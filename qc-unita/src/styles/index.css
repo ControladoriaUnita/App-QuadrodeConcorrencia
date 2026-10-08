@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    background: var(--color-background);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: var(--font-display); }
+  :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+  dialog::backdrop { background: rgb(26 24 23 / 0.4); }
+}
+
+@utility tabular { font-variant-numeric: tabular-nums; }
+
+/* Hachura 45° para valores estimados (acessível sem depender só da cor) */
+@utility hatch {
+  background-image: repeating-linear-gradient(45deg, rgb(255 255 255 / 0.55) 0 2px, transparent 2px 6px);
+}

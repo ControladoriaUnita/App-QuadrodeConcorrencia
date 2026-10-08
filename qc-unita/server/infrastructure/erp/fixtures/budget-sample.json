@@ -1,0 +1,2347 @@
+{
+ "groups": [
+  {
+   "wbs": "02",
+   "description": "INFRAESTRUTURA"
+  },
+  {
+   "wbs": "02.02",
+   "description": "TERRAPLENAGEM"
+  },
+  {
+   "wbs": "02.03",
+   "description": "PAVIMENTAÇÃO"
+  },
+  {
+   "wbs": "06",
+   "description": "IMPERMEABILIZAÇÃO"
+  },
+  {
+   "wbs": "06.02",
+   "description": "IMPERMEABILIZAÇÃO COM MANTA"
+  },
+  {
+   "wbs": "08",
+   "description": "REVESTIMENTO INTERNO"
+  },
+  {
+   "wbs": "08.01",
+   "description": "CONTRAPISO"
+  },
+  {
+   "wbs": "08.04",
+   "description": "SOLEIRA / FILETES / PEITORIL"
+  },
+  {
+   "wbs": "09",
+   "description": "REVESTIMENTO EXTERNO"
+  },
+  {
+   "wbs": "09.01",
+   "description": "REBOCO EXTERNO / TRATAMENTO DE FACHADA"
+  },
+  {
+   "wbs": "11",
+   "description": "ESQUADRIAS"
+  },
+  {
+   "wbs": "11.01",
+   "description": "ESQUADRIAS DE ALUMINIO"
+  },
+  {
+   "wbs": "12",
+   "description": "PINTURA"
+  },
+  {
+   "wbs": "12.01",
+   "description": "PINTURA INTERNA"
+  },
+  {
+   "wbs": "16",
+   "description": "INDIRETO"
+  }
+ ],
+ "activities": [
+  {
+   "wbs": "02.02.01",
+   "code": "CPO00004",
+   "description": "CUSTO INCORRIDO: TERRAPLANAGEM GERAL",
+   "unit": "VB",
+   "quantity": "1",
+   "unitCost": "258470.68"
+  },
+  {
+   "wbs": "02.02.02",
+   "code": "CPU02716",
+   "description": "TAXA MOBILIZAÇÃO DE ESCAVADEIRA HIDRÁULICA (PC) - 08 TONELADAS - IDA E VOLTA",
+   "unit": "vb",
+   "quantity": "4",
+   "unitCost": "900"
+  },
+  {
+   "wbs": "02.02.03",
+   "code": "CPU01046",
+   "description": "LOCAÇÃO DE ESCAVADEIRA HIDRÁULICA (PC) - 8 TONELADAS",
+   "unit": "mês",
+   "quantity": "0.348",
+   "unitCost": "33000"
+  },
+  {
+   "wbs": "02.02.04",
+   "code": "CPU00018",
+   "description": "TRANSPORTE BOTA FORA DE TERRA CUBICAGEM DE CORTE",
+   "unit": "m³",
+   "quantity": "270",
+   "unitCost": "78"
+  },
+  {
+   "wbs": "02.03.01",
+   "code": "CPU00007",
+   "description": "TRANSPORTE BOTA FORA DE TERRA",
+   "unit": "m³",
+   "quantity": "29.15",
+   "unitCost": "78"
+  },
+  {
+   "wbs": "02.03.02",
+   "code": "CPU01389",
+   "description": "PAVIMENTAÇÃO EM PISO INTERTRAVADO COM BLOCO DE CONCRETO CINZA 10X20X08CM PARA TRÁFEGO LEVE DE VEÍCULO COM CAIXA DE 35CM",
+   "unit": "m²",
+   "quantity": "145.79",
+   "unitCost": "300.1505"
+  },
+  {
+   "wbs": "02.03.03",
+   "code": "CPU00010",
+   "description": "ASSENTAMENTO DE MINI GUIA DE JARDIM, CONSIDERANDO ABERTURA DE VALA PREPARO DE CONCRETO E FORNECIMENTO DE MATERIAL",
+   "unit": "m",
+   "quantity": "57.84",
+   "unitCost": "85.686"
+  },
+  {
+   "wbs": "06.02.01",
+   "code": "CPU02296",
+   "description": "REGULARIZAÇÃO DE SUPERFÍCIE PARA IMPERMEABLIZAÇÃO COM ARGAMASSA DE CIMENTO E AREIA 1:3 - 3CM",
+   "unit": "m²",
+   "quantity": "876.75",
+   "unitCost": "35.3375"
+  },
+  {
+   "wbs": "06.02.02",
+   "code": "CPU02324",
+   "description": "IMPERMEABILIZAÇÃO COM MANTA ASFÁLTICA (4MM TIPO IV), ADERIDO COM ASFALTO OXIDADO",
+   "unit": "m²",
+   "quantity": "1197.91",
+   "unitCost": "138"
+  },
+  {
+   "wbs": "06.02.03",
+   "code": "CPU02294",
+   "description": "BANHO DE ASFALTO OXIDADO - 02 KG/M²",
+   "unit": "m²",
+   "quantity": "876.75",
+   "unitCost": "20"
+  },
+  {
+   "wbs": "06.02.04",
+   "code": "CPU00973",
+   "description": "CONTRAPISO PARA MANTA ASFÁLTICA - 3CM",
+   "unit": "m²",
+   "quantity": "876.75",
+   "unitCost": "37.1195"
+  },
+  {
+   "wbs": "06.02.05",
+   "code": "CPU01312",
+   "description": "PROTEÇÃO MECÂNICA PARA RODAPÉ DE MANTA ASFÁLTICA",
+   "unit": "m²",
+   "quantity": "321.16",
+   "unitCost": "22.27"
+  },
+  {
+   "wbs": "06.02.06",
+   "code": "CPU01571",
+   "description": "IMPERMEABILIZAÇÃO EM MANTA ARDOSIADA 4MM",
+   "unit": "m²",
+   "quantity": "82.97",
+   "unitCost": "163.828"
+  },
+  {
+   "wbs": "08.01.01",
+   "code": "CPU00013",
+   "description": "REGULARIZAÇÃO SARRAFEADA - CONTRAPISO - ESP=3CM",
+   "unit": "m²",
+   "quantity": "3395",
+   "unitCost": "52.605"
+  },
+  {
+   "wbs": "08.01.02",
+   "code": "CPU01851",
+   "description": "REGULARIZAÇÃO COM ACIII EM ESCADA",
+   "unit": "un",
+   "quantity": "39",
+   "unitCost": "560.7682"
+  },
+  {
+   "wbs": "08.04.01",
+   "code": "CPU01290",
+   "description": "SOLEIRA EM GRANITO CINZA ANDORINHA 0,11X0,80M",
+   "unit": "un",
+   "quantity": "307",
+   "unitCost": "40.848"
+  },
+  {
+   "wbs": "08.04.02",
+   "code": "CPU01482",
+   "description": "SOLEIRA EM GRANITO CINZA ANDORINHA 0,15X0,80M",
+   "unit": "un",
+   "quantity": "418",
+   "unitCost": "49.0928"
+  },
+  {
+   "wbs": "08.04.03",
+   "code": "CPU01291",
+   "description": "SOLEIRA EM GRANITO CINZA ANDORINHA 0,15X0,90M",
+   "unit": "un",
+   "quantity": "369",
+   "unitCost": "52.7294"
+  },
+  {
+   "wbs": "08.04.04",
+   "code": "CPU02662",
+   "description": "SOLEIRA EM GRANITO CINZA ANDORINHA 0,18X1,55M",
+   "unit": "un",
+   "quantity": "369",
+   "unitCost": "89.0589"
+  },
+  {
+   "wbs": "08.04.05",
+   "code": "CPU01505",
+   "description": "FILETE EM GRANITO CINZA ANDORINHA  0,70M 02 FACES POLIDAS - H3,0CM",
+   "unit": "un",
+   "quantity": "357",
+   "unitCost": "35.22"
+  },
+  {
+   "wbs": "08.04.06",
+   "code": "CPU02021",
+   "description": "FILETE EM GRANITO CINZA ANDORINHA  0,80M 02 FACES POLIDAS - H3,0CM",
+   "unit": "un",
+   "quantity": "12",
+   "unitCost": "37.32"
+  },
+  {
+   "wbs": "08.04.07",
+   "code": "CPU01504",
+   "description": "FILETE EM GRANITO CINZA ANDORINHA  0,85M 03 FACES POLIDAS - H5,0CM",
+   "unit": "un",
+   "quantity": "369",
+   "unitCost": "46.02"
+  },
+  {
+   "wbs": "08.04.08",
+   "code": "CPU02046",
+   "description": "FILETE EM GRANITO CINZA ANDORINHA  1,00M 03 FACES POLIDAS - H5,0CM",
+   "unit": "un",
+   "quantity": "12",
+   "unitCost": "52.02"
+  },
+  {
+   "wbs": "08.04.09",
+   "code": "CPU01437",
+   "description": "PEITORIL DE ARDÓSIA ASSENTADO COM AC3 - LARGURA: 17CM",
+   "unit": "m",
+   "quantity": "906",
+   "unitCost": "40.6176"
+  },
+  {
+   "wbs": "08.04.10",
+   "code": "CPU00207",
+   "description": "PEITORIL DE ARDÓSIA ASSENTADO COM AC3 - LARGURA: 19CM",
+   "unit": "m",
+   "quantity": "899.26",
+   "unitCost": "43.0432"
+  },
+  {
+   "wbs": "09.01.01",
+   "code": "CPU00216",
+   "description": "REBOCO PARA PAREDE EXTERNA, COM ARGAMASSA PRÉ FABRICADA, E=20MM (TORRES)",
+   "unit": "m²",
+   "quantity": "18339.66",
+   "unitCost": "115.4403"
+  },
+  {
+   "wbs": "09.01.02",
+   "code": "CPU00217",
+   "description": "APLICAÇÃO DE ELASTOMERICO EM TRATAMENTO DE FRISOS DE FACHADA, INCLUSO MATERIAL",
+   "unit": "m",
+   "quantity": "3806",
+   "unitCost": "18.7"
+  },
+  {
+   "wbs": "09.01.03",
+   "code": "CPU00218",
+   "description": "COLOCAÇÃO DE TELA GALVANIZADA EM FACHADA",
+   "unit": "m",
+   "quantity": "8398.74",
+   "unitCost": "13.6138"
+  },
+  {
+   "wbs": "09.01.04",
+   "code": "CPU00462",
+   "description": "CHAPISCO COLANTE EM PEÇAS DE CONCRETO PARA REBOCO",
+   "unit": "m²",
+   "quantity": "1586.27",
+   "unitCost": "3.6"
+  },
+  {
+   "wbs": "09.01.05",
+   "code": "CPU03313",
+   "description": "ENSAIO DE DETERMINAÇÃO DA RESISTÊNCIA À TRAÇÃO DE REVESTIMENTO EXTERNO",
+   "unit": "vb",
+   "quantity": "1",
+   "unitCost": "5560"
+  },
+  {
+   "wbs": "11.01.01",
+   "code": "CPU00228",
+   "description": "PERCENTUAL DE QUEBRA DE VIDRO 5%",
+   "unit": "vb",
+   "quantity": "1",
+   "unitCost": "9850"
+  },
+  {
+   "wbs": "11.01.02",
+   "code": "CPU01207",
+   "description": "FRETES DIVERSOS PARA USO DEDICADO",
+   "unit": "vb",
+   "quantity": "1",
+   "unitCost": "20000"
+  },
+  {
+   "wbs": "11.01.03",
+   "code": "CPU02232",
+   "description": "JANELA DE ALUMÍNIO COM 01 FOLHA FIXA VENEZIANA COM VENTILAÇÃO PERMANENTE - 0,45X0,60M",
+   "unit": "pç",
+   "quantity": "36",
+   "unitCost": "343.67"
+  },
+  {
+   "wbs": "11.01.04",
+   "code": "CPU00229",
+   "description": "JANELA DE ALUMÍNIO COM 02 FOLHAS DE CORRER - 1,20X1,20M",
+   "unit": "pç",
+   "quantity": "755",
+   "unitCost": "579.87"
+  },
+  {
+   "wbs": "11.01.05",
+   "code": "CPU00871",
+   "description": "JANELA DE ALUMÍNIO COM 01 FOLHA FIXA VENEZIANA COM VENTILAÇÃO PERMANENTE - 2,80X0,60M",
+   "unit": "pç",
+   "quantity": "2",
+   "unitCost": "2084.02"
+  },
+  {
+   "wbs": "11.01.06",
+   "code": "CPU00900",
+   "description": "PORTA DE ALUMÍNIO COM 02 FOLHAS DE CORRER - 1,60X2,20M",
+   "unit": "pç",
+   "quantity": "369",
+   "unitCost": "1145.12"
+  },
+  {
+   "wbs": "11.01.07",
+   "code": "CPU00595",
+   "description": "PORTA DE ALUMÍNIO COM 01 FOLHA VENEZIANA COM VENTILAÇÃO PERMANENTE - 0,90X2,20M",
+   "unit": "pç",
+   "quantity": "6",
+   "unitCost": "1020.56"
+  },
+  {
+   "wbs": "11.01.08",
+   "code": "CPU01538",
+   "description": "PORTA DE ALUMÍNIO COM 01 FOLHA DE GIRO - 1,10X2,20M",
+   "unit": "pç",
+   "quantity": "3",
+   "unitCost": "1774"
+  },
+  {
+   "wbs": "11.01.09",
+   "code": "CPU00340",
+   "description": "PORTA DE ALUMÍNIO COM 01 FOLHA VENEZIANA COM VENTILAÇÃO PERMANENTE - 0,80X2,20M",
+   "unit": "pç",
+   "quantity": "2",
+   "unitCost": "1019.98"
+  },
+  {
+   "wbs": "11.01.10",
+   "code": "CPU03309",
+   "description": "PORTA DE ALUMÍNIO COM 01 FOLHA VENEZIANA COM VENTILAÇÃO PERMANENTE - 1,00X1,60M",
+   "unit": "pç",
+   "quantity": "2",
+   "unitCost": "1139.27"
+  },
+  {
+   "wbs": "11.01.11",
+   "code": "CPU02024",
+   "description": "PORTA DE ALUMÍNIO COM 02 FOLHAS ASSIMÉTRICAS (01 GIRO E 01 FIXA) COM VIDRO FLOAT NA PARTE SUPERIOR E LAMINADO INFERIOR - 1,20X2,20M",
+   "unit": "pç",
+   "quantity": "2",
+   "unitCost": "1452.08"
+  },
+  {
+   "wbs": "11.01.12",
+   "code": "CPU01457",
+   "description": "PORTA DE ALUMÍNIO COM 02 FOLHAS DE GIRO COM VIDRO FLOAT - 1,30X2,20M",
+   "unit": "pç",
+   "quantity": "0",
+   "unitCost": "1510"
+  },
+  {
+   "wbs": "12.01.01",
+   "code": "CPU00260",
+   "description": "PINTURA ACRILICA SOBRE MASSA ÚNICA COM 01 DEMÃO DE MASSA CORRIDA PVA",
+   "unit": "m²",
+   "quantity": "1029.37",
+   "unitCost": "37.1328"
+  },
+  {
+   "wbs": "12.01.02",
+   "code": "CPU00248",
+   "description": "PINTURA DE ESCADA, DEGRAUS, ESPELHO E RODAPÉ",
+   "unit": "cj",
+   "quantity": "39",
+   "unitCost": "702"
+  },
+  {
+   "wbs": "12.01.03",
+   "code": "CPU00355",
+   "description": "PINTURA LATEX PVA SOBRE MASSA ÚNICA COM 1 DEMÃO DE MASSA CORRIDA PVA",
+   "unit": "m²",
+   "quantity": "5291.1542",
+   "unitCost": "36.0375"
+  },
+  {
+   "wbs": "12.01.04",
+   "code": "CPU00582",
+   "description": "PINTURA LÁTEX PVA SOBRE GESSO LISO COM 01 DEMÃO DE MASSA CORRIDA PVA",
+   "unit": "m²",
+   "quantity": "39322.8261",
+   "unitCost": "16.5438"
+  },
+  {
+   "wbs": "12.01.05",
+   "code": "CPU00405",
+   "description": "PINTURA ACRILICA SOBRE GESSO LISO COM 01 DEMÃO DE MASSA CORRIDA PVA",
+   "unit": "m²",
+   "quantity": "11577.49",
+   "unitCost": "19.407"
+  },
+  {
+   "wbs": "12.01.06",
+   "code": "CPU00251",
+   "description": "PINTURA ACRILICA SOBRE FORRO DE GESSO COM 01 DEMÃO DE MASSA CORRIDA PVA",
+   "unit": "m²",
+   "quantity": "1043.38",
+   "unitCost": "19.7503"
+  },
+  {
+   "wbs": "12.01.07",
+   "code": "CPU00252",
+   "description": "PINTURA ACRILICA SOBRE SANCA DE GESSO COM 01 DEMÃO DE MASSA CORRIDA PVA",
+   "unit": "m",
+   "quantity": "3021.45",
+   "unitCost": "11.0024"
+  },
+  {
+   "wbs": "12.01.08",
+   "code": "CPU01256",
+   "description": "PINTURA LÁTEX PVA SOBRE FORRO DE GESSO COM 01 DEMÃO DE MASSA CORRIDA PVA",
+   "unit": "m²",
+   "quantity": "2298.92",
+   "unitCost": "17.2003"
+  },
+  {
+   "wbs": "12.01.09",
+   "code": "CPU00392",
+   "description": "PINTURA ACRÍLICA SOBRE CONCRETO",
+   "unit": "m²",
+   "quantity": "125.6",
+   "unitCost": "14.6397"
+  },
+  {
+   "wbs": "12.01.10",
+   "code": "CPU00125",
+   "description": "PINTURA ACRILICA EM PISO",
+   "unit": "m²",
+   "quantity": "126.01",
+   "unitCost": "14.6324"
+  },
+  {
+   "wbs": "12.01.11",
+   "code": "CPU00256",
+   "description": "PINTURA EM ESMALTE SINTÉTICO EM PORTA CORTA FOGO",
+   "unit": "m²",
+   "quantity": "267.3",
+   "unitCost": "58.44"
+  },
+  {
+   "wbs": "12.01.12",
+   "code": "CPU00253",
+   "description": "PINTURA EM ESMALTE SINTÉTICO ACETINADO SOBRE CORRIMÃO",
+   "unit": "m",
+   "quantity": "1389",
+   "unitCost": "25"
+  },
+  {
+   "wbs": "12.01.13",
+   "code": "CPU00257",
+   "description": "PINTURA EM ESMALTE SINTÉTICO EM GUARDA CORPO",
+   "unit": "m²",
+   "quantity": "1062.51",
+   "unitCost": "37.88"
+  },
+  {
+   "wbs": "12.01.14",
+   "code": "CPU00254",
+   "description": "PINTURA EM ESMALTE SINTÉTICO EM ESCADA MARINHEIRO",
+   "unit": "pç",
+   "quantity": "10",
+   "unitCost": "852.5"
+  },
+  {
+   "wbs": "12.01.15",
+   "code": "CPU02502",
+   "description": "EXECUÇÃO DE TRATAMENTO COMPLETO DA CAIXA CORRIDA DO ELEVADOR",
+   "unit": "m²",
+   "quantity": "3551.11",
+   "unitCost": "35"
+  },
+  {
+   "wbs": "12.01.16",
+   "code": "CPU02721",
+   "description": "PINTURA PICTOGRAMA PNE PARA ÁREA DE FUGA",
+   "unit": "un",
+   "quantity": "39",
+   "unitCost": "250"
+  },
+  {
+   "wbs": "16.01",
+   "code": "CPU00619",
+   "description": "EQUIPAMENTOS",
+   "unit": "vb",
+   "quantity": "1",
+   "unitCost": "1515623.3956"
+  }
+ ],
+ "items": [
+  {
+   "activityWbs": "02.02.01",
+   "materialCode": "IP00104",
+   "quantity": "1",
+   "unitCost": "258470.68",
+   "packageCode": "IP00104",
+   "packageDescription": "Terraplenagem"
+  },
+  {
+   "activityWbs": "02.02.02",
+   "materialCode": "IS02036",
+   "quantity": "8",
+   "unitCost": "450",
+   "packageCode": "IP00104",
+   "packageDescription": "Terraplenagem"
+  },
+  {
+   "activityWbs": "02.02.03",
+   "materialCode": "IS01712",
+   "quantity": "7.656",
+   "unitCost": "1500",
+   "packageCode": "IP00104",
+   "packageDescription": "Terraplenagem"
+  },
+  {
+   "activityWbs": "02.02.04",
+   "materialCode": "IS00017",
+   "quantity": "351",
+   "unitCost": "60",
+   "packageCode": "IP00104",
+   "packageDescription": "Terraplenagem"
+  },
+  {
+   "activityWbs": "02.03.01",
+   "materialCode": "IS00008",
+   "quantity": "37.895",
+   "unitCost": "60",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.02",
+   "materialCode": "IM08135",
+   "quantity": "7653.975",
+   "unitCost": "1.84",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.02",
+   "materialCode": "IP00302",
+   "quantity": "408.212",
+   "unitCost": "22.31",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.02",
+   "materialCode": "IP00308",
+   "quantity": "218.685",
+   "unitCost": "0.97",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.02",
+   "materialCode": "IP00309",
+   "quantity": "218.685",
+   "unitCost": "1.78",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.02",
+   "materialCode": "IP00349",
+   "quantity": "590.4495",
+   "unitCost": "27.15",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.02",
+   "materialCode": "IS00140",
+   "quantity": "7.2895",
+   "unitCost": "120",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.02",
+   "materialCode": "IS00141",
+   "quantity": "145.79",
+   "unitCost": "8",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.02",
+   "materialCode": "IS00142",
+   "quantity": "14.579",
+   "unitCost": "130",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.03",
+   "materialCode": "IM00011",
+   "quantity": "144.6",
+   "unitCost": "9.06",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.03",
+   "materialCode": "IM00012",
+   "quantity": "694.08",
+   "unitCost": "0.75",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.03",
+   "materialCode": "IM00013",
+   "quantity": "2.1112",
+   "unitCost": "200",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.03",
+   "materialCode": "IM00014",
+   "quantity": "1.4518",
+   "unitCost": "140",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.03",
+   "materialCode": "IM00015",
+   "quantity": "0.4859",
+   "unitCost": "130",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "02.03.03",
+   "materialCode": "IS02063",
+   "quantity": "57.84",
+   "unitCost": "42.13",
+   "packageCode": "IP00105",
+   "packageDescription": "Pavimentação"
+  },
+  {
+   "activityWbs": "06.02.01",
+   "materialCode": "IM00012",
+   "quantity": "8285.2875",
+   "unitCost": "0.75",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.01",
+   "materialCode": "IM00013",
+   "quantity": "20.3844",
+   "unitCost": "200",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.01",
+   "materialCode": "IM00017",
+   "quantity": "350.7",
+   "unitCost": "9",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.01",
+   "materialCode": "IS03014",
+   "quantity": "876.75",
+   "unitCost": "20",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.02",
+   "materialCode": "IM00258",
+   "quantity": "598.955",
+   "unitCost": "3.32",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.02",
+   "materialCode": "IM00259",
+   "quantity": "3593.73",
+   "unitCost": "8.5",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.02",
+   "materialCode": "IM00748",
+   "quantity": "137.7597",
+   "unitCost": "542",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.02",
+   "materialCode": "IS03017",
+   "quantity": "1197.91",
+   "unitCost": "48.51",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.03",
+   "materialCode": "IM00259",
+   "quantity": "1753.5",
+   "unitCost": "8.5",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.03",
+   "materialCode": "IS03237",
+   "quantity": "876.75",
+   "unitCost": "3",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.04",
+   "materialCode": "IM00012",
+   "quantity": "7662.795",
+   "unitCost": "0.75",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.04",
+   "materialCode": "IM00013",
+   "quantity": "35.07",
+   "unitCost": "200",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.04",
+   "materialCode": "IM00017",
+   "quantity": "394.5375",
+   "unitCost": "9",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.04",
+   "materialCode": "IM00749",
+   "quantity": "5.6989",
+   "unitCost": "233",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.04",
+   "materialCode": "IS00095",
+   "quantity": "876.75",
+   "unitCost": "14.5",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.04",
+   "materialCode": "IS03018",
+   "quantity": "876.75",
+   "unitCost": "2.5",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.05",
+   "materialCode": "IM04525",
+   "quantity": "2569.28",
+   "unitCost": "0.9",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.05",
+   "materialCode": "IM08016",
+   "quantity": "6.4232",
+   "unitCost": "3.5",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.05",
+   "materialCode": "IS00093",
+   "quantity": "321.16",
+   "unitCost": "15",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.06",
+   "materialCode": "IM00258",
+   "quantity": "33.188",
+   "unitCost": "3.32",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.06",
+   "materialCode": "IM08464",
+   "quantity": "8.297",
+   "unitCost": "325",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "06.02.06",
+   "materialCode": "IS00094",
+   "quantity": "82.97",
+   "unitCost": "130",
+   "packageCode": "IP00138",
+   "packageDescription": "Impermeabilização com Mantas"
+  },
+  {
+   "activityWbs": "08.01.01",
+   "materialCode": "IM00012",
+   "quantity": "29672.3",
+   "unitCost": "0.75",
+   "packageCode": "IP00141",
+   "packageDescription": "Contra Piso"
+  },
+  {
+   "activityWbs": "08.01.01",
+   "materialCode": "IM00013",
+   "quantity": "135.8",
+   "unitCost": "200",
+   "packageCode": "IP00141",
+   "packageDescription": "Contra Piso"
+  },
+  {
+   "activityWbs": "08.01.01",
+   "materialCode": "IM00017",
+   "quantity": "1527.75",
+   "unitCost": "9",
+   "packageCode": "IP00141",
+   "packageDescription": "Contra Piso"
+  },
+  {
+   "activityWbs": "08.01.01",
+   "materialCode": "IS00012",
+   "quantity": "3395",
+   "unitCost": "34",
+   "packageCode": "IP00141",
+   "packageDescription": "Contra Piso"
+  },
+  {
+   "activityWbs": "08.01.02",
+   "materialCode": "IM00021",
+   "quantity": "4711.9995",
+   "unitCost": "1.3",
+   "packageCode": "IP00141",
+   "packageDescription": "Contra Piso"
+  },
+  {
+   "activityWbs": "08.01.02",
+   "materialCode": "IP00302",
+   "quantity": "628.2666",
+   "unitCost": "22.31",
+   "packageCode": "IP00141",
+   "packageDescription": "Contra Piso"
+  },
+  {
+   "activityWbs": "08.01.02",
+   "materialCode": "IP00308",
+   "quantity": "628.2666",
+   "unitCost": "0.97",
+   "packageCode": "IP00141",
+   "packageDescription": "Contra Piso"
+  },
+  {
+   "activityWbs": "08.01.02",
+   "materialCode": "IP00309",
+   "quantity": "628.2666",
+   "unitCost": "1.78",
+   "packageCode": "IP00141",
+   "packageDescription": "Contra Piso"
+  },
+  {
+   "activityWbs": "08.04.01",
+   "materialCode": "IM00275",
+   "quantity": "245.6",
+   "unitCost": "0.65",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.01",
+   "materialCode": "IM05211",
+   "quantity": "28.3668",
+   "unitCost": "220",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.01",
+   "materialCode": "IS00102",
+   "quantity": "307",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.02",
+   "materialCode": "IM00021",
+   "quantity": "441.408",
+   "unitCost": "1.3",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.02",
+   "materialCode": "IM05211",
+   "quantity": "52.668",
+   "unitCost": "220",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.02",
+   "materialCode": "IS00102",
+   "quantity": "418",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.03",
+   "materialCode": "IM00021",
+   "quantity": "438.372",
+   "unitCost": "1.3",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.03",
+   "materialCode": "IM05211",
+   "quantity": "52.3058",
+   "unitCost": "220",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.03",
+   "materialCode": "IS00102",
+   "quantity": "369",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.04",
+   "materialCode": "IM00275",
+   "quantity": "987.1488",
+   "unitCost": "0.65",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.04",
+   "materialCode": "IM05211",
+   "quantity": "112.914",
+   "unitCost": "220",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.04",
+   "materialCode": "IS00102",
+   "quantity": "369",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.05",
+   "materialCode": "IM00275",
+   "quantity": "285.6",
+   "unitCost": "0.65",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.05",
+   "materialCode": "IM08354",
+   "quantity": "262.395",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.05",
+   "materialCode": "IS00102",
+   "quantity": "357",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.06",
+   "materialCode": "IM00275",
+   "quantity": "9.6",
+   "unitCost": "0.65",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.06",
+   "materialCode": "IM08354",
+   "quantity": "10.08",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.06",
+   "materialCode": "IS00102",
+   "quantity": "12",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.07",
+   "materialCode": "IM00275",
+   "quantity": "295.2",
+   "unitCost": "0.65",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.07",
+   "materialCode": "IM06890",
+   "quantity": "313.65",
+   "unitCost": "30",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.07",
+   "materialCode": "IS00102",
+   "quantity": "369",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.08",
+   "materialCode": "IM00275",
+   "quantity": "9.6",
+   "unitCost": "0.65",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.08",
+   "materialCode": "IM06890",
+   "quantity": "12.6",
+   "unitCost": "30",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.08",
+   "materialCode": "IS00102",
+   "quantity": "12",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.09",
+   "materialCode": "IM00021",
+   "quantity": "1232.16",
+   "unitCost": "1.3",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.09",
+   "materialCode": "IM00279",
+   "quantity": "161.721",
+   "unitCost": "105.6",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.09",
+   "materialCode": "IS00104",
+   "quantity": "906",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.10",
+   "materialCode": "IM00021",
+   "quantity": "1366.8752",
+   "unitCost": "1.3",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.10",
+   "materialCode": "IM00279",
+   "quantity": "179.4024",
+   "unitCost": "105.6",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "08.04.10",
+   "materialCode": "IS00104",
+   "quantity": "899.26",
+   "unitCost": "20",
+   "packageCode": "IP00144",
+   "packageDescription": "Soleiras / Filete / Peitoril"
+  },
+  {
+   "activityWbs": "09.01.01",
+   "materialCode": "IM00159",
+   "quantity": "1656485.4075",
+   "unitCost": "0.59",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "09.01.01",
+   "materialCode": "IM00293",
+   "quantity": "183.3966",
+   "unitCost": "15",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "09.01.01",
+   "materialCode": "IS00109",
+   "quantity": "18339.66",
+   "unitCost": "62",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "09.01.02",
+   "materialCode": "IM10528",
+   "quantity": "1141.8",
+   "unitCost": "19",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "09.01.02",
+   "materialCode": "IS00110",
+   "quantity": "3806",
+   "unitCost": "13",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "09.01.03",
+   "materialCode": "IM00160",
+   "quantity": "356.4425",
+   "unitCost": "145",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "09.01.03",
+   "materialCode": "IM00170",
+   "quantity": "335.9496",
+   "unitCost": "24",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "09.01.03",
+   "materialCode": "IS00111",
+   "quantity": "8398.74",
+   "unitCost": "6.5",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "09.01.04",
+   "materialCode": "IM04525",
+   "quantity": "6345.08",
+   "unitCost": "0.9",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "09.01.05",
+   "materialCode": "IS03199",
+   "quantity": "1",
+   "unitCost": "5560",
+   "packageCode": "IP00149",
+   "packageDescription": "Reboco Externo / Tratamento de Fachada"
+  },
+  {
+   "activityWbs": "11.01.01",
+   "materialCode": "IM00313",
+   "quantity": "20",
+   "unitCost": "150",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.01",
+   "materialCode": "IM00314",
+   "quantity": "5",
+   "unitCost": "150",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.01",
+   "materialCode": "IM00315",
+   "quantity": "10",
+   "unitCost": "280",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.01",
+   "materialCode": "IM00316",
+   "quantity": "10",
+   "unitCost": "330",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.02",
+   "materialCode": "IS00001",
+   "quantity": "2",
+   "unitCost": "10000",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.03",
+   "materialCode": "IM00283",
+   "quantity": "16.362",
+   "unitCost": "40",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.03",
+   "materialCode": "IM00322",
+   "quantity": "2.88",
+   "unitCost": "10.5",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.03",
+   "materialCode": "IM10558",
+   "quantity": "36",
+   "unitCost": "209.65",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.03",
+   "materialCode": "IS00114",
+   "quantity": "36",
+   "unitCost": "5",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.03",
+   "materialCode": "IS02159",
+   "quantity": "36",
+   "unitCost": "110",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.04",
+   "materialCode": "IM00283",
+   "quantity": "343.1475",
+   "unitCost": "40",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.04",
+   "materialCode": "IM00322",
+   "quantity": "60.4",
+   "unitCost": "10.5",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.04",
+   "materialCode": "IM00461",
+   "quantity": "755",
+   "unitCost": "445.85",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.04",
+   "materialCode": "IS00114",
+   "quantity": "755",
+   "unitCost": "5",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.04",
+   "materialCode": "IS02159",
+   "quantity": "755",
+   "unitCost": "110",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.05",
+   "materialCode": "IM00283",
+   "quantity": "0.909",
+   "unitCost": "40",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.05",
+   "materialCode": "IM00322",
+   "quantity": "0.16",
+   "unitCost": "10.5",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.05",
+   "materialCode": "IM05429",
+   "quantity": "2",
+   "unitCost": "1950",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.05",
+   "materialCode": "IS00114",
+   "quantity": "2",
+   "unitCost": "5",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.05",
+   "materialCode": "IS02159",
+   "quantity": "2",
+   "unitCost": "110",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.06",
+   "materialCode": "IM05519",
+   "quantity": "369",
+   "unitCost": "1005.12",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.06",
+   "materialCode": "IS00115",
+   "quantity": "369",
+   "unitCost": "140",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.07",
+   "materialCode": "IM05237",
+   "quantity": "6",
+   "unitCost": "880.56",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.07",
+   "materialCode": "IS00115",
+   "quantity": "6",
+   "unitCost": "140",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.08",
+   "materialCode": "IM08418",
+   "quantity": "3",
+   "unitCost": "1634",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.08",
+   "materialCode": "IS00115",
+   "quantity": "3",
+   "unitCost": "140",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.09",
+   "materialCode": "IM04469",
+   "quantity": "2",
+   "unitCost": "879.98",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.09",
+   "materialCode": "IS00115",
+   "quantity": "2",
+   "unitCost": "140",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.10",
+   "materialCode": "IM01444",
+   "quantity": "2",
+   "unitCost": "999.27",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.10",
+   "materialCode": "IS00115",
+   "quantity": "2",
+   "unitCost": "140",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.11",
+   "materialCode": "IM09850",
+   "quantity": "2",
+   "unitCost": "1312.08",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.11",
+   "materialCode": "IS00115",
+   "quantity": "2",
+   "unitCost": "140",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.12",
+   "materialCode": "IM07823",
+   "quantity": "0",
+   "unitCost": "1370",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "11.01.12",
+   "materialCode": "IS00115",
+   "quantity": "0",
+   "unitCost": "140",
+   "packageCode": "IP00153",
+   "packageDescription": "Esquadrias de Alumínio"
+  },
+  {
+   "activityWbs": "12.01.01",
+   "materialCode": "IM00002",
+   "quantity": "174.9929",
+   "unitCost": "7.7",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.01",
+   "materialCode": "IM00337",
+   "quantity": "813.2023",
+   "unitCost": "1.2",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.01",
+   "materialCode": "IS01573",
+   "quantity": "1029.37",
+   "unitCost": "34.8758",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.02",
+   "materialCode": "IS00121",
+   "quantity": "1755",
+   "unitCost": "15.6",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.03",
+   "materialCode": "IM00337",
+   "quantity": "4180.0118",
+   "unitCost": "1.2",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.03",
+   "materialCode": "IM00338",
+   "quantity": "899.4962",
+   "unitCost": "4.95",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.03",
+   "materialCode": "IS03074",
+   "quantity": "5291.1542",
+   "unitCost": "34.248",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.04",
+   "materialCode": "IM00337",
+   "quantity": "24993.5883",
+   "unitCost": "1.2",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.04",
+   "materialCode": "IM00338",
+   "quantity": "9830.7065",
+   "unitCost": "4.95",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.04",
+   "materialCode": "IS01999",
+   "quantity": "39322.8261",
+   "unitCost": "14.5436",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.05",
+   "materialCode": "IM00002",
+   "quantity": "1968.1733",
+   "unitCost": "7.7",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.05",
+   "materialCode": "IM00337",
+   "quantity": "9146.2171",
+   "unitCost": "1.2",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.05",
+   "materialCode": "IS01327",
+   "quantity": "11577.49",
+   "unitCost": "17.15",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.06",
+   "materialCode": "IM00002",
+   "quantity": "246.655",
+   "unitCost": "7.7",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.06",
+   "materialCode": "IM00337",
+   "quantity": "156.507",
+   "unitCost": "1.2",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.06",
+   "materialCode": "IS00123",
+   "quantity": "1043.38",
+   "unitCost": "17.75",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.07",
+   "materialCode": "IM00002",
+   "quantity": "1055.6946",
+   "unitCost": "7.7",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.07",
+   "materialCode": "IM00337",
+   "quantity": "785.577",
+   "unitCost": "1.2",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.07",
+   "materialCode": "IS00124",
+   "quantity": "3021.45",
+   "unitCost": "8",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.08",
+   "materialCode": "IM00337",
+   "quantity": "574.73",
+   "unitCost": "1.2",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.08",
+   "materialCode": "IM00338",
+   "quantity": "789.679",
+   "unitCost": "4.95",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.08",
+   "materialCode": "IS01986",
+   "quantity": "2298.92",
+   "unitCost": "15.2",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.09",
+   "materialCode": "IM00002",
+   "quantity": "32.7816",
+   "unitCost": "7.7",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.09",
+   "materialCode": "IS00075",
+   "quantity": "125.6",
+   "unitCost": "12.63",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.10",
+   "materialCode": "IM00165",
+   "quantity": "37.6606",
+   "unitCost": "6.7",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.10",
+   "materialCode": "IS00075",
+   "quantity": "126.01",
+   "unitCost": "12.63",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.11",
+   "materialCode": "IM00123",
+   "quantity": "253.935",
+   "unitCost": "28",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.11",
+   "materialCode": "IS00128",
+   "quantity": "534.6",
+   "unitCost": "15.92",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.12",
+   "materialCode": "IS00125",
+   "quantity": "1389",
+   "unitCost": "25",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.13",
+   "materialCode": "IM00123",
+   "quantity": "531.255",
+   "unitCost": "28",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.13",
+   "materialCode": "IS00128",
+   "quantity": "1593.765",
+   "unitCost": "15.92",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.14",
+   "materialCode": "IM00123",
+   "quantity": "100",
+   "unitCost": "28",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.14",
+   "materialCode": "IS00126",
+   "quantity": "10",
+   "unitCost": "572.5",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.15",
+   "materialCode": "IS03362",
+   "quantity": "3551.11",
+   "unitCost": "35",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "12.01.16",
+   "materialCode": "IS03084",
+   "quantity": "39",
+   "unitCost": "250",
+   "packageCode": "IP00157",
+   "packageDescription": "Pintura Interna"
+  },
+  {
+   "activityWbs": "16.01",
+   "materialCode": "IS03703",
+   "quantity": "1",
+   "unitCost": "10240",
+   "packageCode": "IP00519",
+   "packageDescription": "Locação de Grua"
+  },
+  {
+   "activityWbs": "16.01",
+   "materialCode": "XEQ0053",
+   "quantity": "280",
+   "unitCost": "165",
+   "packageCode": "IP00519",
+   "packageDescription": "Locação de Grua"
+  },
+  {
+   "activityWbs": "16.01",
+   "materialCode": "XEQ0053",
+   "quantity": "1",
+   "unitCost": "3000",
+   "packageCode": "IP00519",
+   "packageDescription": "Locação de Grua"
+  },
+  {
+   "activityWbs": "16.01",
+   "materialCode": "XEQ0054",
+   "quantity": "2",
+   "unitCost": "9000",
+   "packageCode": "IP00519",
+   "packageDescription": "Locação de Grua"
+  },
+  {
+   "activityWbs": "16.01",
+   "materialCode": "XEQ0055",
+   "quantity": "7",
+   "unitCost": "40581.4143",
+   "packageCode": "IP00519",
+   "packageDescription": "Locação de Grua"
+  },
+  {
+   "activityWbs": "16.01",
+   "materialCode": "XEQ0056",
+   "quantity": "1",
+   "unitCost": "33900",
+   "packageCode": "IP00519",
+   "packageDescription": "Locação de Grua"
+  },
+  {
+   "activityWbs": "16.01",
+   "materialCode": "XEQ0057",
+   "quantity": "0",
+   "unitCost": "80000",
+   "packageCode": "IP00519",
+   "packageDescription": "Locação de Grua"
+  }
+ ],
+ "materials": [
+  {
+   "code": "IM00002",
+   "description": "Tinta acrílica fosco - (NBR 14942)",
+   "unit": "l"
+  },
+  {
+   "code": "IM00011",
+   "description": "Mini guia de concreto 07x40x20cm",
+   "unit": "un"
+  },
+  {
+   "code": "IM00012",
+   "description": "Cimento CP II-32 - (NBR 11578)",
+   "unit": "kg"
+  },
+  {
+   "code": "IM00013",
+   "description": "Areia média - (NBR 7211)",
+   "unit": "m³"
+  },
+  {
+   "code": "IM00014",
+   "description": "Brita 2 (dois) - (NBR 7211)",
+   "unit": "m³"
+  },
+  {
+   "code": "IM00015",
+   "description": "Brita 1 (um) - (NBR 7211)",
+   "unit": "m³"
+  },
+  {
+   "code": "IM00017",
+   "description": "Adesivo a base de resina PVA",
+   "unit": "kg"
+  },
+  {
+   "code": "IM00021",
+   "description": "Argamassa colante AC3 cinza - (NBR 14081)",
+   "unit": "kg"
+  },
+  {
+   "code": "IM00123",
+   "description": "Tinta esmalte sintético acetinado a base de água - (NBR 14942)",
+   "unit": "l"
+  },
+  {
+   "code": "IM00159",
+   "description": "Argamassa pronta revestimento externo - (NBR 13281)",
+   "unit": "kg"
+  },
+  {
+   "code": "IM00160",
+   "description": "Tela eletrossoldada galvanizada - malha 25x25mm, comp 25m, fio 1,24mm, Larg 0,50m",
+   "unit": "rl"
+  },
+  {
+   "code": "IM00165",
+   "description": "Tinta acrílica piso - (NBR 14942)",
+   "unit": "l"
+  },
+  {
+   "code": "IM00170",
+   "description": "Pino galvanizado Ø1/4x28mm - com arruela Ø23mm - pacote com 100 unidades",
+   "unit": "un"
+  },
+  {
+   "code": "IM00258",
+   "description": "Primer - (NBR 9686)",
+   "unit": "l"
+  },
+  {
+   "code": "IM00259",
+   "description": "Asfalto Oxidado - (NBR 9910)",
+   "unit": "kg"
+  },
+  {
+   "code": "IM00275",
+   "description": "Argamassa colante AC1 cinza - (NBR 14081)",
+   "unit": "kg"
+  },
+  {
+   "code": "IM00279",
+   "description": "Peitoril em ardósia esp.: 02cm",
+   "unit": "m²"
+  },
+  {
+   "code": "IM00283",
+   "description": "Selante de base poliuretano monocomponente flexível",
+   "unit": "kg"
+  },
+  {
+   "code": "IM00293",
+   "description": "Arame galvanizado BWG 18 1,24mm - (NBR 6331)",
+   "unit": "kg"
+  },
+  {
+   "code": "IM00313",
+   "description": "Vidro cristal liso 4mm - (NBR 11706)",
+   "unit": "m²"
+  },
+  {
+   "code": "IM00314",
+   "description": "Vidro Fantasia incolor mini boreal colocado - (NBR 11706)",
+   "unit": "m²"
+  },
+  {
+   "code": "IM00315",
+   "description": "Vidro incolor temperado - (NBR 11706)",
+   "unit": "m²"
+  },
+  {
+   "code": "IM00316",
+   "description": "Vidro laminado incolor liso 6mm - (NBR 11706)",
+   "unit": "m²"
+  },
+  {
+   "code": "IM00322",
+   "description": "Resina acrílica (base água)",
+   "unit": "l"
+  },
+  {
+   "code": "IM00337",
+   "description": "Massa corrida PVA - (NBR 11702)",
+   "unit": "l"
+  },
+  {
+   "code": "IM00338",
+   "description": "Tinta PVA branco fosco - (NBR 14942)",
+   "unit": "l"
+  },
+  {
+   "code": "IM00461",
+   "description": "Janela de alumínio 02 folhas de correr de vidro comum 3mm 1,20x1,20m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IM00748",
+   "description": "Manta asfáltica SBS, 4mm Tipo IV - 01x10m - (NBR 9952)",
+   "unit": "rl"
+  },
+  {
+   "code": "IM00749",
+   "description": "Filme de polietileno para camada separadora na impermeabilização - 30 micras - 01x200m",
+   "unit": "rl"
+  },
+  {
+   "code": "IM01444",
+   "description": "Porta de alumínio 01 folha de giro com veneziana e ventilação permanente - 0,90x1,60m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IM04469",
+   "description": "Porta de alumínio 01 folha de giro com veneziana e ventilação permanente - 0,80x2,20m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IM04525",
+   "description": "Argamassa de chapisco colante - (NBR 14081)",
+   "unit": "kg"
+  },
+  {
+   "code": "IM05211",
+   "description": "Soleira em granito cinza andorinha esp.: 02cm",
+   "unit": "m²"
+  },
+  {
+   "code": "IM05237",
+   "description": "Porta de alumínio 01 folha de giro com veneziana e ventilação permanente - 0,90x2,20m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IM05429",
+   "description": "Janela de alumínio veneziana fixa com ventilação permanente - 2,80x0,60m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IM05519",
+   "description": "Porta de alumínio 02 folhas de correr com vidro float parte superior e vidro temperado/laminado parte inferior - 1,60x2,20m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IM06890",
+   "description": "Filete em granito cinza andorinha, altura 5,0cm, chanfrado com três faces polidas",
+   "unit": "m"
+  },
+  {
+   "code": "IM07823",
+   "description": "Porta de alumínio 02 folhas de giro com vidro float parte superior e vidro temperado/laminado parte inferior - 1,30x2,20m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IM08016",
+   "description": "Tela PVC 25mm tipo `pinteiro` rolo 1,00x50,00m",
+   "unit": "rl"
+  },
+  {
+   "code": "IM08135",
+   "description": "Piso intertravado cinza de concreto (35 MPa) - 10x20x08cm",
+   "unit": "un"
+  },
+  {
+   "code": "IM08354",
+   "description": "Filete em granito cinza andorinha, altura 3,0cm, chanfrado com duas faces polidas",
+   "unit": "m"
+  },
+  {
+   "code": "IM08418",
+   "description": "Porta de alumínio 01 folha de giro veneziana- 1,10x2,20m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IM08464",
+   "description": "Manta asfáltica SBS, 4mm Tipo III - com acabamento em ardósia - 01x10m (NBR 9952)",
+   "unit": "rl"
+  },
+  {
+   "code": "IM09850",
+   "description": "Porta de alumínio 02 folhas assimétricas (01 giro e 01 fixa) com vidro float parte superior e vidro laminado parte inferior - 1,20x2,20m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IM10528",
+   "description": "Impermeabilizante monocomponente elastomérico para frisos - (NBR 9229)",
+   "unit": "kg"
+  },
+  {
+   "code": "IM10558",
+   "description": "Janela de alumínio veneziana fixa com ventilação permanente - 0,45x0,60m - (NBR 10821)",
+   "unit": "un"
+  },
+  {
+   "code": "IP00104",
+   "description": "Terraplenagem",
+   "unit": "VB"
+  },
+  {
+   "code": "IP00302",
+   "description": "Servente/Ajudante (com encargos)",
+   "unit": "VB"
+  },
+  {
+   "code": "IP00308",
+   "description": "Vale Transporte (Mão de obra direta)",
+   "unit": "VB"
+  },
+  {
+   "code": "IP00309",
+   "description": "Vale Alimentação (Mão de obra Direta)",
+   "unit": "VB"
+  },
+  {
+   "code": "IP00349",
+   "description": "Oficial (com encargos)",
+   "unit": "h"
+  },
+  {
+   "code": "IS00001",
+   "description": "Fretes e carretos",
+   "unit": "VB"
+  },
+  {
+   "code": "IS00008",
+   "description": "Transporte bota fora de terra com volume medido em caminhão (terraplenagem)",
+   "unit": "m³"
+  },
+  {
+   "code": "IS00012",
+   "description": "Serviço de contra piso, incluso preparo da argamassa",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00017",
+   "description": "Transporte bota fora de terra com volume medido em corte e escavação",
+   "unit": "m³"
+  },
+  {
+   "code": "IS00075",
+   "description": "Serviço de pintura acrílica",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00093",
+   "description": "Serviço de proteção mecânica para manta asfaltica",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00094",
+   "description": "Execução de impermeabilização com manta asfáltica, uma camada, aderida à maçarico",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00095",
+   "description": "Serviço de contrapiso para proteção de manta asfaltica",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00102",
+   "description": "Assentamento de soleira",
+   "unit": "un"
+  },
+  {
+   "code": "IS00104",
+   "description": "Instalação de peitoril",
+   "unit": "m"
+  },
+  {
+   "code": "IS00109",
+   "description": "Serviço de reboco externo - pano",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00110",
+   "description": "Serviço de friso em fachada",
+   "unit": "m"
+  },
+  {
+   "code": "IS00111",
+   "description": "Colocação de tela galvanizada em fachada entre alvenaria e estrutura",
+   "unit": "m"
+  },
+  {
+   "code": "IS00114",
+   "description": "Limpeza e aplicação de resina em peitoril",
+   "unit": "un"
+  },
+  {
+   "code": "IS00115",
+   "description": "Assentamento de portas de alumínio sem contra marco, incluso vedação em ambos os lados (interno e externo)",
+   "unit": "un"
+  },
+  {
+   "code": "IS00121",
+   "description": "Pintura de escada com tinta acrilica para piso",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00123",
+   "description": "Pintura acrílica sobre forro de gesso com 1 demão de massa corrida PVA",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00124",
+   "description": "Pintura acrílica sobre sanca de gesso com 1 demão de massa corrida PVA",
+   "unit": "m"
+  },
+  {
+   "code": "IS00125",
+   "description": "Pintura sobre corrimão em esmalte sintético acetinado (NBR 14942)",
+   "unit": "m"
+  },
+  {
+   "code": "IS00126",
+   "description": "Pintura de escada marinheiro",
+   "unit": "un"
+  },
+  {
+   "code": "IS00128",
+   "description": "Pintura em esquadria metálica",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00140",
+   "description": "Lastro de areia com areia grossa",
+   "unit": "m³"
+  },
+  {
+   "code": "IS00141",
+   "description": "Sub-base granular 15cm - CBR>30%",
+   "unit": "m²"
+  },
+  {
+   "code": "IS00142",
+   "description": "Base de brita graduada simples, compactado a 100% do PI, espessura de 10cm",
+   "unit": "m³"
+  },
+  {
+   "code": "IS01327",
+   "description": "Pintura acrílica sobre gesso liso com 1 demão de massa corrida PVA",
+   "unit": "m²"
+  },
+  {
+   "code": "IS01573",
+   "description": "Pintura acrílica emboço om 1 demão de massa corrida PVA",
+   "unit": "m²"
+  },
+  {
+   "code": "IS01712",
+   "description": "Locação de PC 8T - com operador",
+   "unit": "dia"
+  },
+  {
+   "code": "IS01986",
+   "description": "Pintura PVA sobre forro de gesso com 1 demão de massa corrida PVA",
+   "unit": "m²"
+  },
+  {
+   "code": "IS01999",
+   "description": "Pintura PVA sobre gesso com 1 demão de massa corrida PVA",
+   "unit": "m²"
+  },
+  {
+   "code": "IS02036",
+   "description": "Mobilização/Desmobilização de Mini Escavadeira 8T",
+   "unit": "VB"
+  },
+  {
+   "code": "IS02063",
+   "description": "Assentamento de mini guia de concreto",
+   "unit": "m"
+  },
+  {
+   "code": "IS02159",
+   "description": "Assentamento de janelas de alumínio sem contra marco, incluso vedação em ambos os lados (interno e externo)",
+   "unit": "un"
+  },
+  {
+   "code": "IS03014",
+   "description": "Preparação / regularização das superfícies para impermeabilização",
+   "unit": "m²"
+  },
+  {
+   "code": "IS03017",
+   "description": "Execução de impermeabilização com manta asfáltica, uma camada, aderida com asfalto oxidado",
+   "unit": "m²"
+  },
+  {
+   "code": "IS03018",
+   "description": "Aplicação de camada separadora para impermeabilização com manta",
+   "unit": "m²"
+  },
+  {
+   "code": "IS03074",
+   "description": "Pintura PVA sobre massa única sem massa corrida PVA",
+   "unit": "m²"
+  },
+  {
+   "code": "IS03084",
+   "description": "Pintura de identificação de área de resgate para PNE 1,20x0,80m",
+   "unit": "un"
+  },
+  {
+   "code": "IS03199",
+   "description": "Ensaio da resistência de aderência à tração na argamassa interna/externa - (NBR 13528)",
+   "unit": "un"
+  },
+  {
+   "code": "IS03237",
+   "description": "Execução de impermeabilização com banho de asfalto oxidado",
+   "unit": "m²"
+  },
+  {
+   "code": "IS03362",
+   "description": "Serviço de tratamento da caixa corrida e poço do elevador: caiação, estuque, corte de tela de proteção e pinturas padrões de recebimento dos elevadores (ganchos e área de segurança)",
+   "unit": "m²"
+  },
+  {
+   "code": "IS03703",
+   "description": "Execução de furo com Ø5,0cm em laje de concreto 12cm",
+   "unit": "vb"
+  },
+  {
+   "code": "XEQ0053",
+   "description": "Ascensão de Grua ",
+   "unit": "mês"
+  },
+  {
+   "code": "XEQ0054",
+   "description": "Frete  Grua",
+   "unit": "un"
+  },
+  {
+   "code": "XEQ0055",
+   "description": "Locação de Grua (LOCAÇÃO + MANUTENÇÃO PREVENTITA +TRANSFORMADOR + ART E PROJJETO)",
+   "unit": "mês"
+  },
+  {
+   "code": "XEQ0056",
+   "description": "Montagem/Desmontagem De Grua",
+   "unit": "un"
+  },
+  {
+   "code": "XEQ0057",
+   "description": "Base da Grua",
+   "unit": "un"
+  }
+ ]
+}
