@@ -5,7 +5,9 @@
  */
 import { Decimal } from '../../../shared/domain/decimal'
 import type { RequestContext } from '../../application/context'
+import * as addenda from '../../application/use-cases/addenda'
 import * as contracts from '../../application/use-cases/contracts'
+import { currentAllocations, suggestAllocations } from '../../../shared/domain/contract/addendum'
 import * as qc from '../../application/use-cases/competitions'
 import { syncFromErp } from '../../application/use-cases/erp-sync'
 import { MockERPProvider } from '../erp/mock-erp-provider'
@@ -216,14 +218,19 @@ async function seed(db: MemoryDb) {
     await contracts.submitContractRequest(s.repos, s.ctx, contractId)
     const contract = (await s.repos.contracts.get(contractId))!
     const first = contract.items[0]!
-    await contracts.createAddendum(s.repos, s.ctx, contractId, {
+    const extra = Decimal.from(first.quantity).times('0.1').round(4)
+    const current = currentAllocations(
+      { id: first.id, quantity: Decimal.from(first.quantity), totalPrice: Decimal.from(first.totalPrice), allocations: first.allocations.map((a) => ({ packageCode: a.packageCode, quantity: Decimal.from(a.quantity) })) },
+      [],
+    )
+    const { id: addendumId } = await addenda.createAddendum(s.repos, s.ctx, contractId, {
+      kind: 'addendum',
       reason: 'Volume adicional de bota-fora apontado pela engenharia após sondagem complementar.',
       requestedOn: '2026-10-02',
       newEndOn: '2027-03-31',
-      items: [{ contractItemId: first.id, quantityDelta: Decimal.from(first.quantity).times('0.1').round(4).toDb() }],
+      items: [{ contractItemId: first.id, quantity: extra.toDb(), allocations: suggestAllocations(current, extra).map((a) => ({ packageCode: a.packageCode, quantity: a.quantity.toDb() })) }],
     })
-    const addendum = (await s.repos.contracts.get(contractId))!.addenda[0]!
-    await contracts.submitAddendum(s.repos, s.ctx, addendum.id)
+    await addenda.submitAddendum(s.repos, s.ctx, addendumId)
 
     await qc.createRevision(s.repos, s.ctx, competitionId, 'Inclusão de volume adicional de bota-fora apontado pela engenharia.')
   }

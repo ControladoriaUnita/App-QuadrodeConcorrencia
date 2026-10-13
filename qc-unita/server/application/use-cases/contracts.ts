@@ -1,45 +1,33 @@
 /**
- * Casos de uso da Solicitação de Contrato e dos Aditivos.
+ * Casos de uso da Solicitação de Contrato (aditivos e distratos em ./addenda.ts).
  *
  *   draft ──submit──▶ submitted ──ERP──▶ sent_to_erp ──assinatura──▶ signed
  *     │                   │
  *     └──── cancel ───────┘ (cancelled)
- *
- * Aditivo: draft ──submit──▶ submitted ──Gerente/Diretoria──▶ approved | rejected
  */
 import type {
-  AddendumItemInput,
   ContractListItemDTO,
   ContractRequestDTO,
-  SaveAddendumInput,
   UpdateContractItemInput,
   UpdateContractRequestInput,
 } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import { buildQcMap } from '../../../shared/domain/competition/qc-map'
 import { DomainError } from '../../../shared/domain/competition/revision'
-import {
-  buildContractDraft,
-  computeAddendum,
-  contractDistribution,
-  currentEndOn,
-  validateAddendum,
-  validateContractRequest,
-  type AddendumLine,
-} from '../../../shared/domain/contract/contract-request'
+import { buildContractDraft, contractDistribution, validateContractRequest } from '../../../shared/domain/contract/contract-request'
 import type { ERPProvider } from '../../infrastructure/erp/erp-provider'
 import { AppError, can, notFound, requirePermission, type Actor, type RequestContext } from '../context'
-import type { AddendumContent, ContractData, NewAddendumItem, Repositories } from '../ports'
+import type { ContractData, Repositories } from '../ports'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 
 /** Aditivo é decidido pela Gerência/Diretoria (planilha: "Assinatura Gerente / Diretoria"). */
 const ADDENDUM_DECIDERS = new Set(['manager', 'director', 'admin'])
-function canDecideAddendum(actor: Actor, workId: string) {
+export function canDecideAddendum(actor: Actor, workId: string) {
   return can(actor, 'approval.decide', workId) && actor.roles.some((r) => ADDENDUM_DECIDERS.has(r.roleKey) && (r.workId === null || r.workId === workId))
 }
 
-async function load(repos: Repositories, ctx: RequestContext, id: string, permission = 'contract.read'): Promise<ContractData> {
+export async function loadContract(repos: Repositories, ctx: RequestContext, id: string, permission = 'contract.read'): Promise<ContractData> {
   const c = await repos.contracts.get(id)
   if (!c) throw notFound('Solicitação de contrato')
   requirePermission(ctx, permission, c.work.id)
@@ -71,7 +59,7 @@ export async function listContracts(repos: Repositories, ctx: RequestContext, fi
 }
 
 export async function getContract(repos: Repositories, ctx: RequestContext, id: string): Promise<ContractRequestDTO> {
-  const c = await load(repos, ctx, id)
+  const c = await loadContract(repos, ctx, id)
   const workId = c.work.id
   const manage = can(ctx.actor, 'contract.manage', workId)
   const openAddendum = c.addenda.some((a) => a.status === 'draft' || a.status === 'submitted')
@@ -158,7 +146,7 @@ export async function createContractRequest(repos: Repositories, ctx: RequestCon
 
 // ----------------------------------------------------------------------------- edição do rascunho
 export async function updateContractRequest(repos: Repositories, ctx: RequestContext, id: string, input: UpdateContractRequestInput) {
-  const c = await load(repos, ctx, id, 'contract.manage')
+  const c = await loadContract(repos, ctx, id, 'contract.manage')
   assertStatus(c, ['draft'], 'Somente solicitações em rascunho podem ser alteradas.')
   const startOn = input.startOn ?? c.startOn
   const endOn = input.endOn ?? c.endOn
@@ -172,7 +160,7 @@ export async function updateContractRequest(repos: Repositories, ctx: RequestCon
 }
 
 export async function updateContractItem(repos: Repositories, ctx: RequestContext, id: string, itemId: string, input: UpdateContractItemInput) {
-  const c = await load(repos, ctx, id, 'contract.manage')
+  const c = await loadContract(repos, ctx, id, 'contract.manage')
   assertStatus(c, ['draft'], 'Somente solicitações em rascunho podem ser alteradas.')
   if (!c.items.some((i) => i.id === itemId)) throw notFound('Item do contrato')
   await repos.contracts.updateItem(id, itemId, input)
@@ -180,7 +168,7 @@ export async function updateContractItem(repos: Repositories, ctx: RequestContex
 
 // ----------------------------------------------------------------------------- ciclo de vida
 export async function submitContractRequest(repos: Repositories, ctx: RequestContext, id: string) {
-  const c = await load(repos, ctx, id, 'contract.manage')
+  const c = await loadContract(repos, ctx, id, 'contract.manage')
   assertStatus(c, ['draft'], 'A solicitação já foi enviada.')
   const items = c.items.map((i) => ({ quantity: Decimal.from(i.quantity), totalPrice: Decimal.from(i.totalPrice), pctMaterial: Decimal.from(i.pctMaterial), pctEquipment: Decimal.from(i.pctEquipment) }))
   const issues = validateContractRequest(headerOf(c), items, today(ctx))
@@ -193,7 +181,7 @@ export async function submitContractRequest(repos: Repositories, ctx: RequestCon
 }
 
 export async function cancelContractRequest(repos: Repositories, ctx: RequestContext, id: string, reason: string) {
-  const c = await load(repos, ctx, id, 'contract.manage')
+  const c = await loadContract(repos, ctx, id, 'contract.manage')
   assertStatus(c, ['draft', 'submitted'], 'Somente solicitações em rascunho ou enviadas (antes do ERP) podem ser canceladas.')
   await repos.contracts.update(id, { status: 'cancelled', cancelReason: reason })
   if (c.status === 'submitted') {
@@ -208,7 +196,7 @@ export async function cancelContractRequest(repos: Repositories, ctx: RequestCon
 
 /** Envia o contrato ao ERP (UAU/Senior via ERPProvider) e registra o integration_log. */
 export async function pushContractToErp(repos: Repositories, erp: ERPProvider, ctx: RequestContext, id: string) {
-  const c = await load(repos, ctx, id, 'contract.manage')
+  const c = await loadContract(repos, ctx, id, 'contract.manage')
   assertStatus(c, ['submitted'], 'Somente solicitações enviadas podem ir para o ERP.')
   if (!c.work.erpId || !c.supplier.erpId) {
     throw new DomainError('CONTRACT_ERP_IDS', 'Obra ou fornecedor sem código no ERP. Sincronize os cadastros antes de enviar.')
@@ -237,117 +225,10 @@ export async function pushContractToErp(repos: Repositories, erp: ERPProvider, c
 }
 
 export async function signContract(repos: Repositories, ctx: RequestContext, id: string, input: { signedOn: string; erpContractId?: string }) {
-  const c = await load(repos, ctx, id, 'contract.manage')
+  const c = await loadContract(repos, ctx, id, 'contract.manage')
   assertStatus(c, ['submitted', 'sent_to_erp'], 'A solicitação precisa estar enviada para registrar a assinatura.')
   if (input.signedOn > today(ctx)) throw new DomainError('CONTRACT_SIGN_DATE', 'A data de assinatura não pode ser futura.')
   const erpContractId = input.erpContractId?.trim() || c.erpContractId
   await repos.contracts.update(id, { status: 'signed', signedOn: input.signedOn, ...(erpContractId !== c.erpContractId ? { erpContractId } : {}) })
   return { status: 'signed' as const }
-}
-
-// ----------------------------------------------------------------------------- aditivos
-/** Resolve as linhas de entrada (item do contrato ou item novo) em linhas persistíveis. */
-function resolveAddendumItems(c: ContractData, items: AddendumItemInput[]): NewAddendumItem[] {
-  const byId = new Map(c.items.map((i) => [i.id, i]))
-  const seen = new Set<string>()
-  return items.map((it) => {
-    if (it.contractItemId) {
-      const ci = byId.get(it.contractItemId)
-      if (!ci) throw new AppError('ADDENDUM_ITEM', 'Item não pertence a este contrato.', 422)
-      if (seen.has(ci.id)) throw new AppError('ADDENDUM_ITEM_DUPLICATED', `O item ${ci.code} foi informado duas vezes.`, 422)
-      seen.add(ci.id)
-      return {
-        contractItemId: ci.id, materialId: ci.materialId, code: ci.code, description: ci.description, unit: ci.unit,
-        quantityDelta: Decimal.from(it.quantityDelta).round(4).toDb(),
-        unitPrice: Decimal.from(it.unitPrice ?? ci.unitPrice).round(4).toDb(),
-      }
-    }
-    const n = it as Extract<AddendumItemInput, { code: string }>
-    return {
-      contractItemId: null, materialId: null, code: n.code, description: n.description, unit: n.unit,
-      quantityDelta: Decimal.from(n.quantityDelta).round(4).toDb(), unitPrice: Decimal.from(n.unitPrice).round(4).toDb(),
-    }
-  })
-}
-
-const toLine = (i: { contractItemId: string | null; code: string; quantityDelta: string; unitPrice: string }): AddendumLine => ({
-  contractItemId: i.contractItemId, code: i.code, quantityDelta: Decimal.from(i.quantityDelta), unitPrice: Decimal.from(i.unitPrice),
-})
-
-function summarize(c: ContractData, items: NewAddendumItem[], excludeAddendumId?: string) {
-  const approved = c.addenda.filter((a) => a.status === 'approved' && a.id !== excludeAddendumId)
-  return computeAddendum(
-    c.items.map((i) => ({ id: i.id, quantity: Decimal.from(i.quantity), totalPrice: Decimal.from(i.totalPrice) })),
-    approved.flatMap((a) => a.items.map(toLine)),
-    items.map(toLine),
-  )
-}
-
-function contentOf(c: ContractData, input: SaveAddendumInput, ctx: RequestContext, addendumId?: string): AddendumContent {
-  const items = resolveAddendumItems(c, input.items)
-  const summary = summarize(c, items, addendumId)
-  return {
-    reason: input.reason.trim(),
-    requestedOn: input.requestedOn ?? today(ctx),
-    newEndOn: input.newEndOn ?? null,
-    totalDelta: summary.totalDelta.toDb(),
-    items,
-  }
-}
-
-export async function createAddendum(repos: Repositories, ctx: RequestContext, contractId: string, input: SaveAddendumInput) {
-  const c = await load(repos, ctx, contractId, 'contract.manage')
-  assertStatus(c, ['submitted', 'sent_to_erp', 'signed'], 'Aditivos só podem ser solicitados para contratos já enviados.')
-  if (c.addenda.some((a) => a.status === 'draft' || a.status === 'submitted')) {
-    throw new DomainError('ADDENDUM_OPEN', 'Já existe um aditivo em aberto (rascunho ou aguardando aprovação).')
-  }
-  const number = c.addenda.reduce((m, a) => Math.max(m, a.number), 0) + 1
-  const id = await repos.contracts.createAddendum(contractId, number, contentOf(c, input, ctx), ctx.actor.id)
-  return { id, number }
-}
-
-async function loadAddendum(repos: Repositories, ctx: RequestContext, addendumId: string, permission: string) {
-  const ref = await repos.contracts.getAddendumRef(addendumId)
-  if (!ref) throw notFound('Aditivo')
-  const c = await load(repos, ctx, ref.contractId, permission)
-  const a = c.addenda.find((x) => x.id === addendumId)!
-  return { c, a }
-}
-
-export async function saveAddendum(repos: Repositories, ctx: RequestContext, addendumId: string, input: SaveAddendumInput) {
-  const { c, a } = await loadAddendum(repos, ctx, addendumId, 'contract.manage')
-  if (a.status !== 'draft') throw new DomainError('ADDENDUM_LOCKED', 'Somente aditivos em rascunho podem ser alterados.')
-  await repos.contracts.saveAddendum(addendumId, contentOf(c, input, ctx, addendumId))
-}
-
-export async function deleteAddendum(repos: Repositories, ctx: RequestContext, addendumId: string) {
-  const { a } = await loadAddendum(repos, ctx, addendumId, 'contract.manage')
-  if (a.status !== 'draft') throw new DomainError('ADDENDUM_LOCKED', 'Somente aditivos em rascunho podem ser excluídos.')
-  await repos.contracts.deleteAddendum(addendumId)
-}
-
-export async function submitAddendum(repos: Repositories, ctx: RequestContext, addendumId: string) {
-  const { c, a } = await loadAddendum(repos, ctx, addendumId, 'contract.manage')
-  if (a.status !== 'draft') throw new DomainError('ADDENDUM_LOCKED', 'O aditivo já foi enviado.')
-  const approved = c.addenda.filter((x) => x.status === 'approved')
-  const summary = summarize(c, a.items.map((i) => ({ ...i, materialId: null })), a.id)
-  const issues = validateAddendum(
-    { reason: a.reason, newEndOn: a.newEndOn, contractStartOn: c.startOn, currentEndOn: currentEndOn(c.endOn, approved) },
-    summary,
-  )
-  if (issues.length) throw new AppError('ADDENDUM_INVALID', 'Existem pendências no aditivo.', 422, issues)
-  await repos.contracts.updateAddendum(addendumId, { status: 'submitted', submittedAt: ctx.now().toISOString(), submittedBy: ctx.actor.id })
-  return { status: 'submitted' as const }
-}
-
-export async function decideAddendum(repos: Repositories, ctx: RequestContext, addendumId: string, input: { decision: 'approved' | 'rejected'; comment?: string | null }) {
-  const { c, a } = await loadAddendum(repos, ctx, addendumId, 'contract.read')
-  if (!canDecideAddendum(ctx.actor, c.work.id)) {
-    throw new AppError('FORBIDDEN', 'Aditivos são aprovados pela Gerência ou Diretoria.', 403)
-  }
-  if (a.status !== 'submitted') throw new DomainError('ADDENDUM_NOT_SUBMITTED', 'O aditivo não está aguardando aprovação.')
-  const comment = input.comment?.trim() || null
-  if (input.decision === 'rejected' && !comment) throw new DomainError('ADDENDUM_REJECT_COMMENT', 'Informe o motivo da reprovação.')
-  await repos.contracts.updateAddendum(addendumId, { status: input.decision, decidedAt: ctx.now().toISOString(), decidedBy: ctx.actor.id, decisionComment: comment })
-  return { status: input.decision }
 }

@@ -116,31 +116,62 @@ describe('aditivos', () => {
     expect((await call('PUT', `/addenda/${a.id}`, { reason: 'Alterar depois de aprovado', items: [] })).status).toBe(409)
   })
 
-  it('2º aditivo: quantidade acumulada, item novo, um aberto por vez, exclusão do rascunho', async () => {
+  it('distrato: numeração própria, sinal negativo, sem passar do contratado e com vínculo por IP', async () => {
     const id = await seeded()
     const { data: c } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
     expect(c.can.addendum).toBe(true)
     const item = c.items[0]!
-    const created = await call<{ id: string; number: number }>('POST', `/contracts/${id}/addenda`, {
+    const ip = item.allocations[0]!.packageCode!
+    const tooMuch = Decimal.from(item.quantity).times('2').toDb()
+    const created = await call<{ id: string; kind: string; number: number }>('POST', `/contracts/${id}/addenda`, {
+      kind: 'termination',
       reason: 'Redução de escopo do item',
-      items: [{ contractItemId: item.id, quantityDelta: Decimal.from(item.quantity).times('2').neg().toDb() }],
+      items: [{ contractItemId: item.id, quantity: tooMuch, allocations: [{ packageCode: ip, quantity: tooMuch }] }],
     })
     expect(created.status).toBe(201)
-    expect(created.data.number).toBe(2)
+    expect([created.data.kind, created.data.number]).toEqual(['termination', 1])
     const sub = await call<{ error: { details: { message: string }[] } }>('POST', `/addenda/${created.data.id}/submit`)
     expect(sub.status).toBe(422)
-    expect(sub.data.error.details.map((d) => d.message).join()).toMatch(/negativa/)
+    expect(sub.data.error.details.map((d) => d.message).join()).toMatch(/passa da quantidade contratada/)
 
+    // Distrato não aceita item novo
+    const novo = await call('PUT', `/addenda/${created.data.id}`, {
+      reason: 'Item novo no distrato',
+      items: [{ code: 'IS99999', description: 'X', unit: 'm', quantity: '1', unitPrice: '1', allocations: [{ packageCode: ip, quantity: '1' }] }],
+    })
+    expect(novo.status).toBe(422)
+
+    const half = Decimal.from(item.quantity).div(2).round(4).toDb()
     const saved = await call('PUT', `/addenda/${created.data.id}`, {
-      reason: 'Serviço complementar de drenagem',
-      newEndOn: '2027-04-30',
-      items: [{ code: 'IS99999', description: 'Drenagem provisória', unit: 'm', quantityDelta: '120', unitPrice: '35.5' }],
+      reason: 'Redução de escopo do item',
+      items: [{ contractItemId: item.id, quantity: half, unitPrice: '1', allocations: [{ packageCode: ip, quantity: half }] }],
     })
     expect(saved.status).toBe(200)
     const { data: c2 } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
-    expect(c2.addenda[1]!.totalDelta).toBe('4260.0000')
-    expect(c2.addenda[1]!.items[0]!.contractItemId).toBeNull()
+    const t = c2.addenda.find((x) => x.id === created.data.id)!
+    expect(t.items[0]!.quantityDelta).toBe(Decimal.from(half).neg().toDb())
+    expect(t.items[0]!.unitPrice).toBe(item.unitPrice) // distrato usa o preço contratado
+    expect(t.items[0]!.allocations).toEqual([{ packageCode: ip, locationCode: null, quantity: Decimal.from(half).neg().toDb() }])
+    expect(Number(t.totalDelta)).toBeLessThan(0)
     expect((await call('POST', `/contracts/${id}/addenda`, { reason: 'Outro aditivo', items: [] })).status).toBe(409)
+    expect((await call('POST', `/addenda/${created.data.id}/submit`)).status).toBe(200)
+    const before = await contracted()
+    expect((await call('POST', `/addenda/${created.data.id}/decide`, { decision: 'approved', comment: 'De acordo.' }, MGR)).status).toBe(200)
+    expect(await contracted()).toBeCloseTo(before + Number(t.totalDelta), 2) // distrato reduz o contratado
+  })
+
+  it('aditivo com item novo exige vínculo de planejamento e numera depois do 1º aditivo', async () => {
+    const id = await seeded()
+    const { data: c } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
+    expect(c.can.addendum).toBe(true)
+    const created = await call<{ id: string; number: number }>('POST', `/contracts/${id}/addenda`, {
+      reason: 'Serviço complementar de drenagem',
+      newEndOn: '2027-04-30',
+      items: [{ code: 'IS99999', description: 'Drenagem provisória', unit: 'm', quantity: '120', unitPrice: '35.5', allocations: [] }],
+    })
+    expect(created.data.number).toBe(2)
+    const sub = await call<{ error: { details: { message: string }[] } }>('POST', `/addenda/${created.data.id}/submit`)
+    expect(sub.data.error.details.map((d) => d.message).join()).toMatch(/Vincule ao planejamento/)
     expect((await call('DELETE', `/addenda/${created.data.id}`)).status).toBe(200)
   })
 

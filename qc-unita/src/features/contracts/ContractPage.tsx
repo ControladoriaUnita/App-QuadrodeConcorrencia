@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Ban, ClipboardList, FileSignature, FileStack, Paperclip, Send, Server, Table2 } from 'lucide-react'
 import { Decimal } from '@shared/domain/decimal'
-import { currentEndOn } from '@shared/domain/contract/contract-request'
+import { currentEndOn } from '@shared/domain/contract/addendum'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Alert, Badge, Button, ConfirmDialog, Dialog, Field, Input, KpiStrip, Skeleton, Tabs, Textarea, toneClasses } from '@/components/ui'
 import { ApiError } from '@/lib/api'
@@ -138,7 +138,7 @@ export function ContractPage() {
         className="mb-3"
         items={[
           { label: 'Total a contratar', value: formatBRL(c.totalAmount), hint: `${c.items.length} itens` },
-          { label: 'Aditivos aprovados', value: formatBRL(addendaTotal), hint: `${approved.length} de ${c.addenda.length}` },
+          { label: 'Aditivos e distratos', value: formatBRL(addendaTotal), hint: `${approved.length} de ${c.addenda.length}` },
           { label: 'Novo total do contrato', value: formatBRL(newTotal), emphasis: !addendaTotal.isZero() },
           { label: 'Verba disponível (QC)', value: formatBRL(c.availableAmount), hint: `orçado ${formatBRL(c.budgetAmount)}` },
           {
@@ -158,7 +158,7 @@ export function ContractPage() {
           items={[
             { key: 'solicitacao', label: 'Solicitação', icon: <ClipboardList className="size-4" /> },
             { key: 'itens', label: 'Itens e vínculos', icon: <Table2 className="size-4" />, count: c.items.length },
-            { key: 'aditivos', label: 'Aditivos', icon: <FileStack className="size-4" />, count: pendingAddenda || c.addenda.length || undefined },
+            { key: 'aditivos', label: 'Aditivos e distratos', icon: <FileStack className="size-4" />, count: pendingAddenda || c.addenda.length || undefined },
             { key: 'anexos', label: 'Anexos', icon: <Paperclip className="size-4" /> },
           ]}
           trailing={<span className="text-xs text-text-muted">Vigência {formatDate(c.startOn)} → {formatDate(currentEndOn(c.endOn, approved))}</span>}

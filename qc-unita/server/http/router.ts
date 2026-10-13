@@ -32,6 +32,7 @@ import {
 } from '../../shared/contracts'
 import { AppError, toAppError, type RequestContext } from '../application/context'
 import type { Repositories } from '../application/ports'
+import * as addenda from '../application/use-cases/addenda'
 import * as attachments from '../application/use-cases/attachments'
 import * as catalog from '../application/use-cases/catalog'
 import * as contracts from '../application/use-cases/contracts'
@@ -160,18 +161,18 @@ route('POST', '/contracts/:id/erp-push', async ({ repos, ctx, params }) => contr
 route('POST', '/contracts/:id/sign', async ({ repos, ctx, params, body }) =>
   contracts.signContract(repos, ctx, parse(uuidParam, params.id), parse(signContractSchema, await body())))
 route('POST', '/contracts/:id/addenda', async ({ repos, ctx, params, body }) =>
-  contracts.createAddendum(repos, ctx, parse(uuidParam, params.id), parse(saveAddendumSchema, await body())), 201)
+  addenda.createAddendum(repos, ctx, parse(uuidParam, params.id), parse(saveAddendumSchema, await body())), 201)
 route('PUT', '/addenda/:aid', async ({ repos, ctx, params, body }) => {
-  await contracts.saveAddendum(repos, ctx, parse(uuidParam, params.aid), parse(saveAddendumSchema, await body()))
+  await addenda.saveAddendum(repos, ctx, parse(uuidParam, params.aid), parse(saveAddendumSchema, await body()))
   return { ok: true }
 })
 route('DELETE', '/addenda/:aid', async ({ repos, ctx, params }) => {
-  await contracts.deleteAddendum(repos, ctx, parse(uuidParam, params.aid))
+  await addenda.deleteAddendum(repos, ctx, parse(uuidParam, params.aid))
   return { ok: true }
 })
-route('POST', '/addenda/:aid/submit', async ({ repos, ctx, params }) => contracts.submitAddendum(repos, ctx, parse(uuidParam, params.aid)))
+route('POST', '/addenda/:aid/submit', async ({ repos, ctx, params }) => addenda.submitAddendum(repos, ctx, parse(uuidParam, params.aid)))
 route('POST', '/addenda/:aid/decide', async ({ repos, ctx, params, body }) =>
-  contracts.decideAddendum(repos, ctx, parse(uuidParam, params.aid), parse(decideAddendumSchema, await body())))
+  addenda.decideAddendum(repos, ctx, parse(uuidParam, params.aid), parse(decideAddendumSchema, await body())))
 
 route('GET', '/integration/logs', async ({ repos, ctx }) => catalog.listIntegrationLogs(repos, ctx))
 route('POST', '/integration/erp-sync', async ({ repos, ctx, body }) => {

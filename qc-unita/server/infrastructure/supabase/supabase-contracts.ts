@@ -31,9 +31,10 @@ const HEADER = `id, code, status, start_on, end_on, total_amount::text, pct_mate
 const ITEM = `id, competition_item_id, material_id, code, description, specification, unit, quantity::text, unit_price::text,
   pct_retention::text, pct_material::text, pct_equipment::text, sort_order,
   contract_item_allocations(package_code, location_code, quantity::text)`
-const ADDENDUM = `id, number, reason, requested_on, new_end_on, status, total_delta::text, submitted_at, decided_at, decided_by,
+const ADDENDUM = `id, kind, number, reason, requested_on, new_end_on, status, total_delta::text, submitted_at, decided_at, decided_by,
   decision_comment, created_at,
-  contract_addendum_items(id, contract_request_item_id, code, description, unit, quantity_delta::text, unit_price::text, sort_order)`
+  contract_addendum_items(id, contract_request_item_id, code, description, unit, quantity_delta::text, unit_price::text, sort_order,
+    contract_addendum_item_allocations(package_code, location_code, quantity::text))`
 
 const party = (s: Json | null): ContractPartyDTO | null =>
   s
@@ -52,15 +53,21 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
     return new Map(rows.map((r) => [r.id, r.full_name]))
   }
 
+  /** Substitui itens e vínculos (os vínculos caem junto com os itens, por cascade). */
   const writeAddendumItems = async (addendumId: string, content: AddendumContent) => {
     must(await db.from('contract_addendum_items').delete().eq('addendum_id', addendumId))
     if (!content.items.length) return
-    must(await db.from('contract_addendum_items').insert(
+    const inserted = must(await db.from('contract_addendum_items').insert(
       content.items.map((i, idx) => ({
         addendum_id: addendumId, contract_request_item_id: i.contractItemId, material_id: i.materialId, code: i.code,
         description: i.description, unit: i.unit, quantity_delta: i.quantityDelta, unit_price: i.unitPrice, sort_order: idx,
       })),
-    ))
+    ).select('id, sort_order')) as { id: string; sort_order: number }[]
+    const idByOrder = new Map(inserted.map((r) => [r.sort_order, r.id]))
+    const allocations = content.items.flatMap((i, idx) =>
+      i.allocations.map((a) => ({ addendum_item_id: idByOrder.get(idx)!, package_code: a.packageCode, location_code: a.locationCode, quantity: a.quantity })),
+    )
+    if (allocations.length) must(await db.from('contract_addendum_item_allocations').insert(allocations))
   }
 
   const addendumHead = (c: AddendumContent) => ({
@@ -107,7 +114,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
       if (!cr) return null
       const [itemRows, addRows] = await Promise.all([
         db.from('contract_request_items').select(ITEM).eq('contract_request_id', id).order('sort_order'),
-        db.from('contract_addenda').select(ADDENDUM).eq('contract_request_id', id).order('number'),
+        db.from('contract_addenda').select(ADDENDUM).eq('contract_request_id', id).order('created_at'),
       ])
       const comp = cr.competitions as Json
       const work = comp.works as Json
@@ -143,6 +150,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
 
       const addenda = adds.map<AddendumDTO>((a) => ({
         id: a.id as string,
+        kind: a.kind as AddendumDTO['kind'],
         number: a.number as number,
         reason: a.reason as string,
         requestedOn: a.requested_on as string,
@@ -165,6 +173,9 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
             quantityDelta: x.quantity_delta as string,
             unitPrice: x.unit_price as string,
             totalDelta: lineTotal(Decimal.from(x.unit_price as string), Decimal.from(x.quantity_delta as string)).toDb(),
+            allocations: ((x.contract_addendum_item_allocations as Json[]) ?? [])
+              .map((al) => ({ packageCode: al.package_code as string, locationCode: (al.location_code as string) ?? null, quantity: al.quantity as string }))
+              .sort((p, q) => p.packageCode.localeCompare(q.packageCode)),
           })),
       }))
 
@@ -248,7 +259,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
 
     async createAddendum(contractId, number, content, actorId) {
       const a = must(await db.from('contract_addenda').insert({
-        contract_request_id: contractId, number, created_by: actorId, ...addendumHead(content),
+        contract_request_id: contractId, kind: content.kind, number, created_by: actorId, ...addendumHead(content),
       }).select('id').single()) as { id: string }
       await writeAddendumItems(a.id, content)
       return a.id

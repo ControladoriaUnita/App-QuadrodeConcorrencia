@@ -534,6 +534,8 @@ export type ErpSyncInput = z.infer<typeof erpSyncSchema>
 // ----------------------------------------------------------------------------- solicitação de contrato e aditivos
 export type ContractRequestStatus = 'draft' | 'submitted' | 'sent_to_erp' | 'signed' | 'cancelled'
 export type AddendumStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
+/** Aditivo (soma) ou distrato (subtrai) */
+export type AddendumKind = 'addendum' | 'termination'
 
 /** Vínculo de quantidade do item contratado (Vínculo PL) */
 export interface ContractAllocationDTO {
@@ -579,19 +581,29 @@ export interface ContractPartyDTO {
   erpId: string | null
 }
 
+/** Vínculo de planejamento (IP) de um item do aditivo/distrato; quantidade com o sinal do item */
+export interface AddendumAllocationDTO {
+  packageCode: string
+  locationCode: string | null
+  quantity: string
+}
+
 export interface AddendumItemDTO {
   id: string
   contractItemId: string | null
   code: string
   description: string
   unit: string
+  /** Com sinal: positivo no aditivo, negativo no distrato */
   quantityDelta: string
   unitPrice: string
   totalDelta: string
+  allocations: AddendumAllocationDTO[]
 }
 
 export interface AddendumDTO {
   id: string
+  kind: AddendumKind
   number: number
   reason: string
   requestedOn: string
@@ -696,26 +708,47 @@ export type UpdateContractItemInput = z.infer<typeof updateContractItemSchema>
 export const cancelContractSchema = z.object({ reason: z.string().trim().min(5, 'Explique o motivo do cancelamento').max(1000) })
 export const signContractSchema = z.object({ signedOn: isoDate, erpContractId: z.string().trim().max(60).optional() })
 
+/** Quantidade digitada: sempre positiva; o sinal vem do tipo (aditivo +, distrato −). */
+const positiveQuantity = decimalString.refine((v) => !v.startsWith('-') && !/^0+(\.0+)?$/.test(v), 'Informe uma quantidade maior que zero')
+
+const addendumAllocationSchema = z.object({
+  packageCode: z.string().trim().min(1, 'Informe o IP').max(40),
+  locationCode: z.string().trim().max(40).nullable().optional(),
+  quantity: positiveQuantity,
+})
+
 const addendumItemSchema = z.union([
-  z.object({ contractItemId: uuid, quantityDelta: decimalString, unitPrice: decimalString.optional() }),
+  z.object({
+    contractItemId: uuid,
+    quantity: positiveQuantity,
+    /** Só no aditivo; o distrato usa o preço contratado */
+    unitPrice: decimalString.optional(),
+    allocations: z.array(addendumAllocationSchema).max(100),
+  }),
   z.object({
     contractItemId: z.null().optional(),
     code: z.string().trim().min(1).max(40),
     description: z.string().trim().min(1).max(500),
     unit: z.string().trim().min(1).max(20),
-    quantityDelta: decimalString,
+    quantity: positiveQuantity,
     unitPrice: decimalString,
+    allocations: z.array(addendumAllocationSchema).max(100),
   }),
 ])
 export type AddendumItemInput = z.infer<typeof addendumItemSchema>
 
 export const saveAddendumSchema = z.object({
-  reason: z.string().trim().min(5, 'Descreva o motivo do aditamento').max(2000),
+  /** Só na criação; depois o tipo não muda */
+  kind: z.enum(['addendum', 'termination']).default('addendum'),
+  reason: z.string().trim().min(5, 'Descreva o motivo').max(2000),
   requestedOn: isoDate.optional(),
   newEndOn: isoDate.nullable().optional(),
   items: z.array(addendumItemSchema).max(500),
 })
-export type SaveAddendumInput = z.infer<typeof saveAddendumSchema>
+/** Corpo enviado pela tela (kind opcional) */
+export type SaveAddendumInput = z.input<typeof saveAddendumSchema>
+/** Corpo já validado no servidor */
+export type SaveAddendumData = z.infer<typeof saveAddendumSchema>
 
 export const decideAddendumSchema = z.object({
   decision: z.enum(['approved', 'rejected']),

@@ -15,6 +15,3 @@ export const addendumStatus: Record<AddendumStatus, { label: string; tone: Tone 
   approved: { label: 'Aprovado', tone: 'success' },
   rejected: { label: 'Reprovado', tone: 'error' },
 }
-
-/** "1º aditamento" */
-export const ordinal = (n: number) => `${n}º`

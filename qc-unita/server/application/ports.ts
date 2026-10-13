@@ -21,6 +21,7 @@ import type {
   ContractProjectDTO,
   ContractRequestDTO,
   ContractRequestStatus,
+  AddendumKind,
   AddendumStatus,
   ContractTypeDTO,
   IntegrationLogDTO,
@@ -258,11 +259,16 @@ export interface NewAddendumItem {
   code: string
   description: string
   unit: string
+  /** Com sinal: positivo no aditivo, negativo no distrato */
   quantityDelta: string
   unitPrice: string
+  /** Vínculos de planejamento (IP), com o mesmo sinal do item */
+  allocations: { packageCode: string; locationCode: string | null; quantity: string }[]
 }
 
 export interface AddendumContent {
+  /** Fixado na criação (saveAddendum ignora) */
+  kind: AddendumKind
   reason: string
   requestedOn: string
   newEndOn: string | null

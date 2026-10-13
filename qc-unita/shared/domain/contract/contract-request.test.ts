@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Decimal } from '../decimal'
 import { buildQcMap, type QcMapSource } from '../competition/qc-map'
-import { buildContractDraft, computeAddendum, currentEndOn, validateAddendum, validateContractRequest } from './contract-request'
+import { buildContractDraft, validateContractRequest } from './contract-request'
 
 const D = Decimal.from
 
@@ -78,40 +78,5 @@ describe('Solicitação de contrato', () => {
       '2026-10-06',
     ).map((i) => i.field)
     expect(issues).toEqual(['endOn', 'secondSupplierId', 'directBillingMaterials', 'measurementCriteria', 'supplier'])
-  })
-})
-
-describe('Aditivos', () => {
-  const contract = [
-    { id: 'a', quantity: D('100'), totalPrice: D('1000') },
-    { id: 'b', quantity: D('10'), totalPrice: D('500') },
-  ]
-
-  it('acumula quantidades e totais com aditivos aprovados anteriores', () => {
-    const previous = [{ contractItemId: 'a', code: 'A', quantityDelta: D('20'), unitPrice: D('10') }]
-    const s = computeAddendum(contract, previous, [
-      { contractItemId: 'a', code: 'A', quantityDelta: D('-30'), unitPrice: D('10') },
-      { contractItemId: null, code: 'NOVO', quantityDelta: D('2.5'), unitPrice: D('40.10') },
-    ])
-    expect(s.initialTotal.toDb()).toBe('1500.0000')
-    expect(s.previousTotal.toDb()).toBe('200.0000')
-    expect(s.totalDelta.toDb()).toBe('-199.7500') // −300 + 100,25
-    expect(s.newTotal.toDb()).toBe('1500.2500')
-    expect(s.lines[0]!.quantityAfter.toDb()).toBe('90.0000')
-  })
-
-  it('não deixa a quantidade acumulada ficar negativa e exige conteúdo', () => {
-    const neg = computeAddendum(contract, [], [{ contractItemId: 'b', code: 'B', quantityDelta: D('-11'), unitPrice: D('50') }])
-    const args = { reason: 'Redução de escopo', newEndOn: null, contractStartOn: '2026-10-01', currentEndOn: '2026-12-31' }
-    expect(validateAddendum(args, neg).map((i) => i.message).join()).toContain('negativa em B')
-    const empty = computeAddendum(contract, [], [])
-    expect(validateAddendum(args, empty).map((i) => i.field)).toEqual(['items'])
-    expect(validateAddendum({ ...args, newEndOn: '2027-02-01' }, empty)).toEqual([])
-    expect(validateAddendum({ ...args, newEndOn: '2026-12-31' }, empty).map((i) => i.field)).toEqual(['newEndOn'])
-  })
-
-  it('término vigente vem do último aditivo aprovado com nova data', () => {
-    expect(currentEndOn('2026-12-31', [])).toBe('2026-12-31')
-    expect(currentEndOn('2026-12-31', [{ number: 1, newEndOn: '2027-01-31' }, { number: 2, newEndOn: null }, { number: 3, newEndOn: '2027-03-31' }])).toBe('2027-03-31')
   })
 })

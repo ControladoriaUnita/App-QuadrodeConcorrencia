@@ -3,7 +3,7 @@
  * A revisão de origem é guardada como `qcRevisionId` — `revisionId` faria o banco em memória
  * tratar a linha como filha da revisão congelada.
  */
-import type { AddendumDTO, ContractItemDTO, ContractListItemDTO, ContractPartyDTO, ContractProjectDTO } from '../../../shared/contracts'
+import type { AddendumDTO, AddendumItemDTO, ContractItemDTO, ContractListItemDTO, ContractPartyDTO, ContractProjectDTO } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import { lineTotal } from '../../../shared/domain/competition/best-condition'
 import type { AddendumContent, ContractData, ContractRepository } from '../../application/ports'
@@ -60,9 +60,10 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
   const addenda = (contractId: string): AddendumDTO[] =>
     db
       .find('contract_addenda', (a) => a.contractRequestId === contractId)
-      .sort((a, b) => (a.number as number) - (b.number as number))
+      .sort((a, b) => (a.createdAt as string).localeCompare(b.createdAt as string))
       .map((a) => ({
         id: a.id,
+        kind: (a.kind as AddendumDTO['kind']) ?? 'addendum',
         number: a.number as number,
         reason: a.reason as string,
         requestedOn: a.requestedOn as string,
@@ -86,6 +87,7 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
             quantityDelta: x.quantityDelta as string,
             unitPrice: x.unitPrice as string,
             totalDelta: lineTotal(Decimal.from(x.unitPrice as string), Decimal.from(x.quantityDelta as string)).toDb(),
+            allocations: [...((x.allocations as AddendumItemDTO['allocations']) ?? [])].sort((p, q) => p.packageCode.localeCompare(q.packageCode)),
           })),
       }))
 
@@ -97,7 +99,7 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
     content.items.forEach((i, idx) =>
       db.insert('contract_addendum_items', {
         addendumId, contractRequestItemId: i.contractItemId, materialId: i.materialId, code: i.code, description: i.description,
-        unit: i.unit, quantityDelta: i.quantityDelta, unitPrice: i.unitPrice, sortOrder: idx,
+        unit: i.unit, quantityDelta: i.quantityDelta, unitPrice: i.unitPrice, sortOrder: idx, allocations: i.allocations,
       }, audit, { workId }),
     )
   }
@@ -225,7 +227,8 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
     async saveAddendum(addendumId, content) {
       const a = db.get('contract_addenda', addendumId)!
       const workId = workOf(a.contractRequestId as string)
-      const { items: _i, ...head } = content
+      // O tipo é fixado na criação
+      const { items: _i, kind: _k, ...head } = content
       db.update('contract_addenda', addendumId, head, audit, { workId })
       writeAddendumItems(addendumId, content, workId)
     },

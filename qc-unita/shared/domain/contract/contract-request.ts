@@ -7,8 +7,7 @@
  *    Itens que a vencedora não cotou ficam de fora e são informados (exigiriam outro contrato).
  *  - Vínculos (IP · Qtd · Valor) vêm dos vínculos de planejamento do item; valor = quantidade × R$ unitário.
  *  - Distribuição (§1.6) ponderada pelo valor contratado de cada item.
- *  - Aditivo: quantidade aditiva (±) por item do contrato ou item novo; a quantidade acumulada
- *    (contrato + aditivos aprovados + este) não pode ficar negativa.
+ *  - Aditivos e distratos: ver ./addendum.ts.
  */
 import { Decimal } from '../decimal'
 import { lineTotal } from '../competition/best-condition'
@@ -146,78 +145,4 @@ export function validateContractRequest(h: ContractHeader, items: { quantity: De
     issues.push({ field: 'supplier', message: `CND do contratado vencida em ${h.supplierCndValidUntil}.` })
   }
   return issues
-}
-
-// ----------------------------------------------------------------------------- aditivos
-export interface AddendumLine {
-  contractItemId: string | null
-  code: string
-  quantityDelta: Decimal
-  unitPrice: Decimal
-}
-
-export interface AddendumLineResult extends AddendumLine {
-  totalDelta: Decimal
-  /** Quantidade do item após este aditivo (contrato + aditivos aprovados + este) */
-  quantityAfter: Decimal
-}
-
-export interface AddendumSummary {
-  lines: AddendumLineResult[]
-  /** Total do contrato inicial */
-  initialTotal: Decimal
-  /** Σ aditivos aprovados anteriores */
-  previousTotal: Decimal
-  /** Total deste aditamento */
-  totalDelta: Decimal
-  /** Novo total do contrato (inicial + anteriores + este) */
-  newTotal: Decimal
-}
-
-/**
- * Calcula o aditamento: total por linha (Δ quant. × R$ unit.), quantidade acumulada por item e
- * o novo total do contrato. `previous` = linhas de aditivos já aprovados.
- */
-export function computeAddendum(
-  contractItems: { id: string; quantity: Decimal; totalPrice: Decimal }[],
-  previous: AddendumLine[],
-  lines: AddendumLine[],
-): AddendumSummary {
-  const qty = new Map(contractItems.map((i) => [i.id, i.quantity]))
-  for (const p of previous) if (p.contractItemId) qty.set(p.contractItemId, (qty.get(p.contractItemId) ?? ZERO).plus(p.quantityDelta))
-  const result = lines.map<AddendumLineResult>((l) => {
-    const totalDelta = lineTotal(l.unitPrice, l.quantityDelta)
-    const before = l.contractItemId ? (qty.get(l.contractItemId) ?? ZERO) : ZERO
-    return { ...l, totalDelta, quantityAfter: before.plus(l.quantityDelta) }
-  })
-  const initialTotal = Decimal.sum(contractItems.map((i) => i.totalPrice))
-  const previousTotal = Decimal.sum(previous.map((p) => lineTotal(p.unitPrice, p.quantityDelta)))
-  const totalDelta = Decimal.sum(result.map((r) => r.totalDelta))
-  return { lines: result, initialTotal, previousTotal, totalDelta, newTotal: initialTotal.plus(previousTotal).plus(totalDelta) }
-}
-
-export function validateAddendum(
-  a: { reason: string; newEndOn: string | null; contractStartOn: string; currentEndOn: string },
-  summary: AddendumSummary,
-): ValidationIssue[] {
-  const issues: ValidationIssue[] = []
-  if (a.reason.trim().length < 5) issues.push({ field: 'reason', message: 'Descreva o motivo do aditamento.' })
-  const hasValue = summary.lines.some((l) => !l.quantityDelta.isZero())
-  if (!hasValue && !a.newEndOn) issues.push({ field: 'items', message: 'Informe quantidades aditivas ou uma nova data de término.' })
-  if (a.newEndOn && a.newEndOn < a.contractStartOn) issues.push({ field: 'newEndOn', message: 'A nova data de término é anterior ao início do contrato.' })
-  if (a.newEndOn && a.newEndOn === a.currentEndOn) issues.push({ field: 'newEndOn', message: 'A nova data de término é igual à vigente.' })
-  const negative = summary.lines.filter((l) => l.quantityAfter.isNegative())
-  if (negative.length) {
-    issues.push({ field: 'items', message: `Quantidade acumulada negativa em ${negative.map((n) => n.code).join(', ')}.` })
-  }
-  const zeroNew = summary.lines.filter((l) => !l.contractItemId && !l.quantityDelta.isPositive())
-  if (zeroNew.length) issues.push({ field: 'items', message: 'Itens novos precisam de quantidade positiva.' })
-  if (summary.lines.some((l) => l.unitPrice.isNegative())) issues.push({ field: 'items', message: 'R$ unitário não pode ser negativo.' })
-  return issues
-}
-
-/** Término vigente do contrato: maior "nova data de término" dos aditivos aprovados, senão o original. */
-export function currentEndOn(endOn: string, approvedAddenda: { newEndOn: string | null; number: number }[]): string {
-  const last = [...approvedAddenda].filter((a) => a.newEndOn).sort((a, b) => b.number - a.number)[0]
-  return last?.newEndOn ?? endOn
 }
