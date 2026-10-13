@@ -15,11 +15,15 @@ function graphSource(values = mockSheetRows() as CellValue[][]) {
 }
 
 describe('MockBudgetSheetSource', () => {
-  it('lista os orçamentos de exemplo por obra, inclusive com empresa diferente da UAU', async () => {
-    const mock = new MockBudgetSheetSource()
-    expect((await mock.listBudgets('2041')).map((b) => [b.company, b.work, b.budget, b.services])).toEqual([['1', '2041', '1', 5], ['1', '2041', '2', 5]])
-    expect((await mock.listBudgets('2070')).map((b) => b.company)).toEqual(['72'])
-    expect(await mock.listBudgets('9999')).toEqual([])
+  it('lista os orçamentos de exemplo por empresa + obra + nº', async () => {
+    const list = await new MockBudgetSheetSource().listBudgets()
+    expect(list.map((b) => [b.company, b.work, b.budget, b.services])).toEqual([
+      ['2', '1980', '1', 5],
+      ['1', '2041', '1', 5],
+      ['1', '2041', '2', 5],
+      ['1', '2055', '1', 5],
+      ['2', '2070', '3', 5],
+    ])
   })
 
   it('abre a composição auxiliar: um insumo por linha, com a auxiliar de origem', async () => {
@@ -34,8 +38,8 @@ describe('MockBudgetSheetSource', () => {
 describe('GraphBudgetSheetSource', () => {
   it('lista pelo índice: só colunas de chave e total, em blocos, com cache', async () => {
     const { g, source } = graphSource()
-    const list = await source.listBudgets('2041')
-    expect(list).toEqual(await new MockBudgetSheetSource().listBudgets('2041'))
+    const list = await source.listBudgets()
+    expect(list).toEqual(await new MockBudgetSheetSource().listBudgets())
     // Cabeçalho inteiro + colunas A:H (Empresa…QtdPai) e M:N (PrecoItem, PrecoFinal); nunca a linha inteira
     expect(g.calls[0]).toBe('usedRange')
     expect(g.calls[1]).toBe('A1:V1')
@@ -50,7 +54,7 @@ describe('GraphBudgetSheetSource', () => {
 
   it('carrega o orçamento lendo só as linhas dele, com a linha real da aba', async () => {
     const { g, source, values } = graphSource()
-    await source.listBudgets('2041')
+    await source.listBudgets()
     g.calls.length = 0
     const key = { company: '1', work: '2041', budget: '2' }
     const b = await source.loadBudget(key)

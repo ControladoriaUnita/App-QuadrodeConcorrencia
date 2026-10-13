@@ -1,26 +1,26 @@
 /**
- * Nova obra a partir da UAU + orçamento da planilha "BD_Orcamentos" (SharePoint).
+ * Nova obra a partir da planilha de orçamentos "BD_Orcamentos" (SharePoint).
  *
- *  - Empresa e obra vêm das listas da UAU; o nº do orçamento, da planilha (filtrada pelo código
- *    da obra: a empresa na planilha, Empresa_pla, pode diferir da empresa da obra na UAU).
+ *  - A planilha é a fonte da verdade do que pode ser criado: Empresa_pla · Obra_pla · NumOrca_pla.
+ *    Empresa e obra são os próprios códigos da UAU (o mesmo código de obra pode existir em mais de
+ *    uma empresa, então a chave é sempre empresa + obra). A UAU só completa os nomes.
  *  - O orçamento é carregado e conferido ANTES de criar a obra: erro na planilha não deixa obra
  *    criada sem orçamento. Se a gravação do orçamento falhar depois (banco), o erro diz que a obra
- *    foi criada e como completar ("Atualizar orçamento").
+ *    foi criada e como completar ("Atualizar da planilha").
  *  - Reimportar cria uma nova versão vigente; versões anteriores e QCs ficam intactos.
  */
 import type {
   BudgetImportInput,
-  CreateWorkFromUauInput,
+  CreateWorkFromUauData,
   RefreshSheetBudgetInput,
-  SheetBudgetDTO,
-  UauCompanyDTO,
-  UauWorkOptionDTO,
   WorkDTO,
+  WorkSetupCompanyDTO,
+  WorkSetupOptionsDTO,
 } from '../../../shared/contracts'
-import type { BudgetSheetKey, SheetBudget } from '../../../shared/domain/budget/budget-sheet'
-import type { ERPProvider } from '../../infrastructure/erp/erp-provider'
-import { AppError, can, notFound, requirePermission, type RequestContext } from '../context'
-import type { BudgetSheetSource, Repositories, SheetBudgetRef } from '../ports'
+import { compareItemCodes, type BudgetSheetEntry, type BudgetSheetKey, type SheetBudget } from '../../../shared/domain/budget/budget-sheet'
+import type { ERPProvider, ErpCompany, ErpWorkOption } from '../../infrastructure/erp/erp-provider'
+import { AppError, notFound, requirePermission, type RequestContext } from '../context'
+import type { BudgetSheetSource, Repositories } from '../ports'
 import { assertConsistentBudget, saveBudgetVersion } from './works'
 
 export interface SheetBudgetImportResult {
@@ -29,25 +29,36 @@ export interface SheetBudgetImportResult {
   warnings: string[]
 }
 
-// ----------------------------------------------------------------------------- listas
-export async function listUauCompanies(erp: ERPProvider, ctx: RequestContext): Promise<UauCompanyDTO[]> {
+// ----------------------------------------------------------------------------- opções da tela
+/** Empresas → obras → orçamentos da planilha, com os nomes da UAU e as obras já cadastradas no QC. */
+export async function listWorkSetupOptions(
+  repos: Repositories,
+  erp: ERPProvider,
+  sheet: BudgetSheetSource,
+  ctx: RequestContext,
+): Promise<WorkSetupOptionsDTO> {
   requirePermission(ctx, 'work.manage')
-  return erp.listCompanies()
+  const [entries, works, uau] = await Promise.all([readSheet(() => sheet.listBudgets()), repos.catalog.listWorks(), uauNames(erp)])
+  return { companies: groupOptions(entries, works, uau), warnings: uau.warning ? [uau.warning] : [] }
 }
 
-/** Obras ativas da UAU, marcando as que já existem no QC (mesma chave UAU ou mesmo código). */
-export async function listUauWorks(repos: Repositories, erp: ERPProvider, ctx: RequestContext): Promise<UauWorkOptionDTO[]> {
-  requirePermission(ctx, 'work.manage')
-  const [options, works] = await Promise.all([erp.listWorkOptions(), repos.catalog.listWorks()])
-  return options.map((o) => ({ ...o, existingWorkId: findExisting(works, o.company, o.code)?.id ?? null }))
-}
-
-/** Orçamentos da obra na planilha (todas as empresas). Também serve à reimportação. */
-export async function listSheetBudgets(sheet: BudgetSheetSource, ctx: RequestContext, workCode: string): Promise<SheetBudgetDTO[]> {
-  if (!can(ctx.actor, 'work.manage') && !ctx.actor.permissions.some((p) => p.key === 'budget.import')) {
-    requirePermission(ctx, 'work.manage')
+function groupOptions(entries: BudgetSheetEntry[], works: WorkDTO[], uau: UauNames): WorkSetupCompanyDTO[] {
+  const companies = new Map<string, WorkSetupCompanyDTO>()
+  for (const e of entries) {
+    const company = companies.get(e.company) ?? { code: e.company, name: uau.company(e.company), works: [] }
+    let work = company.works.find((w) => w.code === e.work)
+    if (!work) {
+      work = { code: e.work, name: uau.work(e.company, e.work), existingWorkId: findExisting(works, e.company, e.work)?.id ?? null, budgets: [] }
+      company.works.push(work)
+    }
+    work.budgets.push({ budget: e.budget, services: e.services, lines: e.lines, total: e.total })
+    companies.set(e.company, company)
   }
-  return readSheet(() => sheet.listBudgets(workCode.trim().toUpperCase()))
+  const byCode = (a: { code: string }, b: { code: string }) => compareItemCodes(a.code, b.code) || a.code.localeCompare(b.code)
+  return [...companies.values()].sort(byCode).map((c) => ({
+    ...c,
+    works: c.works.sort(byCode).map((w) => ({ ...w, budgets: w.budgets.sort((a, b) => compareItemCodes(a.budget, b.budget)) })),
+  }))
 }
 
 // ----------------------------------------------------------------------------- criação e reimportação
@@ -56,49 +67,50 @@ export async function createWorkFromUau(
   erp: ERPProvider,
   sheet: BudgetSheetSource,
   ctx: RequestContext,
-  input: CreateWorkFromUauInput,
+  input: CreateWorkFromUauData,
 ): Promise<SheetBudgetImportResult> {
   requirePermission(ctx, 'work.manage')
-  const code = input.work.toUpperCase()
-  const option = (await erp.listWorkOptions()).find((o) => o.company === input.company && o.code.toUpperCase() === code)
-  if (!option) throw new AppError('UAU_WORK_NOT_FOUND', `A obra ${code} da empresa ${input.company} não está entre as obras ativas da UAU.`, 422)
+  const key = sheetKey(input.company, input.work, input.budget)
 
-  const existing = findExisting(await repos.catalog.listWorks(), option.company, option.code)
+  const existing = findExisting(await repos.catalog.listWorks(), key.company, key.work)
   if (existing) {
     throw new AppError(
       'WORK_EXISTS',
-      `A obra ${existing.code} — ${existing.name} já existe no QC. Para trazer o orçamento de novo, use "Atualizar orçamento" nela.`,
+      `A obra ${existing.code} — ${existing.name} já existe no QC. Para trazer o orçamento de novo, use "Atualizar da planilha" nela.`,
       409,
       { workId: existing.id },
     )
   }
 
   // Planilha primeiro: só cria a obra com o orçamento já lido e conferido
-  const ref: SheetBudgetRef = { work: option.code.toUpperCase(), budget: input.budget, sheetCompany: input.sheetCompany ?? option.company }
-  const budget = await loadSheetBudget(sheet, ref)
-  const importInput = toImportInput(budget, sheet.sheetName, ref)
+  const budget = await readSheet(() => sheet.loadBudget(key))
+  const importInput = toImportInput(budget, sheet.sheetName, key)
   assertConsistentBudget(importInput)
 
+  const uau = await uauNames(erp)
+  const name = uau.work(key.company, key.work) ?? `Obra ${key.work}`
+  const warnings = [...(uau.warning ? [uau.warning] : []), ...budget.warnings]
+
   const id = await repos.catalog.createWork(
-    { code: option.code, name: option.name, clientName: input.clientName ?? null, status: input.status },
+    { code: key.work, name, clientName: input.clientName ?? null, status: input.status },
     ctx.actor.id,
-    { erpId: `${option.company}:${option.code}`, uau: { company: option.company, work: option.code, budget: ref.budget, sheetCompany: ref.sheetCompany } },
+    { erpId: `${key.company}:${key.work}`, uau: { ...key } },
   )
   try {
-    const saved = await saveBudgetVersion(repos, ctx, id, importInput, { provider: 'sharepoint', integrationId: keyId(ref), sheet: ref })
-    return { id, budget: saved, warnings: budget.warnings }
+    const saved = await saveBudgetVersion(repos, ctx, id, importInput, { provider: 'sharepoint', integrationId: keyId(key), sheet: key })
+    return { id, budget: saved, warnings }
   } catch (err) {
     const reason = err instanceof AppError ? err.message : 'erro ao gravar no banco'
     throw new AppError(
       'WORK_CREATED_WITHOUT_BUDGET',
-      `A obra ${option.code} foi criada, mas o orçamento não foi gravado (${reason}). Abra a obra e use "Atualizar orçamento".`,
+      `A obra ${key.work} foi criada, mas o orçamento não foi gravado (${reason}). Abra a obra e use "Atualizar da planilha".`,
       502,
       { workId: id },
     )
   }
 }
 
-/** Reimporta o orçamento da planilha (o mesmo nº guardado na obra, ou outro informado). */
+/** Reimporta o orçamento da planilha (o mesmo nº guardado na obra, ou outro da mesma empresa + obra). */
 export async function refreshSheetBudget(
   repos: Repositories,
   sheet: BudgetSheetSource,
@@ -109,34 +121,59 @@ export async function refreshSheetBudget(
   requirePermission(ctx, 'budget.import', workId)
   const work = await repos.catalog.getWork(workId)
   if (!work) throw notFound('Obra')
+  if (!work.uau) throw new AppError('SHEET_BUDGET_REQUIRED', 'Esta obra não foi criada pela planilha de orçamentos (falta a empresa e a obra da UAU).', 422)
 
-  const budget = input.budget ?? work.uau?.budget
-  const sheetCompany = input.sheetCompany ?? work.uau?.sheetCompany ?? work.uau?.company
-  if (!budget || !sheetCompany) {
-    throw new AppError('SHEET_BUDGET_REQUIRED', 'Escolha o orçamento da planilha (nº e empresa) para esta obra.', 422)
-  }
-  const ref: SheetBudgetRef = { work: (work.uau?.work ?? work.code).toUpperCase(), budget, sheetCompany }
-  const loaded = await loadSheetBudget(sheet, ref)
-  const saved = await saveBudgetVersion(repos, ctx, workId, toImportInput(loaded, sheet.sheetName, ref), {
+  const budget = input.budget ?? work.uau.budget
+  if (!budget) throw new AppError('SHEET_BUDGET_REQUIRED', 'Escolha o nº do orçamento da planilha para esta obra.', 422)
+  const key = sheetKey(work.uau.company, work.uau.work, budget)
+  const loaded = await readSheet(() => sheet.loadBudget(key))
+  const saved = await saveBudgetVersion(repos, ctx, workId, toImportInput(loaded, sheet.sheetName, key), {
     provider: 'sharepoint',
-    integrationId: keyId(ref),
-    sheet: ref,
+    integrationId: keyId(key),
+    sheet: key,
   })
   return { id: workId, budget: saved, warnings: loaded.warnings }
 }
 
 // ----------------------------------------------------------------------------- apoio
-/** Obra do QC com a mesma chave UAU (empresa + obra) ou, na falta dela, o mesmo código. */
+const sheetKey = (company: string, work: string, budget: string): BudgetSheetKey => ({
+  company: company.trim(),
+  work: work.trim().toUpperCase(),
+  budget: budget.trim(),
+})
+
+const keyId = (k: BudgetSheetKey) => `${k.company}|${k.work}|${k.budget}`
+
+/** Obra do QC com a mesma chave UAU (empresa + obra) ou, se não tiver chave, o mesmo código. */
 function findExisting(works: WorkDTO[], company: string, code: string): WorkDTO | undefined {
   const c = code.toUpperCase()
-  return works.find((w) => (w.uau && w.uau.company === company && w.uau.work.toUpperCase() === c) || w.code.toUpperCase() === c)
+  return works.find((w) => (w.uau ? w.uau.company === company && w.uau.work.toUpperCase() === c : w.code.toUpperCase() === c))
 }
 
-const keyId = (ref: SheetBudgetRef) => `${ref.sheetCompany}|${ref.work}|${ref.budget}`
+interface UauNames {
+  company: (code: string) => string | null
+  work: (company: string, code: string) => string | null
+  /** A UAU não respondeu: a tela mostra só os códigos */
+  warning: string | null
+}
 
-async function loadSheetBudget(sheet: BudgetSheetSource, ref: SheetBudgetRef): Promise<SheetBudget> {
-  const key: BudgetSheetKey = { company: ref.sheetCompany, work: ref.work, budget: ref.budget }
-  return readSheet(() => sheet.loadBudget(key))
+/** Nomes de empresas e obras da UAU. Falha na UAU não impede criar a obra (fica só com os códigos). */
+async function uauNames(erp: ERPProvider): Promise<UauNames> {
+  let companies: ErpCompany[] = []
+  let works: ErpWorkOption[] = []
+  let warning: string | null = null
+  try {
+    ;[companies, works] = await Promise.all([erp.listCompanies(), erp.listWorkOptions()])
+  } catch (err) {
+    warning = `Nomes da UAU indisponíveis (${err instanceof Error ? err.message : String(err)}). As obras aparecem só pelo código.`
+  }
+  const companyName = new Map(companies.map((c) => [c.code, c.name]))
+  const workName = new Map(works.map((w) => [`${w.company}|${w.code.toUpperCase()}`, w.name]))
+  return {
+    company: (code) => companyName.get(code) ?? null,
+    work: (company, code) => workName.get(`${company}|${code.toUpperCase()}`) ?? null,
+    warning,
+  }
 }
 
 /** Erros do parser (colunas ausentes, orçamento inexistente ou vazio) viram mensagens claras. */
@@ -151,9 +188,9 @@ async function readSheet<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-function toImportInput(budget: SheetBudget, sheetName: string, ref: SheetBudgetRef): BudgetImportInput {
+function toImportInput(budget: SheetBudget, sheetName: string, key: BudgetSheetKey): BudgetImportInput {
   return {
-    fileName: `SharePoint · ${sheetName} · orçamento ${ref.budget}`,
+    fileName: `SharePoint · ${sheetName} · empresa ${key.company} · obra ${key.work} · orçamento ${key.budget}`,
     sheetName,
     groups: budget.groups,
     activities: budget.activities,

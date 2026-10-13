@@ -8,7 +8,7 @@
  * Cabeçalhos de auditoria são enviados ao PostgREST e lidos pelo trigger audit_row_changes().
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { RequestContext } from '../../application/context'
+import { AppError, type RequestContext } from '../../application/context'
 
 function env(name: string): string {
   const v = process.env[name]
@@ -34,8 +34,30 @@ export function createUserClient(accessToken: string, ctx: Pick<RequestContext, 
   })
 }
 
+/**
+ * Confere que SUPABASE_SERVICE_ROLE_KEY é mesmo a chave secreta. Com a chave pública (publishable/anon)
+ * o banco aplica as regras de acesso e a sincronização falha com um "bloqueado" genérico.
+ */
+export function serviceKeyProblem(key: string): string | null {
+  const k = key.trim().replace(/^["']|["']$/g, '')
+  if (k.startsWith('sb_secret_')) return null
+  if (k.startsWith('sb_publishable_')) return 'SUPABASE_SERVICE_ROLE_KEY está com a chave pública (sb_publishable_…). Use a chave secreta (sb_secret_…) do Supabase → Project Settings → API Keys.'
+  if (k.startsWith('eyJ')) {
+    try {
+      const role = JSON.parse(Buffer.from(k.split('.')[1] ?? '', 'base64url').toString()).role
+      if (role === 'service_role') return null
+      return `SUPABASE_SERVICE_ROLE_KEY está com a chave "${role}". Use a chave service_role (ou a secreta sb_secret_…).`
+    } catch {
+      return 'SUPABASE_SERVICE_ROLE_KEY não é uma chave válida do Supabase.'
+    }
+  }
+  return 'SUPABASE_SERVICE_ROLE_KEY não parece uma chave do Supabase (esperado sb_secret_… ou a service_role).'
+}
+
 export function createServiceClient(ctx: Pick<RequestContext, 'correlationId' | 'origin'> & { actorId?: string | null }): SupabaseClient {
-  return createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), {
+  const problem = serviceKeyProblem(env('SUPABASE_SERVICE_ROLE_KEY'))
+  if (problem) throw new AppError('SERVICE_KEY_INVALID', problem, 500)
+  return createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY').trim().replace(/^["']|["']$/g, ''), {
     auth: authOptions,
     global: { headers: auditHeaders(ctx) },
   })

@@ -1,10 +1,9 @@
 /**
  * Fonte de orçamentos do modo demonstração: linhas no formato da aba "BD_Orcamentos" para as
- * obras do MockERPProvider (2041, 2055, 1980) e para a obra 2070, que só existe na "UAU" e pode
- * ser criada pela tela. Passa pelo mesmo parser da planilha real (shared/domain/budget/budget-sheet).
+ * obras do MockERPProvider (2041, 2055, 1980) e para a obra 2070, que ainda não está no QC e pode
+ * ser criada pela tela. Empresa_pla e Obra_pla são os códigos da "UAU" de exemplo. Passa pelo mesmo parser da planilha real (shared/domain/budget/budget-sheet).
  */
-import type { SheetBudgetDTO } from '../../../shared/contracts'
-import { buildSheetBudget, listSheetBudgets, type BudgetSheetKey, type SheetBudget } from '../../../shared/domain/budget/budget-sheet'
+import { buildSheetBudget, listSheetBudgets, type BudgetSheetEntry, type BudgetSheetKey, type SheetBudget } from '../../../shared/domain/budget/budget-sheet'
 import type { Cell } from '../../../shared/domain/budget/excel-import'
 import type { BudgetSheetSource } from '../../application/ports'
 
@@ -53,8 +52,7 @@ const BUDGETS: [number, string, number, number][] = [
   [1, '2041', 2, 1.08],
   [1, '2055', 1, 0.7],
   [2, '1980', 1, 0.5],
-  // Empresa na planilha diferente da empresa da obra na UAU (2), como acontece na planilha real
-  [72, '2070', 3, 1.3],
+  [2, '2070', 3, 1.3],
 ]
 
 const round = (n: number, d = 6) => Math.round(n * 10 ** d) / 10 ** d
@@ -94,9 +92,8 @@ export class MockBudgetSheetSource implements BudgetSheetSource {
   readonly sheetName = 'BD_Orcamentos'
   private readonly rows = mockSheetRows()
 
-  async listBudgets(workCode?: string): Promise<SheetBudgetDTO[]> {
-    const work = workCode?.trim().toUpperCase()
-    return listSheetBudgets(this.rows).filter((b) => !work || b.work === work)
+  async listBudgets(): Promise<BudgetSheetEntry[]> {
+    return listSheetBudgets(this.rows)
   }
 
   async loadBudget(key: BudgetSheetKey): Promise<SheetBudget> {

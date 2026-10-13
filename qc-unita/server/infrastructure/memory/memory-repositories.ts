@@ -47,13 +47,8 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       status: w.status as WorkDTO['status'],
       erpId: (w.erpId as string) ?? null,
       erpSyncedAt: (w.erpSyncedAt as string) ?? null,
-      uau: w.uauWorkCode
-        ? {
-            company: ((w.uauCompanyCode ?? w.budgetSheetCompany) as string) ?? '',
-            work: w.uauWorkCode as string,
-            budget: (w.uauBudgetNumber as string) ?? null,
-            sheetCompany: (w.budgetSheetCompany as string) ?? null,
-          }
+      uau: w.uauCompanyCode && w.uauWorkCode
+        ? { company: w.uauCompanyCode as string, work: w.uauWorkCode as string, budget: (w.uauBudgetNumber as string) ?? null }
         : null,
       currentBudgetId: budget?.id ?? null,
       currentBudgetTotal: (budget?.totalAmount as string) ?? null,
@@ -227,7 +222,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
           state: input.state ?? null, costCenter: input.costCenter ?? null, status: input.status, startedOn: input.startedOn ?? null,
           finishedOn: input.finishedOn ?? null, source: origin ? 'erp' : 'manual', erpSyncedAt: origin ? new Date().toISOString() : null, createdBy: actorId,
           uauCompanyCode: origin?.uau.company ?? null, uauWorkCode: origin?.uau.work ?? null,
-          uauBudgetNumber: origin?.uau.budget ?? null, budgetSheetCompany: origin?.uau.sheetCompany ?? null,
+          uauBudgetNumber: origin?.uau.budget ?? null,
         }, audit)
         return row.id
       },
@@ -760,7 +755,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         const { total, count } = writeBudget(budget.id, input.groups, input.activities, input.lines)
         db.put('budgets', { ...db.get('budgets', budget.id)!, isCurrent: true, totalAmount: total.toDb(), linesCount: count })
         if (meta.sheet) {
-          db.update('works', workId, { uauWorkCode: meta.sheet.work, uauBudgetNumber: meta.sheet.budget, budgetSheetCompany: meta.sheet.sheetCompany }, audit, { workId })
+          db.update('works', workId, { uauCompanyCode: meta.sheet.company, uauWorkCode: meta.sheet.work, uauBudgetNumber: meta.sheet.budget }, audit, { workId })
         }
         return { budgetId: budget.id, version, lines: count }
       },

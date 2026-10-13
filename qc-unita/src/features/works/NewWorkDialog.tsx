@@ -1,5 +1,5 @@
 /**
- * Cadastro manual de obra (alternativa à "Nova obra da UAU"). Depois de criada,
+ * Cadastro manual de obra (alternativa à "Nova obra" pela planilha de orçamentos). Depois de criada,
  * a obra abre com a importação do orçamento (Excel) pronta.
  */
 import { useEffect } from 'react'

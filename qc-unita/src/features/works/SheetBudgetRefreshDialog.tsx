@@ -1,16 +1,13 @@
 /**
  * Atualiza o orçamento da obra pela planilha de orçamentos (SharePoint): reimporta o orçamento
- * atual ou outro nº escolhido, gerando uma nova versão vigente.
+ * atual ou outro nº da mesma empresa + obra, gerando uma nova versão vigente.
  */
 import { useEffect, useState } from 'react'
 import type { RefreshSheetBudgetInput, UauWorkKeyDTO } from '@shared/contracts'
 import { Alert, Button, Dialog } from '@/components/ui'
 import type { ApiError } from '@/lib/api'
-import { useRefreshSheetBudget, type SheetBudgetImportResult } from './api'
-import { sameCompany, SheetBudgetField, type SheetBudgetChoice } from './SheetBudgetField'
-
-const currentChoice = (uau: UauWorkKeyDTO): SheetBudgetChoice | null =>
-  uau.budget ? { budget: uau.budget, sheetCompany: uau.sheetCompany ?? uau.company } : null
+import { useRefreshSheetBudget, useWorkSetupOptions, type SheetBudgetImportResult } from './api'
+import { SheetBudgetField } from './SheetBudgetField'
 
 interface Props {
   open: boolean
@@ -22,24 +19,25 @@ interface Props {
 }
 
 export function SheetBudgetRefreshDialog({ open, workId, uau, onClose, onDone }: Props) {
+  const options = useWorkSetupOptions(open)
   const refresh = useRefreshSheetBudget(workId)
-  const [budget, setBudget] = useState<SheetBudgetChoice | null>(null)
+  const [budget, setBudget] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
-    setBudget(currentChoice(uau))
+    setBudget(uau.budget)
     refresh.reset()
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const error = refresh.error as ApiError | null
-  const changed = !!budget && budget.budget !== uau.budget
+  const budgets = options.data
+    ? (options.data.companies.find((c) => c.code === uau.company)?.works.find((w) => w.code === uau.work)?.budgets ?? [])
+    : null
+  const error = (refresh.error ?? options.error) as ApiError | null
+  const changed = !!budget && budget !== uau.budget
 
   const submit = async () => {
     if (!budget) return
-    const input: RefreshSheetBudgetInput = {
-      budget: budget.budget,
-      ...(sameCompany(budget.sheetCompany, uau.company) ? {} : { sheetCompany: budget.sheetCompany }),
-    }
+    const input: RefreshSheetBudgetInput = { budget }
     try {
       onDone(await refresh.mutateAsync(input))
     } catch {
@@ -58,17 +56,18 @@ export function SheetBudgetRefreshDialog({ open, workId, uau, onClose, onDone }:
         <>
           <Button variant="ghost" className="mr-auto" onClick={onClose}>Cancelar</Button>
           <Button variant="primary" disabled={!budget} loading={refresh.isPending} onClick={submit}>
-            {changed ? `Importar orçamento ${budget.budget}` : 'Atualizar orçamento'}
+            {changed ? `Importar orçamento ${budget}` : 'Atualizar orçamento'}
           </Button>
         </>
       }
     >
       <div className="grid gap-3">
         {error && <Alert tone="error" title="Não foi possível atualizar o orçamento">{error.message}</Alert>}
-        <SheetBudgetField workCode={uau.work} company={uau.company} value={budget} onChange={setBudget} />
+        {options.isLoading && <p className="text-sm text-text-muted">Lendo a planilha de orçamentos… pode levar alguns segundos.</p>}
+        <SheetBudgetField budgets={budgets} value={budget} onChange={setBudget} />
         {changed && uau.budget && (
           <Alert tone="warning">
-            A obra hoje usa o orçamento {uau.budget}. Ao confirmar, o orçamento {budget.budget} passa a ser o vigente.
+            A obra hoje usa o orçamento {uau.budget}. Ao confirmar, o orçamento {budget} passa a ser o vigente.
           </Alert>
         )}
       </div>

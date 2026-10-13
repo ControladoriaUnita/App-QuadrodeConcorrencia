@@ -6,10 +6,8 @@ import type {
   CreateWorkFromUauInput,
   CreateWorkInput,
   RefreshSheetBudgetInput,
-  SheetBudgetDTO,
-  UauCompanyDTO,
-  UauWorkOptionDTO,
   WorkOverviewDTO,
+  WorkSetupOptionsDTO,
 } from '@shared/contracts'
 import { api } from '@/lib/api'
 
@@ -65,22 +63,13 @@ export function useCreateWork() {
 }
 
 // ----------------------------------------------------------------------------- obras da UAU e planilha de orçamentos (SharePoint)
-const LIST_STALE = 5 * 60_000
-
-export const useUauCompanies = (enabled = true) =>
-  useQuery({ queryKey: ['uau', 'companies'], queryFn: () => api<UauCompanyDTO[]>('/uau/companies'), enabled, staleTime: LIST_STALE })
-
-/** Obras ativas da UAU (existingWorkId preenchido quando a obra já está no QC) */
-export const useUauWorks = (enabled = true) =>
-  useQuery({ queryKey: ['uau', 'works'], queryFn: () => api<UauWorkOptionDTO[]>('/uau/works'), enabled, staleTime: LIST_STALE })
-
-/** Orçamentos da obra na planilha (pode demorar: a planilha é grande) */
-export const useSheetBudgets = (workCode: string | null) =>
+/** Empresas → obras → orçamentos da planilha (com nomes da UAU). A 1ª leitura da planilha pode demorar. */
+export const useWorkSetupOptions = (enabled = true) =>
   useQuery({
-    queryKey: ['budget-sheet', 'budgets', workCode],
-    queryFn: () => api<SheetBudgetDTO[]>(`/budget-sheet/budgets?${new URLSearchParams({ work: workCode ?? '' })}`),
-    enabled: !!workCode,
-    staleTime: LIST_STALE,
+    queryKey: ['work-setup', 'options'],
+    queryFn: () => api<WorkSetupOptionsDTO>('/work-setup/options'),
+    enabled,
+    staleTime: 5 * 60_000,
   })
 
 /** Resultado da criação/atualização da obra a partir da planilha */
@@ -96,7 +85,7 @@ export function useCreateWorkFromUau() {
     mutationFn: (body: CreateWorkFromUauInput) => api<SheetBudgetImportResult>('/works/from-uau', { method: 'POST', body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['works'] })
-      qc.invalidateQueries({ queryKey: ['uau', 'works'] })
+      qc.invalidateQueries({ queryKey: ['work-setup'] })
     },
   })
 }

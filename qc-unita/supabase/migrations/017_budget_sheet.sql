@@ -2,8 +2,8 @@
 -- 017_budget_sheet.sql
 -- Orçamento das obras vindo da aba "BD_Orcamentos" (Excel no SharePoint, lido pelo Microsoft Graph).
 --
---   * works: chaves da obra na UAU (empresa, obra) e o orçamento escolhido na criação (nº e a
---     empresa como está na planilha — Empresa_pla pode diferir da empresa da obra na UAU).
+--   * works: chave da obra na UAU (empresa + obra, as mesmas colunas Empresa_pla e Obra_pla da
+--     planilha) e o nº do orçamento escolhido (NumOrca_pla).
 --   * activity_items: composição auxiliar aberta — cada insumo da auxiliar é uma linha e guarda
 --     de qual auxiliar veio (código, descrição, unidade, coeficiente no serviço e custo unitário).
 --   * Origem 'sharepoint' para versões de orçamento importadas da planilha.
@@ -15,8 +15,7 @@ alter type public.record_source add value if not exists 'sharepoint';
 alter table public.works
   add column if not exists uau_company_code  text,
   add column if not exists uau_work_code     text,
-  add column if not exists uau_budget_number text,
-  add column if not exists budget_sheet_company text;
+  add column if not exists uau_budget_number text;
 
 create unique index if not exists works_uau_key_idx on public.works (uau_company_code, uau_work_code)
   where uau_company_code is not null and uau_work_code is not null;

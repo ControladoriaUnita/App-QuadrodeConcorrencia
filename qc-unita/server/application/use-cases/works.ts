@@ -5,7 +5,8 @@ import type { BudgetImportInput, BudgetLineUsageDTO, BudgetStructureDTO, CreateW
 import { Decimal } from '../../../shared/domain/decimal'
 import { summarizeWork } from '../../../shared/domain/work/overview'
 import { AppError, can, notFound, requirePermission, type RequestContext } from '../context'
-import type { BudgetImportSource, Repositories, SheetBudgetRef } from '../ports'
+import type { BudgetSheetKey } from '../../../shared/domain/budget/budget-sheet'
+import type { BudgetImportSource, Repositories } from '../ports'
 
 async function competitionsOf(repos: Repositories, ctx: RequestContext, workId: string): Promise<WorkCompetitionDTO[]> {
   if (!can(ctx.actor, 'competition.read', workId)) return []
@@ -160,7 +161,7 @@ export async function saveBudgetVersion(
   ctx: RequestContext,
   workId: string,
   input: BudgetImportInput,
-  opts: { provider: BudgetImportSource; integrationId: string; sheet?: SheetBudgetRef },
+  opts: { provider: BudgetImportSource; integrationId: string; sheet?: BudgetSheetKey },
 ) {
   assertConsistentBudget(input)
   const logId = await repos.integrationLogs.start({

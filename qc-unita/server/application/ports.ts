@@ -27,7 +27,6 @@ import type {
   IntegrationLogDTO,
   ProfileRefDTO,
   RevisionStatus,
-  SheetBudgetDTO,
   SupplierDTO,
   UauWorkKeyDTO,
   UpdateItemInput,
@@ -35,7 +34,7 @@ import type {
   WorkDTO,
 } from '../../shared/contracts'
 import type { ApprovalInstance, ApprovalStepConfig } from '../../shared/domain/approval/approval-flow'
-import type { BudgetSheetKey, SheetBudget } from '../../shared/domain/budget/budget-sheet'
+import type { BudgetSheetEntry, BudgetSheetKey, SheetBudget } from '../../shared/domain/budget/budget-sheet'
 import type { ErpBudget, ErpMaterial, ErpSupplier, ErpWork } from '../infrastructure/erp/erp-provider'
 import type { Actor } from './context'
 
@@ -203,13 +202,6 @@ export interface ErpSyncWriter {
 
 export type BudgetImportSource = 'excel' | 'sharepoint'
 
-/** Orçamento da planilha usado pela obra: Obra_pla · NumOrca_pla · Empresa_pla */
-export interface SheetBudgetRef {
-  work: string
-  budget: string
-  sheetCompany: string
-}
-
 /** Importação de orçamento (Excel ou planilha do SharePoint) — cria nova versão vigente; escrita server-side (service_role). */
 export interface BudgetWriter {
   importBudget(
@@ -218,8 +210,8 @@ export interface BudgetWriter {
     meta: {
       actorId: string
       source?: BudgetImportSource
-      /** Planilha do SharePoint: guarda na obra o orçamento usado (obra, nº e empresa como estão na planilha) */
-      sheet?: SheetBudgetRef
+      /** Planilha do SharePoint: guarda na obra o orçamento usado (empresa, obra e nº) */
+      sheet?: BudgetSheetKey
     },
   ): Promise<{ budgetId: string; version: number; lines: number }>
 }
@@ -229,8 +221,8 @@ export interface BudgetSheetSource {
   readonly name: 'sharepoint' | 'mock'
   /** Nome da aba (para o nome do "arquivo" da versão importada) */
   readonly sheetName: string
-  /** Orçamentos disponíveis; com `workCode`, só os da obra (Obra_pla, sem diferenciar maiúsculas) */
-  listBudgets(workCode?: string): Promise<SheetBudgetDTO[]>
+  /** Orçamentos disponíveis na aba (um por empresa + obra + nº) */
+  listBudgets(): Promise<BudgetSheetEntry[]>
   /** Orçamento completo e estruturado (lança erro claro se não existir) */
   loadBudget(key: BudgetSheetKey): Promise<SheetBudget>
 }

@@ -8,8 +8,15 @@
  *  - Orçamento: lê a linha inteira só nas faixas onde o orçamento aparece (descobertas pelo índice)
  *    e confere a chave de cada linha lida; se a planilha mudou desde o índice, refaz o índice uma vez.
  */
-import type { SheetBudgetDTO } from '../../../shared/contracts'
-import { buildSheetBudget, listSheetBudgets, readSheetColumns, type BudgetSheetKey, type SheetBudget, type SheetColumns } from '../../../shared/domain/budget/budget-sheet'
+import {
+  buildSheetBudget,
+  listSheetBudgets,
+  readSheetColumns,
+  type BudgetSheetEntry,
+  type BudgetSheetKey,
+  type SheetBudget,
+  type SheetColumns,
+} from '../../../shared/domain/budget/budget-sheet'
 import type { Cell } from '../../../shared/domain/budget/excel-import'
 import { AppError } from '../../application/context'
 import type { BudgetSheetSource } from '../../application/ports'
@@ -52,11 +59,9 @@ export class GraphBudgetSheetSource implements BudgetSheetSource {
     this.sheetName = ref.sheet
   }
 
-  async listBudgets(workCode?: string): Promise<SheetBudgetDTO[]> {
+  async listBudgets(): Promise<BudgetSheetEntry[]> {
     const idx = await this.getIndex()
-    const work = workCode?.trim().toUpperCase()
-    const rows = work ? idx.rows.filter((r) => text(r[idx.cols.work]).toUpperCase() === work) : idx.rows
-    return listSheetBudgets([idx.header, ...rows])
+    return listSheetBudgets([idx.header, ...idx.rows])
   }
 
   async loadBudget(key: BudgetSheetKey): Promise<SheetBudget> {

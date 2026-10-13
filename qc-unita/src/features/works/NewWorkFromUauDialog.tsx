@@ -1,14 +1,15 @@
 /**
- * Nova obra a partir da UAU: Empresa → Obra (obras ativas da UAU) → Orçamento (planilha de
- * orçamentos do SharePoint). A obra é criada já com o orçamento completo importado.
- * O cadastro manual continua disponível como alternativa ("Cadastrar sem a UAU").
+ * Nova obra pela planilha de orçamentos: Empresa → Obra → Orçamento.
+ * As três listas vêm da aba BD_Orcamentos (Empresa_pla · Obra_pla · NumOrca_pla), que usa os códigos
+ * da UAU; os nomes vêm da UAU. A obra é criada já com o orçamento completo importado.
+ * O cadastro manual continua disponível como alternativa ("Cadastrar sem a planilha").
  */
 import { useEffect, useMemo, useState } from 'react'
-import type { CreateWorkFromUauInput } from '@shared/contracts'
+import type { CreateWorkFromUauInput, WorkSetupCompanyDTO, WorkSetupWorkDTO } from '@shared/contracts'
 import { Alert, Button, Combobox, Dialog, Field, Input, Select, type ComboboxOption } from '@/components/ui'
 import type { ApiError } from '@/lib/api'
-import { useCreateWorkFromUau, useUauCompanies, useUauWorks, type SheetBudgetImportResult } from './api'
-import { sameCompany, SheetBudgetField, type SheetBudgetChoice } from './SheetBudgetField'
+import { useCreateWorkFromUau, useWorkSetupOptions, type SheetBudgetImportResult } from './api'
+import { SheetBudgetField } from './SheetBudgetField'
 
 interface Props {
   open: boolean
@@ -18,63 +19,59 @@ interface Props {
   onManual: () => void
 }
 
+/** "71 — TEEN 5MS3 SPE LTDA" (ou só o código, quando a UAU não trouxe o nome) */
+const labelOf = (o: { code: string; name: string | null }) => (o.name ? `${o.code} — ${o.name}` : o.code)
+
 export function NewWorkFromUauDialog({ open, onClose, onCreated, onManual }: Props) {
-  const companies = useUauCompanies(open)
-  const works = useUauWorks(open)
+  const options = useWorkSetupOptions(open)
   const create = useCreateWorkFromUau()
-  const [company, setCompany] = useState<string | null>(null)
-  const [work, setWork] = useState<string | null>(null)
-  const [budget, setBudget] = useState<SheetBudgetChoice | null>(null)
+  const [companyCode, setCompanyCode] = useState<string | null>(null)
+  const [workCode, setWorkCode] = useState<string | null>(null)
+  const [budget, setBudget] = useState<string | null>(null)
   const [clientName, setClientName] = useState('')
   const [status, setStatus] = useState<'not_started' | 'active'>('active')
 
   useEffect(() => {
     if (!open) return
-    setCompany(null)
-    setWork(null)
+    setCompanyCode(null)
+    setWorkCode(null)
     setBudget(null)
     setClientName('')
     setStatus('active')
     create.reset()
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const companyOptions = useMemo<ComboboxOption[]>(() => {
-    const count = new Map<string, number>()
-    for (const w of works.data ?? []) count.set(w.company, (count.get(w.company) ?? 0) + 1)
-    return (companies.data ?? []).map((c) => ({
-      value: c.code,
-      label: `${c.code} — ${c.name}`,
-      hint: works.data ? `${count.get(c.code) ?? 0} obra(s) ativa(s)` : undefined,
-    }))
-  }, [companies.data, works.data])
+  const companies = options.data?.companies ?? []
+  const company: WorkSetupCompanyDTO | undefined = companies.find((c) => c.code === companyCode)
+  const work: WorkSetupWorkDTO | undefined = company?.works.find((w) => w.code === workCode)
 
+  const companyOptions = useMemo<ComboboxOption[]>(
+    () =>
+      companies.map((c) => ({
+        value: c.code,
+        label: labelOf(c),
+        hint: `${c.works.length} obra(s) com orçamento na planilha`,
+      })),
+    [companies],
+  )
   const workOptions = useMemo<ComboboxOption[]>(
     () =>
-      (works.data ?? [])
-        .filter((w) => company && sameCompany(w.company, company))
-        .map((w) => ({
-          value: w.code,
-          label: `${w.code} — ${w.name}`,
-          disabled: !!w.existingWorkId,
-          aside: w.existingWorkId ? 'já cadastrada' : undefined,
-        })),
-    [works.data, company],
+      (company?.works ?? []).map((w) => ({
+        value: w.code,
+        label: labelOf(w),
+        hint: `${w.budgets.length} orçamento(s)`,
+        disabled: !!w.existingWorkId,
+        aside: w.existingWorkId ? 'já cadastrada' : undefined,
+      })),
+    [company],
   )
-  const workName = works.data?.find((w) => company && sameCompany(w.company, company) && w.code === work)?.name
 
-  const error = create.error as ApiError | null
-  const ready = !!(company && work && budget)
+  const error = (create.error ?? options.error) as ApiError | null
+  const ready = !!(company && work && budget && !work.existingWorkId)
 
   const submit = async () => {
-    if (!company || !work || !budget) return
-    const input: CreateWorkFromUauInput = {
-      company,
-      work,
-      budget: budget.budget,
-      ...(sameCompany(budget.sheetCompany, company) ? {} : { sheetCompany: budget.sheetCompany }),
-      clientName: clientName.trim() || null,
-      status,
-    }
+    if (!ready) return
+    const input: CreateWorkFromUauInput = { company: company.code, work: work.code, budget, clientName: clientName.trim() || null, status }
     try {
       onCreated(await create.mutateAsync(input))
     } catch {
@@ -87,12 +84,12 @@ export function NewWorkFromUauDialog({ open, onClose, onCreated, onManual }: Pro
       open={open}
       onClose={onClose}
       width="min(94vw, 42rem)"
-      title="Nova obra da UAU"
-      description="Escolha a empresa e a obra cadastradas na UAU e o orçamento na planilha de orçamentos. A obra já abre com o orçamento completo."
+      title="Nova obra"
+      description="Escolha a empresa, a obra e o orçamento da planilha de orçamentos (SharePoint). A obra já abre com o orçamento completo."
       footer={
         <>
           <Button variant="ghost" className="mr-auto" onClick={onManual}>
-            Cadastrar sem a UAU
+            Cadastrar sem a planilha
           </Button>
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button variant="primary" disabled={!ready} loading={create.isPending} onClick={submit}>
@@ -108,44 +105,48 @@ export function NewWorkFromUauDialog({ open, onClose, onCreated, onManual }: Pro
           void submit()
         }}
       >
-        {error && <Alert tone="error" title="Não foi possível criar a obra" className="sm:col-span-2">{error.message}</Alert>}
-        <Field label="Empresa (UAU)" required error={companies.error ? (companies.error as Error).message : null} className="sm:col-span-2">
+        {error && (
+          <Alert tone="error" title={create.error ? 'Não foi possível criar a obra' : 'Não foi possível ler a planilha de orçamentos'} className="sm:col-span-2">
+            {error.message}
+          </Alert>
+        )}
+        {options.data?.warnings.map((w) => (
+          <Alert key={w} tone="warning" className="sm:col-span-2">{w}</Alert>
+        ))}
+        <Field
+          label="Empresa"
+          required
+          hint={options.isLoading ? 'Lendo a planilha de orçamentos… pode levar alguns segundos.' : undefined}
+          className="sm:col-span-2"
+        >
           <Combobox
             options={companyOptions}
-            value={company}
+            value={companyCode}
             onChange={(c) => {
-              if (c === company) return
-              setCompany(c)
-              setWork(null)
+              if (c === companyCode) return
+              setCompanyCode(c)
+              setWorkCode(null)
               setBudget(null)
             }}
-            loading={companies.isLoading}
+            loading={options.isLoading}
             loadingText="Carregando empresas…"
             placeholder="Buscar empresa por código ou nome"
           />
         </Field>
-        <Field
-          label="Obra (UAU)"
-          required
-          error={works.error ? (works.error as Error).message : null}
-          hint={company && works.data && !workOptions.length ? 'Nenhuma obra ativa desta empresa na UAU.' : undefined}
-          className="sm:col-span-2"
-        >
+        <Field label="Obra" required className="sm:col-span-2">
           <Combobox
             options={workOptions}
-            value={work}
+            value={workCode}
             onChange={(w) => {
-              if (w === work) return
-              setWork(w)
+              if (w === workCode) return
+              setWorkCode(w)
               setBudget(null)
             }}
             disabled={!company}
-            loading={!!company && works.isLoading}
-            loadingText="Carregando obras…"
             placeholder={company ? 'Buscar obra por código ou nome' : 'Escolha a empresa primeiro'}
           />
         </Field>
-        <SheetBudgetField workCode={work} company={company} value={budget} onChange={setBudget} className="sm:col-span-2" />
+        <SheetBudgetField budgets={work?.budgets ?? null} value={budget} onChange={setBudget} className="sm:col-span-2" />
         <Field label="Cliente / SPE" hint="Opcional">
           <Input value={clientName} maxLength={200} onChange={(e) => setClientName(e.target.value)} />
         </Field>
@@ -155,9 +156,9 @@ export function NewWorkFromUauDialog({ open, onClose, onCreated, onManual }: Pro
             <option value="not_started">Não iniciada</option>
           </Select>
         </Field>
-        {workName && budget && (
+        {ready && (
           <p className="text-xs text-text-muted sm:col-span-2">
-            Será criada a obra <span className="font-medium text-ink-700">{work} — {workName}</span> com o orçamento {budget.budget} da planilha.
+            Será criada a obra <span className="font-medium text-ink-700">{labelOf(work)}</span> da empresa {company.code}, com o orçamento {budget} da planilha.
           </p>
         )}
         <button type="submit" hidden />

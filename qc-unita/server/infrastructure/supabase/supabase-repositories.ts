@@ -40,7 +40,7 @@ function must<T = any>(res: { data: unknown; error: { message: string; code?: st
 
 const WORK_COLS =
   `id, code, name, clientName:client_name, city, state, status, erpId:erp_id, erpSyncedAt:erp_synced_at,
-   uau_company_code, uau_work_code, uau_budget_number, budget_sheet_company,
+   uau_company_code, uau_work_code, uau_budget_number,
    budgets(id, version, source, totalAmount:total_amount::text, isCurrent:is_current, importFileName:import_file_name,
            importedAt:imported_at, erpSyncedAt:erp_synced_at, linesCount:lines_count)`
 const SUPPLIER_COLS =
@@ -74,17 +74,10 @@ const toSnake = (o: Json) => Object.fromEntries(Object.entries(o).filter(([, v])
 function toWork(w: Json): WorkDTO {
   const budgets = (w.budgets as Json[]) ?? []
   const current = budgets.find((b) => b.isCurrent) as Json | undefined
-  const { budgets: _b, uau_company_code: company, uau_work_code: work, uau_budget_number: budget, budget_sheet_company: sheetCompany, ...rest } = w
+  const { budgets: _b, uau_company_code: company, uau_work_code: work, uau_budget_number: budget, ...rest } = w
   return {
     ...(rest as unknown as WorkDTO),
-    uau: work
-      ? {
-          company: ((company ?? sheetCompany) as string) ?? '',
-          work: work as string,
-          budget: (budget as string) ?? null,
-          sheetCompany: (sheetCompany as string) ?? null,
-        }
-      : null,
+    uau: company && work ? { company: company as string, work: work as string, budget: (budget as string) ?? null } : null,
     currentBudgetId: (current?.id as string) ?? null,
     currentBudgetTotal: (current?.totalAmount as string) ?? null,
     currentBudget: current
@@ -280,7 +273,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           ...(origin
             ? {
                 erp_id: origin.erpId, erp_synced_at: new Date().toISOString(), uau_company_code: origin.uau.company, uau_work_code: origin.uau.work,
-                uau_budget_number: origin.uau.budget, budget_sheet_company: origin.uau.sheetCompany,
+                uau_budget_number: origin.uau.budget,
               }
             : {}),
         }).select('id').single()) as { id: string }
@@ -805,7 +798,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         must(await service.from('budgets').update({ is_current: true, status: 'active', total_amount: total.toDb(), lines_count: count }).eq('id', budget.id))
         if (meta.sheet) {
           must(await service.from('works').update({
-            uau_work_code: meta.sheet.work, uau_budget_number: meta.sheet.budget, budget_sheet_company: meta.sheet.sheetCompany,
+            uau_company_code: meta.sheet.company, uau_work_code: meta.sheet.work, uau_budget_number: meta.sheet.budget,
           }).eq('id', workId))
         }
         return { budgetId: budget.id, version, lines: count }

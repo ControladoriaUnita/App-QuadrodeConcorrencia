@@ -83,12 +83,8 @@ route('POST', '/works', async ({ repos, ctx, body }) => works.createWork(repos, 
 route('GET', '/works/:id/budget-structure', async ({ repos, ctx, params }) => works.getBudgetStructure(repos, ctx, parse(uuidParam, params.id)))
 route('POST', '/works/:id/budget-import', async ({ repos, ctx, params, body }) =>
   works.importBudget(repos, ctx, parse(uuidParam, params.id), parse(budgetImportSchema, await body())), 201)
-// Nova obra pela UAU + orçamento da planilha BD_Orcamentos (SharePoint)
-route('GET', '/uau/companies', async ({ ctx }) => workSetup.listUauCompanies(getErpProvider(), ctx))
-route('GET', '/uau/works', async ({ repos, ctx }) => workSetup.listUauWorks(repos, getErpProvider(), ctx))
-route('GET', '/budget-sheet/budgets', async ({ ctx, url }) =>
-  workSetup.listSheetBudgets(getBudgetSheetSource(), ctx, parse(z.string().trim().min(1, 'Informe a obra').max(20), url.searchParams.get('work'))),
-)
+// Nova obra pela planilha de orçamentos BD_Orcamentos (SharePoint) + nomes da UAU
+route('GET', '/work-setup/options', async ({ repos, ctx }) => workSetup.listWorkSetupOptions(repos, getErpProvider(), getBudgetSheetSource(), ctx))
 route('POST', '/works/from-uau', async ({ repos, ctx, body }) =>
   workSetup.createWorkFromUau(repos, getErpProvider(), getBudgetSheetSource(), ctx, parse(createWorkFromUauSchema, await body())), 201)
 route('POST', '/works/:id/budget-sheet/refresh', async ({ repos, ctx, params, body }) =>

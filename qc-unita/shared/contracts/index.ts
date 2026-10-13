@@ -459,56 +459,66 @@ export const createWorkSchema = z
   .refine((w) => !w.startedOn || !w.finishedOn || w.finishedOn >= w.startedOn, { path: ['finishedOn'], message: 'O término deve ser posterior ao início' })
 export type CreateWorkInput = z.infer<typeof createWorkSchema>
 
-// ----------------------------------------------------------------------------- obras da UAU e orçamentos do SharePoint
-/** Empresa (UAU Empresa/ObterEmpresasAtivas) */
-export interface UauCompanyDTO {
-  code: string
-  name: string
-}
+// ----------------------------------------------------------------------------- nova obra pela planilha de orçamentos
+/*
+ * A aba "BD_Orcamentos" (SharePoint) diz quais orçamentos existem: Empresa_pla · Obra_pla · NumOrca_pla.
+ * A empresa e a obra são os códigos da UAU (o mesmo código de obra pode existir em mais de uma
+ * empresa); a UAU só completa os nomes.
+ */
 
-/** Obra ativa da UAU (Obras/ObterObrasAtivas) para escolher ao criar a obra no QC */
-export interface UauWorkOptionDTO {
-  company: string
-  code: string
-  name: string
-  /** Já existe obra no QC com esta chave */
-  existingWorkId: string | null
-}
-
-export interface UauWorkKeyDTO {
-  /** Empresa da obra na UAU */
-  company: string
-  work: string
-  /** Orçamento escolhido na planilha (NumOrca_pla) e a empresa como está nela (Empresa_pla) */
-  budget: string | null
-  sheetCompany: string | null
-}
-
-/** Orçamento disponível na aba BD_Orcamentos (Empresa_pla · Obra_pla · NumOrca_pla) */
-export interface SheetBudgetDTO {
-  company: string
-  work: string
+/** Orçamento disponível na planilha para uma empresa + obra */
+export interface SheetBudgetOptionDTO {
   budget: string
   services: number
   lines: number
   total: string
 }
 
+export interface WorkSetupWorkDTO {
+  code: string
+  /** Nome na UAU (null quando a obra não está entre as ativas da UAU) */
+  name: string | null
+  /** Obra já cadastrada no QC */
+  existingWorkId: string | null
+  budgets: SheetBudgetOptionDTO[]
+}
+
+export interface WorkSetupCompanyDTO {
+  code: string
+  /** Nome na UAU (null quando a UAU não respondeu ou não tem a empresa) */
+  name: string | null
+  works: WorkSetupWorkDTO[]
+}
+
+/** Empresas → obras → orçamentos que existem na planilha, com os nomes da UAU */
+export interface WorkSetupOptionsDTO {
+  companies: WorkSetupCompanyDTO[]
+  warnings: string[]
+}
+
+/** Chave da obra na UAU e orçamento da planilha em uso */
+export interface UauWorkKeyDTO {
+  company: string
+  work: string
+  budget: string | null
+}
+
 export const createWorkFromUauSchema = z.object({
+  /** Empresa_pla / código da empresa na UAU */
   company: z.string().trim().min(1).max(10),
+  /** Obra_pla / código da obra na UAU */
   work: z.string().trim().min(1).max(20),
-  /** Nº do orçamento na planilha */
+  /** NumOrca_pla */
   budget: z.string().trim().min(1).max(10),
-  /** Empresa como está na planilha (Empresa_pla), quando difere da empresa da obra na UAU */
-  sheetCompany: z.string().trim().min(1).max(10).optional(),
   clientName: z.string().trim().max(200).nullable().optional(),
   status: z.enum(['not_started', 'active']).default('active'),
 })
-export type CreateWorkFromUauInput = z.infer<typeof createWorkFromUauSchema>
+export type CreateWorkFromUauInput = z.input<typeof createWorkFromUauSchema>
+export type CreateWorkFromUauData = z.infer<typeof createWorkFromUauSchema>
 
 export const refreshSheetBudgetSchema = z.object({
+  /** Outro nº de orçamento da mesma empresa + obra; sem ele, reimporta o atual */
   budget: z.string().trim().min(1).max(10).optional(),
-  sheetCompany: z.string().trim().min(1).max(10).optional(),
 })
 export type RefreshSheetBudgetInput = z.infer<typeof refreshSheetBudgetSchema>
 
