@@ -181,7 +181,11 @@ export interface IntegrationLogRepository {
 /** Escrita de dados vindos do ERP (somente service_role). Nunca toca revisões de QC. */
 export interface ErpSyncWriter {
   upsertWorks(works: ErpWork[]): Promise<number>
-  upsertSuppliers(suppliers: ErpSupplier[]): Promise<number>
+  /**
+   * Grava por CNPJ (adota cadastro manual com o mesmo CNPJ), sem apagar CND/telefone já preenchidos.
+   * `deactivateMissing`: leitura completa → inativa fornecedores do ERP que não vieram nela.
+   */
+  upsertSuppliers(suppliers: ErpSupplier[], opts?: { deactivateMissing?: boolean }): Promise<{ upserted: number; deactivated: number }>
   upsertMaterials(materials: ErpMaterial[]): Promise<number>
   /** Cria/atualiza a versão do orçamento da obra; retorna o id do orçamento. */
   upsertBudget(budget: ErpBudget): Promise<{ budgetId: string; lines: number }>

@@ -6,15 +6,17 @@
  *  - Nunca altera revisões de QC: os valores orçados de um QC são cópias feitas na
  *    montagem e revisões aprovadas estão congeladas (trigger no banco + snapshot).
  *  - Cada operação gera um integration_log com correlationId, status, contagens e erro.
+ *  - Escopo "Tudo" roda só o que o provider implementa (ERPProvider.supports); o resto
+ *    volta como etapa "skipped", sem log de erro. Escopo específico não suportado → erro claro.
  */
 import type { ErpSyncInput } from '../../../shared/contracts'
-import type { ERPProvider } from '../../infrastructure/erp/erp-provider'
+import { erpSupports, type ERPProvider, type ErpOperation } from '../../infrastructure/erp/erp-provider'
 import { requirePermission, type RequestContext } from '../context'
 import type { Repositories } from '../ports'
 
 interface StepResult {
   operation: string
-  status: 'success' | 'error'
+  status: 'success' | 'error' | 'skipped'
   records: number
   message?: string
 }
@@ -28,7 +30,7 @@ export async function syncFromErp(
   requirePermission(ctx, 'integration.run')
   const steps: StepResult[] = []
 
-  const run = async (operation: string, fn: () => Promise<{ records: number; summary?: unknown; integrationId?: string }>) => {
+  const run = async (operation: string, fn: () => Promise<{ records: number; message?: string; summary?: unknown; integrationId?: string }>) => {
     const logId = await repos.integrationLogs.start({
       correlationId: ctx.correlationId,
       provider: erp.name,
@@ -42,10 +44,10 @@ export async function syncFromErp(
         status: 'success',
         recordsProcessed: r.records,
         recordsFailed: 0,
-        message: `${r.records} registro(s) sincronizado(s)`,
+        message: r.message ?? `${r.records} registro(s) sincronizado(s)`,
         payloadSummary: r.summary ?? null,
       })
-      steps.push({ operation, status: 'success', records: r.records })
+      steps.push({ operation, status: 'success', records: r.records, message: r.message })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       await repos.integrationLogs.finish(logId, {
@@ -60,16 +62,34 @@ export async function syncFromErp(
   }
 
   const all = input.scope === 'all'
-  if (all || input.scope === 'works') {
+  /** Etapa entra se foi pedida; no "Tudo", só se o provider a implementa. */
+  const wants = (scope: ErpOperation, operation: string) => {
+    if (input.scope === scope) return true
+    if (!all) return false
+    if (erpSupports(erp, scope)) return true
+    steps.push({ operation, status: 'skipped', records: 0, message: `Ainda não implementado para ${erp.name.toUpperCase()}.` })
+    return false
+  }
+
+  if (wants('works', 'getWorks')) {
     await run('getWorks', async () => ({ records: await repos.erpWriter.upsertWorks(await erp.getWorks()) }))
   }
-  if (all || input.scope === 'suppliers') {
-    await run('getSuppliers', async () => ({ records: await repos.erpWriter.upsertSuppliers(await erp.getSuppliers()) }))
+  if (wants('suppliers', 'getSuppliers')) {
+    await run('getSuppliers', async () => {
+      // Leitura completa: quem é do ERP e não veio é inativado (só chega aqui se a leitura não falhou)
+      const suppliers = await erp.getSuppliers()
+      const r = await repos.erpWriter.upsertSuppliers(suppliers, { deactivateMissing: true })
+      return {
+        records: r.upserted,
+        message: `${r.upserted} fornecedor(es) sincronizado(s)` + (r.deactivated ? `; ${r.deactivated} inativado(s) por não constar(em) no ERP` : ''),
+        summary: { read: suppliers.length, upserted: r.upserted, deactivated: r.deactivated },
+      }
+    })
   }
-  if (all || input.scope === 'materials') {
+  if (wants('materials', 'getMaterials')) {
     await run('getMaterials', async () => ({ records: await repos.erpWriter.upsertMaterials(await erp.getMaterials()) }))
   }
-  if (all || input.scope === 'budget') {
+  if (wants('budget', 'getBudget')) {
     const works = await repos.catalog.listWorks()
     const targets = works.filter((w) => w.erpId && (!input.workId || w.id === input.workId))
     for (const w of targets) {

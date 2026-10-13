@@ -674,13 +674,27 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         }
         return works.length
       },
-      async upsertSuppliers(suppliers) {
+      async upsertSuppliers(suppliers, opts) {
         const now = new Date().toISOString()
+        const synced = new Set<string>()
         for (const s of suppliers) {
-          const existing = db.find('suppliers', (x) => x.erpId === s.erpId || x.taxId === s.taxId)[0]
-          db.put('suppliers', { ...(existing ?? { id: uid(), createdAt: now }), ...s, source: 'erp', erpSyncedAt: now, updatedAt: now })
+          // CNPJ manda (adota cadastro manual); erp_id solto em outro registro é liberado
+          const existing = db.find('suppliers', (x) => x.taxId === s.taxId)[0]
+          for (const stale of db.find('suppliers', (x) => x.erpId === s.erpId && x.taxId !== s.taxId)) db.put('suppliers', { ...stale, erpId: null })
+          // Não apaga CND/telefone já preenchidos quando o ERP não traz
+          const data = { ...s, phone: s.phone ?? existing?.phone ?? null, cndValidUntil: s.cndValidUntil ?? existing?.cndValidUntil ?? null }
+          const row = { ...(existing ?? { id: uid(), createdAt: now }), ...data, source: 'erp', erpSyncedAt: now, updatedAt: now }
+          db.put('suppliers', row)
+          synced.add(row.id as string)
         }
-        return suppliers.length
+        let deactivated = 0
+        if (opts?.deactivateMissing && suppliers.length) {
+          for (const x of db.find('suppliers', (x) => x.source === 'erp' && x.active === true && !synced.has(x.id as string))) {
+            db.put('suppliers', { ...x, active: false, updatedAt: now })
+            deactivated++
+          }
+        }
+        return { upserted: synced.size, deactivated }
       },
       async upsertMaterials(materials) {
         const now = new Date().toISOString()

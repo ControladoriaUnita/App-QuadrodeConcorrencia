@@ -683,17 +683,44 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         ))
         return works.length
       },
-      async upsertSuppliers(suppliers) {
+      async upsertSuppliers(suppliers, opts) {
         const now = new Date().toISOString()
-        must(await service.from('suppliers').upsert(
-          suppliers.map((s) => ({
-            erp_id: s.erpId, legal_name: s.legalName, trade_name: s.tradeName, tax_id: s.taxId, tax_id_kind: s.taxId.length === 11 ? 'cpf' : 'cnpj',
-            contact_name: s.contactName, phone: s.phone, email: s.email, cnd_valid_until: s.cndValidUntil, city: s.city, state: s.state,
-            active: s.active, source: 'erp', erp_synced_at: now,
-          })),
-          { onConflict: 'tax_id' },
-        ))
-        return suppliers.length
+        // Um CNPJ e um erp_id por linha: o upsert falha se o mesmo CNPJ aparece duas vezes no lote
+        const byTaxId = new Map(suppliers.map((s) => [s.taxId, s]))
+        const unique = [...new Map([...byTaxId.values()].reverse().map((s) => [s.erpId, s])).values()]
+
+        for (const part of chunk(unique, 500)) {
+          // erp_id que hoje está em outro CNPJ (CNPJ trocado no ERP): libera antes, senão viola o unique
+          const taxIdOf = new Map(part.map((s) => [s.erpId, s.taxId]))
+          const holders = must(await service.from('suppliers').select('id, erp_id, tax_id').in('erp_id', [...taxIdOf.keys()])) as { id: string; erp_id: string; tax_id: string }[]
+          const stale = holders.filter((h) => taxIdOf.get(h.erp_id) !== h.tax_id).map((h) => h.id)
+          if (stale.length) must(await service.from('suppliers').update({ erp_id: null }).in('id', stale))
+
+          // Telefone e CND só vão quando o ERP traz; senão o valor já cadastrado fica.
+          // Linhas agrupadas pelo mesmo conjunto de colunas (o upsert em lote usa a união delas).
+          const groups = new Map<string, Record<string, unknown>[]>()
+          for (const s of part) {
+            const row: Record<string, unknown> = {
+              erp_id: s.erpId, legal_name: s.legalName, trade_name: s.tradeName ?? null, tax_id: s.taxId, tax_id_kind: s.taxId.length === 11 ? 'cpf' : 'cnpj',
+              contact_name: s.contactName ?? null, email: s.email ?? null, city: s.city ?? null, state: s.state ?? null,
+              active: s.active, source: 'erp', erp_synced_at: now,
+            }
+            if (s.phone) row.phone = s.phone
+            if (s.cndValidUntil) row.cnd_valid_until = s.cndValidUntil
+            const key = Object.keys(row).join()
+            groups.set(key, [...(groups.get(key) ?? []), row])
+          }
+          for (const rows of groups.values()) must(await service.from('suppliers').upsert(rows, { onConflict: 'tax_id' }))
+        }
+
+        // Leitura completa: fornecedores do ERP que não vieram agora ficam inativos (nunca com lista vazia)
+        let deactivated = 0
+        if (opts?.deactivateMissing && unique.length) {
+          const missing = () => service.from('suppliers').update({ active: false }).eq('source', 'erp').eq('active', true)
+          deactivated += (must(await missing().lt('erp_synced_at', now).select('id')) as unknown[]).length
+          deactivated += (must(await missing().is('erp_synced_at', null).select('id')) as unknown[]).length
+        }
+        return { upserted: unique.length, deactivated }
       },
       async upsertMaterials(materials) {
         const now = new Date().toISOString()

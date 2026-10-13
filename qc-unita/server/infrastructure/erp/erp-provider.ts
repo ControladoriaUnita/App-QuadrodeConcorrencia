@@ -5,6 +5,7 @@
  * conhece endpoints nem credenciais do ERP. Todos os valores decimais chegam
  * como string para evitar float.
  */
+import { AppError } from '../../application/context'
 
 export interface ErpWork {
   erpId: string
@@ -71,8 +72,16 @@ export interface ErpContractPayload {
   items: { materialCode: string; quantity: string; unitPrice: string }[]
 }
 
+/** Operações de leitura/envio; usadas para saber o que cada provider já implementa. */
+export type ErpOperation = 'works' | 'suppliers' | 'materials' | 'budget' | 'pushContract'
+
 export interface ERPProvider {
   readonly name: 'mock' | 'uau' | 'senior'
+  /**
+   * O que o provider já implementa (ausente = tudo). A sincronização "Tudo" pula o que
+   * não está aqui em vez de falhar; pedir um escopo não suportado diretamente dá erro claro.
+   */
+  readonly supports?: ReadonlySet<ErpOperation>
   getWorks(): Promise<ErpWork[]>
   getWork(erpId: string): Promise<ErpWork | null>
   getBudget(workErpId: string): Promise<ErpBudget | null>
@@ -82,9 +91,11 @@ export interface ERPProvider {
   pushContract(payload: ErpContractPayload): Promise<{ erpContractId: string }>
 }
 
-export class ErpNotConfiguredError extends Error {
-  constructor(provider: string) {
-    super(`Provider ERP "${provider}" ainda não implementado — aguardando documentação oficial da API.`)
+export class ErpNotConfiguredError extends AppError {
+  constructor(provider: string, detail?: string) {
+    super('ERP_NOT_CONFIGURED', detail ?? `Provider ERP "${provider}" ainda não implementado — aguardando documentação oficial da API.`, 501)
     this.name = 'ErpNotConfiguredError'
   }
 }
+
+export const erpSupports = (erp: ERPProvider, op: ErpOperation) => !erp.supports || erp.supports.has(op)

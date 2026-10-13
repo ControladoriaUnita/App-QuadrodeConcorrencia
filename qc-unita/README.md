@@ -29,7 +29,8 @@ No **modo demonstração** (`DATA_SOURCE=memory`) a API roda dentro do próprio 
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | server | client do usuário (JWT → RLS) |
 | `SUPABASE_SERVICE_ROLE_KEY` | **server apenas** | nunca com prefixo `VITE_`; usada só na sincronização ERP e logs de integração |
 | `DATA_SOURCE=supabase` | server | |
-| `ERP_PROVIDER=mock` | server | `uau`/`senior` quando houver documentação |
+| `ERP_PROVIDER` | server | `mock` (padrão) ou `uau`; `senior` ainda não implementado |
+| `UAU_BASE_URL`, `UAU_INTEGRATION_TOKEN`, `UAU_LOGIN`, `UAU_PASSWORD` | **server apenas** | obrigatórias com `ERP_PROVIDER=uau`; cole sem aspas |
 
 3. Conceda papéis aos usuários em `user_roles` (novo usuário recebe só o perfil — sem papel, nenhuma obra é visível).
 4. Rode a sincronização em **Integração ERP → Sincronizar agora** para trazer obras, fornecedores, insumos e orçamentos.
@@ -186,7 +187,7 @@ Trigger `audit_row_changes()` em todas as tabelas críticas grava **uma linha po
 
 ## Integração ERP
 
-`ERPProvider` (`getWorks`, `getWork`, `getBudget`, `getSuppliers`, `getMaterials`, `pushContract`). Hoje: `MockERPProvider`; `uau`/`senior` lançam `ErpNotConfiguredError` até a documentação oficial. Cada operação gera `integration_logs` (data/hora, provider, operação, ID, status, contagens, mensagem/erro, `correlationId`). A sincronização reconstrói as linhas do orçamento — QCs guardam cópia própria e revisões aprovadas estão congeladas.
+`ERPProvider` (`getWorks`, `getWork`, `getBudget`, `getSuppliers`, `getMaterials`, `pushContract`). Hoje: `MockERPProvider` e `UauERPProvider` (só leitura; por enquanto apenas **fornecedores** = pessoas jurídicas ativas do cadastro de pessoas da UAU, deduplicadas por CNPJ; pessoas físicas ficam de fora). O que o provider ainda não implementa aparece como "ignorado" na sincronização "Tudo". `senior` lança `ErpNotConfiguredError`. Cada operação gera `integration_logs` (data/hora, provider, operação, ID, status, contagens, mensagem/erro, `correlationId`). A sincronização reconstrói as linhas do orçamento — QCs guardam cópia própria e revisões aprovadas estão congeladas.
 
 ---
 

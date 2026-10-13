@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Truck } from 'lucide-react'
 import type { ErpSyncInput, IntegrationLogDTO } from '@shared/contracts'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, Select, Skeleton, type Tone } from '@/components/ui'
@@ -12,13 +12,17 @@ import { formatDateTime } from '@/utils/format'
 const tone: Record<IntegrationLogDTO['status'], Tone> = { started: 'info', success: 'success', partial: 'warning', error: 'error' }
 const label: Record<IntegrationLogDTO['status'], string> = { started: 'Em execução', success: 'Sucesso', partial: 'Parcial', error: 'Erro' }
 
+interface SyncStep { operation: string; status: 'success' | 'error' | 'skipped'; records: number; message?: string }
+const stepTone: Record<SyncStep['status'], Tone> = { success: 'success', error: 'error', skipped: 'neutral' }
+const stepLabel: Record<SyncStep['status'], string> = { success: 'Sucesso', error: 'Erro', skipped: 'Ignorado' }
+
 export function IntegrationPage() {
   const { can } = useAuth()
   const qc = useQueryClient()
   const [scope, setScope] = useState<ErpSyncInput['scope']>('all')
   const logs = useQuery({ queryKey: ['integration-logs'], queryFn: () => api<IntegrationLogDTO[]>('/integration/logs') })
   const sync = useMutation({
-    mutationFn: () => api<{ correlationId: string; steps: { operation: string; status: string; records: number }[] }>('/integration/erp-sync', { method: 'POST', body: { scope } }),
+    mutationFn: (s: ErpSyncInput['scope']) => api<{ correlationId: string; steps: SyncStep[] }>('/integration/erp-sync', { method: 'POST', body: { scope: s } }),
     onSettled: () => qc.invalidateQueries(),
   })
   const th = 'border-b border-border bg-ink-50 px-3 py-2 text-xs font-semibold text-text-muted whitespace-nowrap text-left'
@@ -40,16 +44,31 @@ export function IntegrationPage() {
                 <option value="materials">Insumos</option>
                 <option value="budget">Orçamentos</option>
               </Select>
-              <Button variant="primary" icon={<RefreshCw className="size-4" />} loading={sync.isPending} onClick={() => sync.mutate()}>
+              <Button variant="primary" icon={<RefreshCw className="size-4" />} loading={sync.isPending && sync.variables !== 'suppliers'} disabled={sync.isPending} onClick={() => sync.mutate(scope)}>
                 Sincronizar agora
+              </Button>
+              <Button icon={<Truck className="size-4" />} loading={sync.isPending && sync.variables === 'suppliers'} disabled={sync.isPending} onClick={() => sync.mutate('suppliers')}>
+                Só fornecedores
               </Button>
             </>
           )
         }
       />
+      {sync.isPending && (
+        <Alert tone="info" className="mb-6">Sincronizando com o ERP. Fornecedores da UAU levam de 20 s a 1 minuto; não feche a página.</Alert>
+      )}
       {sync.data && (
         <Alert tone={sync.data.steps.some((s) => s.status === 'error') ? 'warning' : 'success'} title="Sincronização concluída" className="mb-6">
-          {sync.data.steps.map((s) => `${s.operation}: ${s.records}`).join(' · ')} — correlationId <code className="text-xs">{sync.data.correlationId}</code>
+          <ul className="grid gap-1">
+            {sync.data.steps.map((s) => (
+              <li key={s.operation} className="flex flex-wrap items-center gap-2">
+                <Badge tone={stepTone[s.status]}>{stepLabel[s.status]}</Badge>
+                <span className="font-medium">{s.operation}</span>
+                <span className="tabular text-text-muted">{s.message ?? `${s.records} registro(s)`}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-text-muted">correlationId <code>{sync.data.correlationId}</code></p>
         </Alert>
       )}
       {sync.error && <Alert tone="error" className="mb-6">{(sync.error as Error).message}</Alert>}

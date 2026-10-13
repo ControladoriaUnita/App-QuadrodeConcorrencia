@@ -4,7 +4,8 @@
  */
 import { handle } from '../server/http/router'
 
-export const config = { maxDuration: 30 }
+// 60 s (teto do plano Hobby): a sincronização de fornecedores da UAU lê ~8,5 mil pessoas em faixas (~15 s, até 45 s) e grava em lotes
+export const config = { maxDuration: 60 }
 
 export default {
   fetch(request: Request): Promise<Response> {
