@@ -12,6 +12,7 @@ import { Alert, Badge, Button, Card, ConsumptionMeter, EmptyState, Skeleton, typ
 import { useAuth } from '@/lib/auth'
 import { formatBRL, formatPercent } from '@/utils/format'
 import { useWorks } from '@/features/competitions/api'
+import { workPath } from './currentWork'
 import { NewWorkDialog } from './NewWorkDialog'
 
 const status: Record<WorkDTO['status'], { label: string; tone: Tone }> = {
@@ -45,7 +46,7 @@ export function WorkSelectPage() {
         onClose={() => setCreating(false)}
         onCreated={(id) => {
           setCreating(false)
-          navigate(`/obras/${id}?importar=1`)
+          navigate(`${workPath.budget(id)}?importar=1`)
         }}
       />
       {works.error ? (
@@ -75,7 +76,7 @@ function WorkCard({ w }: { w: WorkDTO }) {
   const committed = contracted.plus(inApproval)
   return (
     <Link
-      to={`/obras/${w.id}`}
+      to={workPath.budget(w.id)}
       className="group rounded-card border border-border bg-surface p-5 shadow-card transition-colors hover:border-primary/50 focus-visible:border-primary"
     >
       <div className="flex items-start justify-between gap-3">

@@ -70,7 +70,7 @@ export function CompetitionPage() {
   return (
     <div>
       <PageHeader
-        backTo={`/obras/${c.workId}`}
+        backTo={`/obras/${c.workId}/concorrencias`}
         eyebrow={`Obra ${c.workCode} · ${c.workName}`}
         title={`${c.code} — ${c.title}`}
         meta={

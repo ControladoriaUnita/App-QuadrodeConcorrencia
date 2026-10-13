@@ -14,8 +14,9 @@ import { Decimal } from '@shared/domain/decimal'
 import { consolidate, rebalance } from '@shared/domain/planning/links'
 import type { QcMap } from '@shared/domain/competition/qc-map'
 import { Badge, Button, Card, CardHeader, ConfirmDialog, ConsumptionMeter, DecimalInput, Dialog, Skeleton } from '@/components/ui'
-import { BudgetLinesTable, freeShare, pulledValue } from '@/features/works/BudgetLinesTable'
-import { useBudgetLines } from '@/features/works/api'
+import { freeShare, pulledValue } from '@/features/works/BudgetLinesTable'
+import { BudgetTree } from '@/features/works/BudgetTree'
+import { useBudgetLines, useBudgetStructure } from '@/features/works/api'
 import { cn } from '@/utils/cn'
 import { EMPTY, formatBRL, formatDecimal, formatPercent, formatQuantity } from '@/utils/format'
 
@@ -408,6 +409,7 @@ export function LinksPanel({ detail, map, saving, adding, onSave, onAddLines, on
 /** Seletor de linhas do orçamento da obra (todas as IPs), com o comprometido por outros QCs. */
 function LinePickerDialog({ open, detail, adding, onClose, onAdd }: { open: boolean; detail: CompetitionDetailDTO; adding: boolean; onClose: () => void; onAdd: (selection: Map<string, string>) => void }) {
   const lines = useBudgetLines(detail.competition.workId, { excludeCompetitionId: detail.competition.id }, open)
+  const structure = useBudgetStructure(detail.competition.workId, open)
   const [selection, setSelection] = useState<Map<string, string>>(new Map())
   const close = () => (setSelection(new Map()), onClose())
   const chosen = (lines.data ?? []).filter((l) => selection.has(l.id))
@@ -421,7 +423,7 @@ function LinePickerDialog({ open, detail, adding, onClose, onAdd }: { open: bool
     <Dialog
       open={open}
       onClose={close}
-      width="min(96vw, 84rem)"
+      width="min(98vw, 110rem)"
       title="Adicionar linhas do orçamento"
       description="Escolha linhas de qualquer IP de planejamento e o % de cada uma a comprometer (verba puxada). Linhas de um insumo já presente no QC viram novos vínculos do item; as demais criam itens novos. Linhas já neste QC aparecem esmaecidas."
       footer={
@@ -434,16 +436,14 @@ function LinePickerDialog({ open, detail, adding, onClose, onAdd }: { open: bool
         </>
       }
     >
-      {lines.isLoading ? (
+      {lines.isLoading || structure.isLoading ? (
         <div className="grid gap-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9" />)}</div>
       ) : (
         <div className="-mx-6 border-y border-border">
-          <BudgetLinesTable
+          <BudgetTree
+            structure={structure.data ?? { budgetId: '', groups: [], activities: [] }}
             lines={lines.data ?? []}
-            selectable
-            selection={selection}
-            onSelectionChange={setSelection}
-            disabledIds={inQc}
+            selection={{ value: selection, onChange: setSelection, disabledIds: inQc }}
             initialOnlyBalance
             maxHeight="55vh"
           />

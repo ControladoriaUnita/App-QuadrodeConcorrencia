@@ -3,28 +3,58 @@
  * com as mesmas colunas (Item · Código · Descrição · Unid · Quantidade · Custo Unit. · Custo Total ·
  * Vínculo PL · Classificação) e, à direita, o comprometido em concorrências e o saldo livre.
  * Níveis recolhíveis como o agrupamento do Excel; lista virtualizada (orçamentos com milhares de linhas).
+ *
+ * Modo seletor (`selectable`): a MESMA tela serve para escolher os insumos de uma concorrência.
+ * Cada insumo marcado recebe o "% a consumir" (verba puxada = custo total × %). Em Item e composição,
+ * a caixa marca todos os insumos abaixo e o % digitado vale para todos eles (limitado ao livre de cada um).
  */
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, ChevronsDownUp, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronsDownUp, Percent, Search } from 'lucide-react'
 import type { BudgetLineUsageDTO, BudgetStructureDTO } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import { buildBudgetTree, type BudgetTreeRow } from '@shared/domain/budget/structure'
-import { Badge, Input, Select } from '@/components/ui'
+import { Badge, Button, DecimalInput, Input, Select } from '@/components/ui'
 import { cn } from '@/utils/cn'
 import { EMPTY, formatBRL, formatDecimal, formatPercent, formatQuantity } from '@/utils/format'
+import { freeShare, pulledValue } from './BudgetLinesTable'
 
 type Row = BudgetTreeRow<BudgetLineUsageDTO>
+type LineRow = Extract<Row, { kind: 'line' }>
 type Depth = 'items' | 'compositions' | 'all'
 
 const ROW_H = 34
 const OVERSCAN = 12
+// Classes literais (o Tailwind só gera o que encontra escrito por extenso)
 const COLS = 'grid-cols-[6.5rem_6.5rem_minmax(20rem,1fr)_3.5rem_7rem_7.5rem_8.5rem_5.5rem_9rem_10rem_7.5rem]'
+const SELECT_COLS = 'grid-cols-[2.25rem_6.5rem_6.5rem_minmax(18rem,1fr)_3.5rem_7rem_7.5rem_8.5rem_5.5rem_9rem_10rem_7.5rem_6.5rem_8.5rem]'
 const tone = { contracted: 'success', in_approval: 'warning', quoting: 'primary' } as const
+/** Colunas do seletor fixas à direita (como "congelar painéis"): sempre visíveis ao rolar para o lado */
+const PIN_SHARE = 'sticky right-[8.5rem] z-[1] grid h-full items-center bg-primary-soft shadow-[-1px_0_0_var(--color-border)]'
+const PIN_VALUE = 'sticky right-0 z-[1] flex h-full items-center justify-end bg-primary-soft'
 
-export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)' }: { structure: BudgetStructureDTO; lines: BudgetLineUsageDTO[]; maxHeight?: string }) {
+export interface BudgetTreeSelection {
+  /** Insumos escolhidos → % a consumir (canônico, 0..1) */
+  value: Map<string, string>
+  onChange: (next: Map<string, string>) => void
+  /** Insumos que não podem ser escolhidos (ex.: já estão no QC) */
+  disabledIds?: Set<string>
+}
+
+interface Props {
+  structure: BudgetStructureDTO
+  lines: BudgetLineUsageDTO[]
+  maxHeight?: string
+  selection?: BudgetTreeSelection
+  initialOnlyBalance?: boolean
+}
+
+export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)', selection, initialOnlyBalance = false }: Props) {
+  const selectable = !!selection
   const [search, setSearch] = useState('')
   const [pkg, setPkg] = useState('')
-  const [onlyBalance, setOnlyBalance] = useState(false)
+  const [onlyBalance, setOnlyBalance] = useState(initialOnlyBalance)
+  const [onlySelected, setOnlySelected] = useState(false)
+  const [bulk, setBulk] = useState<string | null>(null)
   const [depth, setDepthState] = useState<Depth>('all')
   /** Recolhidos / expandidos manualmente (sobre o nível escolhido) */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -41,7 +71,16 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
 
   const tree = useMemo(() => buildBudgetTree(structure, lines), [structure, lines])
   const byKey = useMemo(() => new Map(tree.map((r) => [r.key, r])), [tree])
-  const filtering = !!(search.trim() || pkg || onlyBalance)
+  /** Insumos abaixo de cada Item/composição (para marcar em bloco) */
+  const linesUnder = useMemo(() => {
+    const m = new Map<string, LineRow[]>()
+    for (const r of tree) {
+      if (r.kind !== 'line') continue
+      for (let p = r.parentKey; p; p = byKey.get(p)!.parentKey) m.set(p, [...(m.get(p) ?? []), r])
+    }
+    return m
+  }, [tree, byKey])
+  const filtering = !!(search.trim() || pkg || onlyBalance || onlySelected)
 
   /** Linhas visíveis: filtro mantém os ancestrais; sem filtro, respeita os níveis recolhidos. */
   const visible = useMemo(() => {
@@ -57,6 +96,7 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
         const l = r.line
         if (pkg && l.packageCode !== pkg) continue
         if (onlyBalance && !Decimal.from(l.balanceShare).isPositive()) continue
+        if (onlySelected && !selection?.value.has(l.id)) continue
         // busca casa no insumo ou em qualquer ancestral (composição/Item)
         let hit = !q || text(r).toLowerCase().includes(q)
         for (let p = r.parentKey; !hit && p; p = byKey.get(p)!.parentKey) hit = text(byKey.get(p)!).toLowerCase().includes(q)
@@ -74,16 +114,40 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
       out.push(r)
     }
     return out
-  }, [tree, byKey, search, pkg, onlyBalance, collapsed, expanded, depth, filtering]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tree, byKey, search, pkg, onlyBalance, onlySelected, filtering, collapsed, expanded, depth, onlySelected && selection?.value]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shownLines = visible.filter((r): r is Extract<Row, { kind: 'line' }> => r.kind === 'line')
-  const footer = filtering
-    ? { total: Decimal.sum(shownLines.map((r) => r.total)), committed: Decimal.sum(shownLines.map((r) => r.committed)), count: shownLines.length }
-    : {
-        total: Decimal.sum(tree.filter((r) => r.kind === 'line').map((r) => r.total)),
-        committed: Decimal.sum(tree.filter((r) => r.kind === 'line').map((r) => r.committed)),
-        count: lines.length,
+  const shownLines = visible.filter((r): r is LineRow => r.kind === 'line')
+  const allLines = tree.filter((r): r is LineRow => r.kind === 'line')
+  const footerLines = filtering ? shownLines : allLines
+  const footer = {
+    total: Decimal.sum(footerLines.map((r) => r.total)),
+    committed: Decimal.sum(footerLines.map((r) => r.committed)),
+    count: filtering ? shownLines.length : lines.length,
+  }
+
+  // ------------------------------------------------------------------ seleção
+  const canPick = (l: BudgetLineUsageDTO) => !selection?.disabledIds?.has(l.id) && freeShare(l).isPositive()
+  const update = (fn: (m: Map<string, string>) => void) => {
+    if (!selection) return
+    const next = new Map(selection.value)
+    fn(next)
+    selection.onChange(next)
+  }
+  const setLines = (rows: LineRow[], on: boolean, share?: string) =>
+    update((m) => {
+      for (const { line: l } of rows) {
+        if (!on) m.delete(l.id)
+        else if (canPick(l)) m.set(l.id, share ? Decimal.min(Decimal.from(share), freeShare(l)).toFixed(6) : (m.get(l.id) ?? freeShare(l).toFixed(6)))
       }
+    })
+  const selectedUnder = (key: string) => {
+    const ls = linesUnder.get(key) ?? []
+    const pickable = ls.filter((r) => canPick(r.line))
+    const chosen = ls.filter((r) => selection?.value.has(r.line.id))
+    const pulled = Decimal.sum(chosen.map((r) => pulledValue(r.line, selection!.value.get(r.line.id)!)))
+    return { ls, pickable, chosen, pulled }
+  }
+  const pulledTotal = selection ? Decimal.sum(allLines.filter((r) => selection.value.has(r.line.id)).map((r) => pulledValue(r.line, selection.value.get(r.line.id)!))) : Decimal.ZERO
 
   /** Filho aparece se o pai está aberto: pelo nível escolhido ou por expansão manual */
   function childVisible(parent: Row, child: Row): boolean {
@@ -118,6 +182,7 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
 
   const start = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN)
   const end = Math.min(visible.length, Math.ceil((scrollTop + viewport) / ROW_H) + OVERSCAN)
+  const cols = selectable ? SELECT_COLS : COLS
 
   const hd = 'px-2 py-2 text-xs font-semibold text-text-muted whitespace-nowrap'
   return (
@@ -137,6 +202,12 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
           <input type="checkbox" className="size-4 accent-primary" checked={onlyBalance} onChange={(e) => setOnlyBalance(e.target.checked)} />
           Somente com saldo
         </label>
+        {selectable && (
+          <label className="inline-flex items-center gap-2 text-sm text-ink-700">
+            <input type="checkbox" className="size-4 accent-primary" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} />
+            Somente marcados
+          </label>
+        )}
         <div className="inline-flex overflow-hidden rounded-control border border-border text-sm" role="group" aria-label="Nível de detalhe">
           <ChevronsDownUp className="mx-2 size-4 self-center text-ink-400" aria-hidden />
           {([['items', 'Itens'], ['compositions', 'Composições'], ['all', 'Insumos']] as const).map(([k, label]) => (
@@ -152,6 +223,20 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
             </button>
           ))}
         </div>
+        {selectable && (
+          <div className="inline-flex items-center gap-1.5 rounded-control border border-border bg-surface pl-2">
+            <Percent className="size-3.5 text-ink-400" aria-hidden />
+            <DecimalInput aria-label="Percentual para aplicar aos insumos marcados" className="h-8 w-20" scale="ratio" max="1" placeholder="% todos" value={bulk} onCommit={setBulk} />
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!bulk || !selection.value.size}
+              onClick={() => setLines(allLines.filter((r) => selection.value.has(r.line.id)), true, bulk ?? undefined)}
+            >
+              Aplicar aos marcados
+            </Button>
+          </div>
+        )}
       </div>
 
       <div
@@ -164,7 +249,8 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
       >
         <div className="tabular min-w-max text-sm" role="table" aria-label="Orçamento da obra" aria-rowcount={visible.length}>
-          <div role="row" className={cn('sticky top-0 z-10 grid border-b border-border bg-ink-50', COLS)}>
+          <div role="row" className={cn('sticky top-0 z-10 grid border-b border-border bg-ink-50', cols)}>
+            {selectable && <span role="columnheader" className={hd} aria-label="Marcar" />}
             <span role="columnheader" className={hd}>Item</span>
             <span role="columnheader" className={hd}>Código</span>
             <span role="columnheader" className={hd}>Descrição</span>
@@ -176,15 +262,30 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
             <span role="columnheader" className={hd}>Classificação</span>
             <span role="columnheader" className={hd}>Comprometido em</span>
             <span role="columnheader" className={cn(hd, 'text-right')}>Livre</span>
+            {selectable && <span role="columnheader" className={cn(hd, PIN_SHARE, 'text-right text-primary')}>% a consumir</span>}
+            {selectable && <span role="columnheader" className={cn(hd, PIN_VALUE, 'text-right text-primary')}>Verba puxada</span>}
           </div>
           <div style={{ height: visible.length * ROW_H, position: 'relative' }}>
             {visible.slice(start, end).map((r, i) => (
               <TreeRow
                 key={r.key}
                 r={r}
+                cols={cols}
                 top={(start + i) * ROW_H}
                 open={filtering || isOpen(r)}
                 onToggle={() => toggle(r)}
+                select={
+                  selection &&
+                  (r.kind === 'line'
+                    ? {
+                        kind: 'line',
+                        share: selection.value.get(r.line.id),
+                        disabled: !canPick(r.line),
+                        onCheck: (on) => setLines([r], on),
+                        onShare: (v) => setLines([r], true, v),
+                      }
+                    : { kind: 'block', ...selectedUnder(r.key), onCheck: (on) => setLines(linesUnder.get(r.key) ?? [], on), onShare: (v) => setLines(linesUnder.get(r.key) ?? [], true, v) })
+                }
               />
             ))}
           </div>
@@ -196,12 +297,21 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
         <span>Custo total <strong>{formatBRL(footer.total)}</strong></span>
         <span>Comprometido <strong>{formatBRL(footer.committed)}</strong> ({formatPercent(footer.total.isZero() ? null : footer.committed.div(footer.total, 6), 1)})</span>
         <span>Livre <strong className="text-success">{formatBRL(footer.total.minus(footer.committed))}</strong></span>
+        {selectable && (
+          <span className="text-primary">
+            {selection.value.size.toLocaleString('pt-BR')} marcado(s) · verba puxada <strong>{formatBRL(pulledTotal)}</strong>
+          </span>
+        )}
       </div>
     </div>
   )
 }
 
-function TreeRow({ r, top, open, onToggle }: { r: Row; top: number; open: boolean; onToggle: () => void }) {
+type RowSelect =
+  | { kind: 'line'; share: string | undefined; disabled: boolean; onCheck: (on: boolean) => void; onShare: (v: string) => void }
+  | { kind: 'block'; ls: LineRow[]; pickable: LineRow[]; chosen: LineRow[]; pulled: Decimal; onCheck: (on: boolean) => void; onShare: (v: string) => void }
+
+function TreeRow({ r, cols, top, open, onToggle, select }: { r: Row; cols: string; top: number; open: boolean; onToggle: () => void; select?: RowSelect }) {
   const cell = 'min-w-0 truncate px-2'
   const indent = { paddingLeft: `${0.5 + r.level * 0.9}rem` }
   const chevron = (
@@ -209,12 +319,32 @@ function TreeRow({ r, top, open, onToggle }: { r: Row; top: number; open: boolea
       {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
     </button>
   )
-  const base = cn('absolute inset-x-0 grid items-center border-b border-border', COLS)
+  const label = r.kind === 'line' ? `${r.line.code} ${r.line.activityWbs}` : r.wbs
+  const base = cn('absolute inset-x-0 grid items-center border-b border-border', cols)
   const style = { top, height: ROW_H }
+  const checked = select?.kind === 'line' ? select.share !== undefined : !!select && select.chosen.length > 0
+
+  const lead = select && (
+    <span className="flex justify-center">
+      <input
+        type="checkbox"
+        className="size-4 accent-primary"
+        aria-label={`Marcar ${label}`}
+        checked={select.kind === 'line' ? checked : select.pickable.length > 0 && select.pickable.every((x) => select.chosen.includes(x))}
+        ref={(el) => {
+          if (el) el.indeterminate = select.kind === 'block' && checked && !select.pickable.every((x) => select.chosen.includes(x))
+        }}
+        disabled={select.kind === 'line' ? select.disabled && !checked : select.pickable.length === 0 && !checked}
+        onChange={(e) => select.onCheck(e.target.checked)}
+      />
+    </span>
+  )
+  const tail = select && <SelectCells r={r} select={select} label={label} />
 
   if (r.kind === 'group') {
     return (
       <div role="row" style={style} className={cn(base, 'font-semibold', r.level === 0 ? 'bg-ink-100 text-text' : 'bg-ink-50 text-ink-800')}>
+        {lead}
         <span className={cn(cell, 'flex items-center')} style={indent}>{chevron}{r.wbs}</span>
         <span className={cn(cell, 'text-xs text-text-muted')}>Item</span>
         <span className={cell} title={r.description}>{r.description}</span>
@@ -226,6 +356,7 @@ function TreeRow({ r, top, open, onToggle }: { r: Row; top: number; open: boolea
         <span className={cn(cell, 'text-xs font-normal text-text-muted')}>{r.lines} insumo(s)</span>
         <Aggregate total={r.total} committed={r.committed} />
         <Free total={r.total} committed={r.committed} />
+        {tail}
       </div>
     )
   }
@@ -233,6 +364,7 @@ function TreeRow({ r, top, open, onToggle }: { r: Row; top: number; open: boolea
     const diverges = r.quantity && !r.total.minus(r.linesTotal).abs().lte('0.05')
     return (
       <div role="row" style={style} className={cn(base, 'bg-surface font-medium text-text')}>
+        {lead}
         <span className={cn(cell, 'flex items-center')} style={indent}>{r.lines > 0 ? chevron : <span className="w-5" />}{r.wbs}</span>
         <span className={cn(cell, 'text-xs')}>{r.code ?? EMPTY}</span>
         <span className={cell} title={r.description}>{r.description}</span>
@@ -244,13 +376,20 @@ function TreeRow({ r, top, open, onToggle }: { r: Row; top: number; open: boolea
         <span />
         <Aggregate total={r.linesTotal} committed={r.committed} />
         <Free total={r.linesTotal} committed={r.committed} />
+        {tail}
       </div>
     )
   }
   const l = r.line
   const free = Decimal.from(l.balanceShare)
+  const dimmed = select?.kind === 'line' && select.disabled && !checked
   return (
-    <div role="row" style={style} className={cn(base, 'bg-surface text-ink-700 hover:bg-primary-soft/30')}>
+    <div
+      role="row"
+      style={style}
+      className={cn(base, 'bg-surface text-ink-700 hover:bg-primary-soft/30', checked && 'bg-primary-soft/50', dimmed && 'opacity-55')}
+    >
+      {lead}
       <span className={cn(cell, 'text-[11px] text-ink-400')} style={indent}>{l.activityWbs}</span>
       <span className={cn(cell, 'text-xs font-medium text-text')}>{l.code}</span>
       <span className={cn(cell, 'pl-5')} title={l.description}>{l.description}</span>
@@ -277,7 +416,58 @@ function TreeRow({ r, top, open, onToggle }: { r: Row; top: number; open: boolea
       >
         {formatBRL(Decimal.from(l.total).minus(l.committedValue))}
       </span>
+      {tail}
     </div>
+  )
+}
+
+/** Colunas "% a consumir" e "Verba puxada" do modo seletor. */
+function SelectCells({ r, select, label }: { r: Row; select: RowSelect; label: string }) {
+  const box = 'h-7 border-border bg-surface text-xs'
+  if (select.kind === 'line' && r.kind === 'line') {
+    const share = select.share
+    const free = freeShare(r.line)
+    const over = share !== undefined && Decimal.from(share).gt(free)
+    return (
+      <>
+        <span className={cn(PIN_SHARE, 'px-1')} title={over ? `Máximo livre: ${formatPercent(free, 1)}` : undefined}>
+          {share !== undefined ? (
+            <DecimalInput aria-label={`% a consumir de ${label}`} scale="ratio" suffix="%" max="1" allowEmpty={false} className={cn(box, over && 'border-error bg-error-soft')} value={share} onCommit={(v) => v && select.onShare(v)} />
+          ) : (
+            <span className="block w-full px-2 text-right text-xs text-text-muted">{EMPTY}</span>
+          )}
+        </span>
+        <span className={cn(PIN_VALUE, 'truncate px-2 text-xs font-medium text-text')} title={share !== undefined ? `${formatQuantity(Decimal.from(r.line.quantity).times(share).round(4))} ${r.line.unit}` : undefined}>
+          {share !== undefined ? formatBRL(pulledValue(r.line, share)) : EMPTY}
+        </span>
+      </>
+    )
+  }
+  if (select.kind !== 'block') return null
+  const base = Decimal.sum(select.chosen.map((x) => x.total))
+  const ratio = base.isZero() ? null : select.pulled.div(base, 6)
+  return (
+    <>
+      <span className={cn(PIN_SHARE, 'px-1')}>
+        {select.pickable.length > 0 || select.chosen.length > 0 ? (
+          <DecimalInput
+            aria-label={`% a consumir em todos os insumos de ${label}`}
+            scale="ratio"
+            suffix="%"
+            max="1"
+            className={box}
+            placeholder={ratio ? formatPercent(ratio, 0) : '%'}
+            value={null}
+            onCommit={(v) => v && select.onShare(v)}
+          />
+        ) : (
+          <span className="block w-full px-2 text-right text-xs text-text-muted">{EMPTY}</span>
+        )}
+      </span>
+      <span className={cn(PIN_VALUE, 'truncate px-2 text-xs font-semibold text-primary')} title={`${select.chosen.length} de ${select.ls.length} insumo(s) marcados`}>
+        {select.chosen.length ? formatBRL(select.pulled) : EMPTY}
+      </span>
+    </>
   )
 }
 

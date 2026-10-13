@@ -64,7 +64,7 @@ export function ContractPage() {
   return (
     <div>
       <PageHeader
-        backTo={`/obras/${workId || c.work.id}?aba=contratos`}
+        backTo={`/obras/${workId || c.work.id}/contratos`}
         eyebrow={`Obra ${c.work.code} · ${c.work.name}`}
         title={`${c.code} — ${c.competition.title}`}
         meta={

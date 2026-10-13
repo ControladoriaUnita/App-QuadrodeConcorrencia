@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "lint:hex": "node scripts/check-hex.mjs",
     "test:integration": "vitest run --config vitest.integration.config.mts",
-    "check": "npm run typecheck && npm run lint:hex && npm test"
+    "check": "npm run typecheck && npm run lint:hex && npm test",
+    "db:bundle": "node scripts/build-db-setup.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
