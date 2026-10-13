@@ -36,6 +36,8 @@ export interface WorkDTO {
   status: 'draft' | 'not_started' | 'active' | 'completed' | 'archived'
   erpId: string | null
   erpSyncedAt: string | null
+  /** Chave da obra na UAU e orçamento escolhido (obras criadas pela planilha de orçamentos) */
+  uau: UauWorkKeyDTO | null
   currentBudgetId: string | null
   currentBudgetTotal: string | null
   /** Metadados da versão vigente do orçamento */
@@ -46,7 +48,7 @@ export interface WorkDTO {
 export interface BudgetVersionDTO {
   id: string
   version: number
-  source: 'manual' | 'erp' | 'excel'
+  source: 'manual' | 'erp' | 'excel' | 'sharepoint'
   fileName: string | null
   importedAt: string | null
   importedByName: string | null
@@ -213,6 +215,17 @@ export interface BudgetLineDTO {
   quantity: string
   unitCost: string
   total: string
+  /** Composição auxiliar de onde o insumo veio (aberta linha a linha), ou null para insumo direto */
+  aux: AuxCompositionDTO | null
+}
+
+export interface AuxCompositionDTO {
+  code: string
+  description: string
+  unit: string | null
+  /** Quantidade da auxiliar por unidade do serviço */
+  coefficient: string
+  unitCost: string
 }
 
 /** Estrutura do orçamento como na planilha: grupos "Item" da EAP e composições (CPU/CPO) */
@@ -446,8 +459,69 @@ export const createWorkSchema = z
   .refine((w) => !w.startedOn || !w.finishedOn || w.finishedOn >= w.startedOn, { path: ['finishedOn'], message: 'O término deve ser posterior ao início' })
 export type CreateWorkInput = z.infer<typeof createWorkSchema>
 
+// ----------------------------------------------------------------------------- obras da UAU e orçamentos do SharePoint
+/** Empresa (UAU Empresa/ObterEmpresasAtivas) */
+export interface UauCompanyDTO {
+  code: string
+  name: string
+}
+
+/** Obra ativa da UAU (Obras/ObterObrasAtivas) para escolher ao criar a obra no QC */
+export interface UauWorkOptionDTO {
+  company: string
+  code: string
+  name: string
+  /** Já existe obra no QC com esta chave */
+  existingWorkId: string | null
+}
+
+export interface UauWorkKeyDTO {
+  /** Empresa da obra na UAU */
+  company: string
+  work: string
+  /** Orçamento escolhido na planilha (NumOrca_pla) e a empresa como está nela (Empresa_pla) */
+  budget: string | null
+  sheetCompany: string | null
+}
+
+/** Orçamento disponível na aba BD_Orcamentos (Empresa_pla · Obra_pla · NumOrca_pla) */
+export interface SheetBudgetDTO {
+  company: string
+  work: string
+  budget: string
+  services: number
+  lines: number
+  total: string
+}
+
+export const createWorkFromUauSchema = z.object({
+  company: z.string().trim().min(1).max(10),
+  work: z.string().trim().min(1).max(20),
+  /** Nº do orçamento na planilha */
+  budget: z.string().trim().min(1).max(10),
+  /** Empresa como está na planilha (Empresa_pla), quando difere da empresa da obra na UAU */
+  sheetCompany: z.string().trim().min(1).max(10).optional(),
+  clientName: z.string().trim().max(200).nullable().optional(),
+  status: z.enum(['not_started', 'active']).default('active'),
+})
+export type CreateWorkFromUauInput = z.infer<typeof createWorkFromUauSchema>
+
+export const refreshSheetBudgetSchema = z.object({
+  budget: z.string().trim().min(1).max(10).optional(),
+  sheetCompany: z.string().trim().min(1).max(10).optional(),
+})
+export type RefreshSheetBudgetInput = z.infer<typeof refreshSheetBudgetSchema>
+
 // Importação do orçamento (Excel) — estrutura produzida por shared/domain/budget/excel-import.ts
 const qty = decimalString
+const auxCompositionSchema = z.object({
+  code: z.string().min(1).max(40),
+  description: z.string().max(1000),
+  unit: z.string().max(20).nullable(),
+  /** Coeficientes da UAU podem ter até 8 casas */
+  coefficient: z.string().trim().regex(/^\d{1,10}(\.\d{1,8})?$/, 'Coeficiente inválido'),
+  unitCost: decimalString,
+})
 export const budgetImportSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
   sheetName: z.string().trim().max(100),
@@ -467,6 +541,7 @@ export const budgetImportSchema = z.object({
         total: qty,
         packageCode: z.string().max(30).nullable(),
         packageDescription: z.string().max(500).nullable(),
+        aux: auxCompositionSchema.nullable().optional(),
       }),
     )
     .min(1)

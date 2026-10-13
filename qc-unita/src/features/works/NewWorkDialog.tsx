@@ -1,5 +1,5 @@
 /**
- * Cadastro manual de obra (obras do ERP chegam pela sincronização). Depois de criada,
+ * Cadastro manual de obra (alternativa à "Nova obra da UAU"). Depois de criada,
  * a obra abre com a importação do orçamento (Excel) pronta.
  */
 import { useEffect } from 'react'
@@ -64,8 +64,8 @@ export function NewWorkDialog({ open, onClose, onCreated }: { open: boolean; onC
       open={open}
       onClose={onClose}
       width="min(94vw, 40rem)"
-      title="Nova obra"
-      description="Cadastro manual. Obras do ERP são criadas pela sincronização. Em seguida você importa o orçamento (Excel)."
+      title="Nova obra (cadastro manual)"
+      description="Para obras fora da UAU. Em seguida você importa o orçamento (Excel)."
       footer={
         <>
           <Button variant="ghost" className="mr-auto" onClick={onClose}>Cancelar</Button>

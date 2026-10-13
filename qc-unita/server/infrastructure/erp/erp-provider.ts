@@ -72,6 +72,19 @@ export interface ErpContractPayload {
   items: { materialCode: string; quantity: string; unitPrice: string }[]
 }
 
+/** Empresa do ERP (lista para escolher a obra) */
+export interface ErpCompany {
+  code: string
+  name: string
+}
+
+/** Obra ativa do ERP para escolher ao criar a obra no QC (não é sincronização) */
+export interface ErpWorkOption {
+  company: string
+  code: string
+  name: string
+}
+
 /** Operações de leitura/envio; usadas para saber o que cada provider já implementa. */
 export type ErpOperation = 'works' | 'suppliers' | 'materials' | 'budget' | 'pushContract'
 
@@ -89,6 +102,9 @@ export interface ERPProvider {
   getMaterials(): Promise<ErpMaterial[]>
   /** Envio futuro de contrato aprovado ao ERP; retorna o id do contrato no ERP. */
   pushContract(payload: ErpContractPayload): Promise<{ erpContractId: string }>
+  /** Listas para o seletor de "Nova obra" (empresas e obras ativas), ordenadas */
+  listCompanies(): Promise<ErpCompany[]>
+  listWorkOptions(): Promise<ErpWorkOption[]>
 }
 
 export class ErpNotConfiguredError extends AppError {
@@ -97,5 +113,9 @@ export class ErpNotConfiguredError extends AppError {
     this.name = 'ErpNotConfiguredError'
   }
 }
+
+/** Ordem das listas do seletor: empresa (numérica) e código da obra */
+export const byCompanyAndCode = (a: ErpWorkOption, b: ErpWorkOption) =>
+  Number(a.company) - Number(b.company) || a.company.localeCompare(b.company) || a.code.localeCompare(b.code)
 
 export const erpSupports = (erp: ERPProvider, op: ErpOperation) => !erp.supports || erp.supports.has(op)

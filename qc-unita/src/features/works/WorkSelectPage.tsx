@@ -14,6 +14,8 @@ import { formatBRL, formatPercent } from '@/utils/format'
 import { useWorks } from '@/features/competitions/api'
 import { workPath } from './currentWork'
 import { NewWorkDialog } from './NewWorkDialog'
+import { NewWorkFromUauDialog } from './NewWorkFromUauDialog'
+import type { BudgetPageState } from './BudgetPage'
 
 const status: Record<WorkDTO['status'], { label: string; tone: Tone }> = {
   draft: { label: 'Rascunho', tone: 'neutral' },
@@ -27,9 +29,10 @@ export function WorkSelectPage() {
   const works = useWorks()
   const navigate = useNavigate()
   const { can } = useAuth()
-  const [creating, setCreating] = useState(false)
+  /** Fluxo principal: obra da UAU; o cadastro manual é a alternativa */
+  const [creating, setCreating] = useState<'uau' | 'manual' | null>(null)
   const newButton = can('work.manage') && (
-    <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
+    <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating('uau')}>
       Nova obra
     </Button>
   )
@@ -41,11 +44,21 @@ export function WorkSelectPage() {
         description="Cada obra tem um orçamento geral; as concorrências consomem esse orçamento por tipo de serviço."
         actions={newButton}
       />
+      <NewWorkFromUauDialog
+        open={creating === 'uau'}
+        onClose={() => setCreating(null)}
+        onManual={() => setCreating('manual')}
+        onCreated={(result) => {
+          setCreating(null)
+          const state: BudgetPageState = { sheetImport: result }
+          navigate(workPath.budget(result.id), { state })
+        }}
+      />
       <NewWorkDialog
-        open={creating}
-        onClose={() => setCreating(false)}
+        open={creating === 'manual'}
+        onClose={() => setCreating(null)}
         onCreated={(id) => {
-          setCreating(false)
+          setCreating(null)
           navigate(`${workPath.budget(id)}?importar=1`)
         }}
       />
@@ -55,7 +68,7 @@ export function WorkSelectPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-52" />)}</div>
       ) : !works.data?.length ? (
         <Card>
-          <EmptyState title="Nenhuma obra disponível" description="Cadastre uma obra, sincronize com o ERP ou peça ao administrador acesso a uma obra." action={newButton} />
+          <EmptyState title="Nenhuma obra disponível" description="Crie uma obra a partir da UAU (com o orçamento da planilha) ou peça ao administrador acesso a uma obra." action={newButton} />
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

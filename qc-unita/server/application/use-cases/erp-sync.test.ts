@@ -25,6 +25,7 @@ function suppliersOnly(list: ErpSupplier[]): ERPProvider {
   return {
     name: 'uau', supports: new Set(['suppliers'] as const),
     getSuppliers: async () => list, getWorks: pending, getWork: pending, getBudget: pending, getMaterials: pending, pushContract: pending,
+    listCompanies: pending, listWorkOptions: pending,
   }
 }
 

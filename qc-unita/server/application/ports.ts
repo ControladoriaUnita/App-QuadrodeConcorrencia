@@ -27,12 +27,15 @@ import type {
   IntegrationLogDTO,
   ProfileRefDTO,
   RevisionStatus,
+  SheetBudgetDTO,
   SupplierDTO,
+  UauWorkKeyDTO,
   UpdateItemInput,
   UpdateSupplierTermsInput,
   WorkDTO,
 } from '../../shared/contracts'
 import type { ApprovalInstance, ApprovalStepConfig } from '../../shared/domain/approval/approval-flow'
+import type { BudgetSheetKey, SheetBudget } from '../../shared/domain/budget/budget-sheet'
 import type { ErpBudget, ErpMaterial, ErpSupplier, ErpWork } from '../infrastructure/erp/erp-provider'
 import type { Actor } from './context'
 
@@ -111,6 +114,12 @@ export interface ComputedPersistence {
   }[]
 }
 
+/** Obra criada a partir da UAU: id no ERP e chaves da UAU/planilha de orçamentos */
+export interface NewWorkOrigin {
+  erpId: string
+  uau: UauWorkKeyDTO
+}
+
 export interface IdentityRepository {
   /** Resolve o ator a partir do id autenticado (perfil + papéis + permissões). */
   loadActor(userId: string): Promise<Actor | null>
@@ -119,8 +128,8 @@ export interface IdentityRepository {
 
 export interface CatalogRepository {
   listWorks(): Promise<WorkDTO[]>
-  /** Cadastro manual (source = manual); retorna o id */
-  createWork(input: CreateWorkInput, actorId: string): Promise<string>
+  /** Cadastro de obra (manual, ou escolhida na lista da UAU com `origin`); retorna o id */
+  createWork(input: CreateWorkInput, actorId: string, origin?: NewWorkOrigin): Promise<string>
   getWork(id: string): Promise<WorkDTO | null>
   listSuppliers(search?: string): Promise<SupplierDTO[]>
   getSupplier(id: string): Promise<SupplierDTO | null>
@@ -192,9 +201,38 @@ export interface ErpSyncWriter {
   upsertBudget(budget: ErpBudget): Promise<{ budgetId: string; lines: number }>
 }
 
-/** Importação de orçamento (Excel) — cria nova versão vigente; escrita server-side (service_role). */
+export type BudgetImportSource = 'excel' | 'sharepoint'
+
+/** Orçamento da planilha usado pela obra: Obra_pla · NumOrca_pla · Empresa_pla */
+export interface SheetBudgetRef {
+  work: string
+  budget: string
+  sheetCompany: string
+}
+
+/** Importação de orçamento (Excel ou planilha do SharePoint) — cria nova versão vigente; escrita server-side (service_role). */
 export interface BudgetWriter {
-  importBudget(workId: string, input: BudgetImportInput, meta: { actorId: string }): Promise<{ budgetId: string; version: number; lines: number }>
+  importBudget(
+    workId: string,
+    input: BudgetImportInput,
+    meta: {
+      actorId: string
+      source?: BudgetImportSource
+      /** Planilha do SharePoint: guarda na obra o orçamento usado (obra, nº e empresa como estão na planilha) */
+      sheet?: SheetBudgetRef
+    },
+  ): Promise<{ budgetId: string; version: number; lines: number }>
+}
+
+/** Orçamentos da aba BD_Orcamentos (Excel no SharePoint, ou exemplo no modo demonstração) */
+export interface BudgetSheetSource {
+  readonly name: 'sharepoint' | 'mock'
+  /** Nome da aba (para o nome do "arquivo" da versão importada) */
+  readonly sheetName: string
+  /** Orçamentos disponíveis; com `workCode`, só os da obra (Obra_pla, sem diferenciar maiúsculas) */
+  listBudgets(workCode?: string): Promise<SheetBudgetDTO[]>
+  /** Orçamento completo e estruturado (lança erro claro se não existir) */
+  loadBudget(key: BudgetSheetKey): Promise<SheetBudget>
 }
 
 // ----------------------------------------------------------------------------- contratos

@@ -3,7 +3,9 @@
  */
 import type {
   ApprovalDTO,
+  AuxCompositionDTO,
   BudgetLineDTO,
+  BudgetVersionDTO,
   CommitmentCategory,
   QcLinkDTO,
   BudgetPackageDTO,
@@ -18,6 +20,7 @@ import type {
 import { Decimal } from '../../../shared/domain/decimal'
 import type { Actor } from '../../application/context'
 import type { CompetitionData, Repositories, WorkCommitments } from '../../application/ports'
+import type { ErpBudget } from '../erp/erp-provider'
 import { uid, type AuditCtx, type MemoryDb, type Row } from './memory-db'
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
 import { createMemoryAttachments, createMemoryStorage } from './memory-attachments'
@@ -44,13 +47,21 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       status: w.status as WorkDTO['status'],
       erpId: (w.erpId as string) ?? null,
       erpSyncedAt: (w.erpSyncedAt as string) ?? null,
+      uau: w.uauWorkCode
+        ? {
+            company: ((w.uauCompanyCode ?? w.budgetSheetCompany) as string) ?? '',
+            work: w.uauWorkCode as string,
+            budget: (w.uauBudgetNumber as string) ?? null,
+            sheetCompany: (w.budgetSheetCompany as string) ?? null,
+          }
+        : null,
       currentBudgetId: budget?.id ?? null,
       currentBudgetTotal: (budget?.totalAmount as string) ?? null,
       currentBudget: budget
         ? {
             id: budget.id,
             version: budget.version as number,
-            source: ((budget.source as string) ?? 'erp') as 'manual' | 'erp' | 'excel',
+            source: ((budget.source as string) ?? 'erp') as BudgetVersionDTO['source'],
             fileName: (budget.importFileName as string) ?? null,
             importedAt: (budget.importedAt as string) ?? (budget.erpSyncedAt as string) ?? null,
             importedByName: profileRef(budget.importedBy)?.fullName ?? null,
@@ -79,6 +90,15 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       quantity: l.quantity as string,
       unitCost: l.unitCost as string,
       total: l.totalCost as string,
+      aux: l.auxCode
+        ? {
+            code: l.auxCode as string,
+            description: (l.auxDescription as string) ?? '',
+            unit: (l.auxUnit as string) ?? null,
+            coefficient: l.auxCoefficient as string,
+            unitCost: l.auxUnitCost as string,
+          }
+        : null,
     }
   }
 
@@ -90,7 +110,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
     budgetId: string,
     groups: { wbs: string; description: string }[],
     activities: { wbs: string; code: string | null; description: string; unit: string | null; quantity: string; unitCost: string }[],
-    items: { activityWbs: string; materialCode: string; quantity: string; unitCost: string; total?: string; packageCode: string | null; packageDescription: string | null; lineKey?: string; sourceRow?: number }[],
+    items: (Omit<ErpBudget['items'][number], 'total'> & { total?: string; sourceRow?: number; aux?: AuxCompositionDTO | null })[],
   ) => {
     const oldGroups = new Map(db.find('budget_items', (x) => x.budgetId === budgetId).map((g) => [g.wbs as string, g.id]))
     const seenGroups = new Set<string>()
@@ -124,6 +144,8 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         id, budgetId, activityId: actByWbs.get(it.activityWbs), materialId: m.id, quantity: it.quantity, unitCost: it.unitCost,
         totalCost: lineTotal.toDb(), packageCode: it.packageCode, packageDescription: it.packageDescription, lineKey: it.lineKey,
         sourceRow: it.sourceRow ?? null, sortOrder: i,
+        auxCode: it.aux?.code ?? null, auxDescription: it.aux?.description ?? null, auxUnit: it.aux?.unit ?? null,
+        auxCoefficient: it.aux?.coefficient ?? null, auxUnitCost: it.aux?.unitCost ?? null,
       })
     })
     for (const [, id] of oldLines) if (!seen.has(id) && !referenced.has(id)) db.t('activity_items').delete(id)
@@ -198,12 +220,14 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       async listWorks() {
         return db.all('works').map(toWork).sort((a, b) => a.code.localeCompare(b.code))
       },
-      async createWork(input, actorId) {
+      async createWork(input, actorId, origin) {
         if (db.find('works', (w) => w.code === input.code).length) throw new Error('duplicate key value violates unique constraint "works_code_key"')
         const row = db.insert('works', {
-          erpId: null, code: input.code, name: input.name, clientName: input.clientName ?? null, city: input.city ?? null,
+          erpId: origin?.erpId ?? null, code: input.code, name: input.name, clientName: input.clientName ?? null, city: input.city ?? null,
           state: input.state ?? null, costCenter: input.costCenter ?? null, status: input.status, startedOn: input.startedOn ?? null,
-          finishedOn: input.finishedOn ?? null, source: 'manual', erpSyncedAt: null, createdBy: actorId,
+          finishedOn: input.finishedOn ?? null, source: origin ? 'erp' : 'manual', erpSyncedAt: origin ? new Date().toISOString() : null, createdBy: actorId,
+          uauCompanyCode: origin?.uau.company ?? null, uauWorkCode: origin?.uau.work ?? null,
+          uauBudgetNumber: origin?.uau.budget ?? null, budgetSheetCompany: origin?.uau.sheetCompany ?? null,
         }, audit)
         return row.id
       },
@@ -730,11 +754,14 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         const version = db.find('budgets', (b) => b.workId === workId).reduce((m, b) => Math.max(m, b.version as number), 0) + 1
         for (const old of db.find('budgets', (x) => x.workId === workId && x.isCurrent === true)) db.put('budgets', { ...old, isCurrent: false, status: 'superseded' })
         const budget = db.insert('budgets', {
-          workId, version, description: `Importado de ${input.fileName}`, status: 'active', isCurrent: false, source: 'excel',
+          workId, version, description: `Importado de ${input.fileName}`, status: 'active', isCurrent: false, source: meta.source ?? 'excel',
           importFileName: input.fileName, importedAt: now, importedBy: meta.actorId, totalAmount: '0', linesCount: 0,
         }, audit, { workId })
         const { total, count } = writeBudget(budget.id, input.groups, input.activities, input.lines)
         db.put('budgets', { ...db.get('budgets', budget.id)!, isCurrent: true, totalAmount: total.toDb(), linesCount: count })
+        if (meta.sheet) {
+          db.update('works', workId, { uauWorkCode: meta.sheet.work, uauBudgetNumber: meta.sheet.budget, budgetSheetCompany: meta.sheet.sheetCompany }, audit, { workId })
+        }
         return { budgetId: budget.id, version, lines: count }
       },
     },

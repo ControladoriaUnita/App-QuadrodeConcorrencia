@@ -7,6 +7,8 @@ import {
   addSupplierSchema,
   createCompetitionSchema,
   createWorkSchema,
+  createWorkFromUauSchema,
+  refreshSheetBudgetSchema,
   createRevisionSchema,
   decideApprovalSchema,
   erpSyncSchema,
@@ -38,7 +40,9 @@ import * as catalog from '../application/use-cases/catalog'
 import * as contracts from '../application/use-cases/contracts'
 import * as qc from '../application/use-cases/competitions'
 import * as works from '../application/use-cases/works'
+import * as workSetup from '../application/use-cases/work-setup'
 import { syncFromErp } from '../application/use-cases/erp-sync'
+import { getBudgetSheetSource, rememberOidcToken } from '../infrastructure/budget-sheet'
 import { getErpProvider } from '../infrastructure/erp'
 import { handleDevStorage } from '../infrastructure/memory/memory-attachments'
 import { DEMO_USERS } from '../infrastructure/memory/seed'
@@ -79,6 +83,16 @@ route('POST', '/works', async ({ repos, ctx, body }) => works.createWork(repos, 
 route('GET', '/works/:id/budget-structure', async ({ repos, ctx, params }) => works.getBudgetStructure(repos, ctx, parse(uuidParam, params.id)))
 route('POST', '/works/:id/budget-import', async ({ repos, ctx, params, body }) =>
   works.importBudget(repos, ctx, parse(uuidParam, params.id), parse(budgetImportSchema, await body())), 201)
+// Nova obra pela UAU + orçamento da planilha BD_Orcamentos (SharePoint)
+route('GET', '/uau/companies', async ({ ctx }) => workSetup.listUauCompanies(getErpProvider(), ctx))
+route('GET', '/uau/works', async ({ repos, ctx }) => workSetup.listUauWorks(repos, getErpProvider(), ctx))
+route('GET', '/budget-sheet/budgets', async ({ ctx, url }) =>
+  workSetup.listSheetBudgets(getBudgetSheetSource(), ctx, parse(z.string().trim().min(1, 'Informe a obra').max(20), url.searchParams.get('work'))),
+)
+route('POST', '/works/from-uau', async ({ repos, ctx, body }) =>
+  workSetup.createWorkFromUau(repos, getErpProvider(), getBudgetSheetSource(), ctx, parse(createWorkFromUauSchema, await body())), 201)
+route('POST', '/works/:id/budget-sheet/refresh', async ({ repos, ctx, params, body }) =>
+  workSetup.refreshSheetBudget(repos, getBudgetSheetSource(), ctx, parse(uuidParam, params.id), parse(refreshSheetBudgetSchema, await body())))
 route('GET', '/works/:id/overview', async ({ repos, ctx, params }) => works.getWorkOverview(repos, ctx, parse(uuidParam, params.id)))
 route('GET', '/works/:id/packages', async ({ repos, ctx, params }) => catalog.listPackages(repos, ctx, parse(uuidParam, params.id)))
 route('GET', '/suppliers', async ({ repos, ctx, url }) => catalog.listSuppliers(repos, ctx, url.searchParams.get('search') ?? undefined))
@@ -246,6 +260,8 @@ export async function handle(req: Request): Promise<Response> {
       throw new AppError(exists ? 'METHOD_NOT_ALLOWED' : 'NOT_FOUND', exists ? 'Método não permitido.' : 'Rota inexistente.', exists ? 405 : 404)
     }
 
+    // Credencial federada da Microsoft (Vercel): o token OIDC chega em cada requisição
+    rememberOidcToken(req.headers.get('x-vercel-oidc-token'))
     const origin = req.headers.get('x-audit-origin') === 'api' ? 'api' : 'ui'
     const session = await openSession(
       { authorization: req.headers.get('authorization'), demoUser: req.headers.get('x-demo-user') },

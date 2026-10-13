@@ -8,7 +8,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type {
   ApprovalDTO,
+  AuxCompositionDTO,
   BudgetLineDTO,
+  BudgetVersionDTO,
   CommitmentCategory,
   QcLinkDTO,
   AuditLogDTO,
@@ -38,6 +40,7 @@ function must<T = any>(res: { data: unknown; error: { message: string; code?: st
 
 const WORK_COLS =
   `id, code, name, clientName:client_name, city, state, status, erpId:erp_id, erpSyncedAt:erp_synced_at,
+   uau_company_code, uau_work_code, uau_budget_number, budget_sheet_company,
    budgets(id, version, source, totalAmount:total_amount::text, isCurrent:is_current, importFileName:import_file_name,
            importedAt:imported_at, erpSyncedAt:erp_synced_at, linesCount:lines_count)`
 const SUPPLIER_COLS =
@@ -71,16 +74,24 @@ const toSnake = (o: Json) => Object.fromEntries(Object.entries(o).filter(([, v])
 function toWork(w: Json): WorkDTO {
   const budgets = (w.budgets as Json[]) ?? []
   const current = budgets.find((b) => b.isCurrent) as Json | undefined
-  const { budgets: _b, ...rest } = w
+  const { budgets: _b, uau_company_code: company, uau_work_code: work, uau_budget_number: budget, budget_sheet_company: sheetCompany, ...rest } = w
   return {
     ...(rest as unknown as WorkDTO),
+    uau: work
+      ? {
+          company: ((company ?? sheetCompany) as string) ?? '',
+          work: work as string,
+          budget: (budget as string) ?? null,
+          sheetCompany: (sheetCompany as string) ?? null,
+        }
+      : null,
     currentBudgetId: (current?.id as string) ?? null,
     currentBudgetTotal: (current?.totalAmount as string) ?? null,
     currentBudget: current
       ? {
           id: current.id as string,
           version: current.version as number,
-          source: current.source as 'manual' | 'erp' | 'excel',
+          source: current.source as BudgetVersionDTO['source'],
           fileName: (current.importFileName as string) ?? null,
           importedAt: (current.importedAt as string) ?? (current.erpSyncedAt as string) ?? null,
           importedByName: null,
@@ -93,6 +104,7 @@ function toWork(w: Json): WorkDTO {
 
 const LINE_SELECT = `id, lineKey:line_key, quantity:quantity::text, unitCost:unit_cost::text, total:total_cost::text,
   packageCode:package_code, packageDescription:package_description, sortOrder:sort_order,
+  aux_code, aux_description, aux_unit, aux_coefficient:aux_coefficient::text, aux_unit_cost:aux_unit_cost::text,
   activities(wbs_code, composition_code, description), materials(id, code, description, unit)`
 
 function toLine(r: Json): BudgetLineDTO {
@@ -113,6 +125,19 @@ function toLine(r: Json): BudgetLineDTO {
     quantity: r.quantity as string,
     unitCost: r.unitCost as string,
     total: r.total as string,
+    aux: auxOf(r),
+  }
+}
+
+/** Composição auxiliar da linha (colunas aux_* de activity_items) */
+function auxOf(r: Json): AuxCompositionDTO | null {
+  if (!r.aux_code) return null
+  return {
+    code: r.aux_code as string,
+    description: (r.aux_description as string) ?? '',
+    unit: (r.aux_unit as string) ?? null,
+    coefficient: (r.aux_coefficient as string) ?? '0',
+    unitCost: (r.aux_unit_cost as string) ?? '0',
   }
 }
 
@@ -128,7 +153,10 @@ async function writeBudgetLines(
   b: {
     groups: { wbs: string; description: string }[]
     activities: { wbs: string; code: string | null; description: string; unit: string | null; quantity: string; unitCost: string }[]
-    items: { activityWbs: string; materialCode: string; quantity: string; unitCost: string; total?: string; packageCode: string | null; packageDescription: string | null; lineKey?: string; sourceRow?: number }[]
+    items: {
+      activityWbs: string; materialCode: string; quantity: string; unitCost: string; total?: string; packageCode: string | null
+      packageDescription: string | null; lineKey?: string; sourceRow?: number; aux?: AuxCompositionDTO | null
+    }[]
   },
 ): Promise<{ total: Decimal; count: number }> {
   const groups: { id: string; wbs_code: string }[] = []
@@ -169,6 +197,8 @@ async function writeBudgetLines(
         budget_id: budgetId, activity_id: actId.get(i.activityWbs), material_id: matId.get(i.materialCode), quantity: i.quantity,
         unit_cost: i.unitCost, total_cost: t.toDb(), package_code: i.packageCode, package_description: i.packageDescription,
         line_key: i.lineKey, source_row: i.sourceRow ?? null, sort_order: idx,
+        aux_code: i.aux?.code ?? null, aux_description: i.aux?.description ?? null, aux_unit: i.aux?.unit ?? null,
+        aux_coefficient: i.aux?.coefficient ?? null, aux_unit_cost: i.aux?.unitCost ?? null,
       }
     })
   for (const part of chunk(rows, 1000)) must(await service.from('activity_items').upsert(part, { onConflict: 'budget_id,line_key' }))
@@ -242,11 +272,17 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
       async listWorks() {
         return (must(await db.from('works').select(WORK_COLS).order('code')) as unknown as Json[]).map(toWork)
       },
-      async createWork(input, actorId) {
+      async createWork(input, actorId, origin) {
         const row = must(await db.from('works').insert({
           code: input.code, name: input.name, client_name: input.clientName ?? null, city: input.city ?? null, state: input.state ?? null,
           cost_center: input.costCenter ?? null, status: input.status, started_on: input.startedOn ?? null, finished_on: input.finishedOn ?? null,
-          source: 'manual', created_by: actorId,
+          source: origin ? 'erp' : 'manual', created_by: actorId,
+          ...(origin
+            ? {
+                erp_id: origin.erpId, erp_synced_at: new Date().toISOString(), uau_company_code: origin.uau.company, uau_work_code: origin.uau.work,
+                uau_budget_number: origin.uau.budget, budget_sheet_company: origin.uau.sheetCompany,
+              }
+            : {}),
         }).select('id').single()) as { id: string }
         return row.id
       },
@@ -279,6 +315,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           activityDescription: r.activity_description as string, materialId: r.material_id as string, code: r.code as string,
           description: r.description as string, unit: r.unit as string, packageCode: (r.package_code as string) ?? null,
           packageDescription: (r.package_description as string) ?? null, quantity: r.quantity as string, unitCost: r.unit_cost as string, total: r.total as string,
+          aux: auxOf(r),
         }))
       },
       async getBudgetStructure(budgetId) {
@@ -760,12 +797,17 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         const last = must(await service.from('budgets').select('version').eq('work_id', workId).order('version', { ascending: false }).limit(1)) as { version: number }[]
         const version = (last[0]?.version ?? 0) + 1
         const budget = must(await service.from('budgets').insert({
-          work_id: workId, version, description: `Importado de ${input.fileName}`, status: 'draft', is_current: false, source: 'excel',
+          work_id: workId, version, description: `Importado de ${input.fileName}`, status: 'draft', is_current: false, source: meta.source ?? 'excel',
           import_file_name: input.fileName, imported_at: new Date().toISOString(), imported_by: meta.actorId,
         }).select('id').single()) as { id: string }
         const { total, count } = await writeBudgetLines(service, budget.id, { groups: input.groups, activities: input.activities, items: input.lines })
         must(await service.from('budgets').update({ is_current: false, status: 'superseded' }).eq('work_id', workId).eq('is_current', true))
         must(await service.from('budgets').update({ is_current: true, status: 'active', total_amount: total.toDb(), lines_count: count }).eq('id', budget.id))
+        if (meta.sheet) {
+          must(await service.from('works').update({
+            uau_work_code: meta.sheet.work, uau_budget_number: meta.sheet.budget, budget_sheet_company: meta.sheet.sheetCompany,
+          }).eq('id', workId))
+        }
         return { budgetId: budget.id, version, lines: count }
       },
     },

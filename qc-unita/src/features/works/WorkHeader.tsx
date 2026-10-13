@@ -4,13 +4,21 @@
  */
 import { useMemo, type ReactNode } from 'react'
 import { FileSpreadsheet } from 'lucide-react'
-import type { WorkOverviewDTO } from '@shared/contracts'
+import type { BudgetVersionDTO, WorkOverviewDTO } from '@shared/contracts'
 import { buildWorkOverview, type WorkOverview } from '@shared/domain/work/overview'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { Badge, Card, ConsumptionMeter, Skeleton } from '@/components/ui'
+import { Badge, Card, ConsumptionMeter, Skeleton, type Tone } from '@/components/ui'
 import { cn } from '@/utils/cn'
 import { formatBRL, formatDateTime, formatPercent } from '@/utils/format'
 import { useWorkOverview } from './api'
+
+/** Origem da versão do orçamento: selo, verbo ("importado em …") e tom do selo */
+const SOURCE: Record<BudgetVersionDTO['source'], { badge: string; verb: string; tone: Tone }> = {
+  excel: { badge: 'Excel', verb: 'importado', tone: 'info' },
+  sharepoint: { badge: 'Planilha SharePoint', verb: 'importado', tone: 'info' },
+  erp: { badge: 'ERP', verb: 'sincronizado', tone: 'neutral' },
+  manual: { badge: 'Manual', verb: 'cadastrado', tone: 'neutral' },
+}
 
 export function WorkHeader({ section, data, ov, actions, strip = true }: { section: string; data: WorkOverviewDTO; ov: WorkOverview; actions?: ReactNode; strip?: boolean }) {
   const { work } = data
@@ -26,8 +34,14 @@ export function WorkHeader({ section, data, ov, actions, strip = true }: { secti
             {b && (
               <>
                 {' '}· Orçamento vigente v{b.version}
-                {b.fileName && <> · <span className="font-medium text-ink-700">{b.fileName}</span></>}
-                {b.importedAt && <> · {b.source === 'excel' ? 'importado' : 'sincronizado'} em {formatDateTime(b.importedAt)}</>}
+                {b.source === 'sharepoint' ? (
+                  <>
+                    {' '}· <span className="font-medium text-ink-700">Planilha de orçamentos (SharePoint){work.uau?.budget && <> · orçamento {work.uau.budget}</>}</span>
+                  </>
+                ) : (
+                  b.fileName && <> · <span className="font-medium text-ink-700">{b.fileName}</span></>
+                )}
+                {b.importedAt && <> · {SOURCE[b.source].verb} em {formatDateTime(b.importedAt)}</>}
                 {b.importedByName && <> por {b.importedByName}</>}
                 {' '}· {b.lines.toLocaleString('pt-BR')} linhas
               </>
@@ -36,8 +50,8 @@ export function WorkHeader({ section, data, ov, actions, strip = true }: { secti
         }
         meta={
           b && (
-            <Badge tone={b.source === 'excel' ? 'info' : 'neutral'} icon={<FileSpreadsheet className="size-3" />}>
-              Orçamento v{b.version} · {b.source === 'excel' ? 'Excel' : 'ERP'}
+            <Badge tone={SOURCE[b.source].tone} icon={<FileSpreadsheet className="size-3" />}>
+              Orçamento v{b.version} · {SOURCE[b.source].badge}
             </Badge>
           )
         }

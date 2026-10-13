@@ -7,7 +7,7 @@ import { buildWorkOverview, UNLINKED } from '../work/overview'
 const line = (id: string, materialId: string, code: string, pkg: string, quantity: string, total: string): BudgetLineDTO => ({
   id, lineKey: `k-${id}`, activityWbs: '01.01', activityCode: 'CPU1', activityDescription: 'Comp', materialId, code,
   description: code, unit: 'un', packageCode: pkg, packageDescription: pkg === 'IP1' ? 'Pavimentação' : 'Passeio',
-  quantity, unitCost: (Number(total) / Number(quantity)).toFixed(4), total,
+  quantity, unitCost: (Number(total) / Number(quantity)).toFixed(4), total, aux: null,
 })
 const inputs: BudgetLineDTO[] = [
   line('a', 'm1', 'IM1', 'IP1', '100', '75'),

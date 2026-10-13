@@ -58,6 +58,47 @@ describe('UauERPProvider.getSuppliers', () => {
   })
 })
 
+describe('UauERPProvider: listas para a nova obra', () => {
+  it('empresas e obras ativas, ordenadas, sem repetição e guardadas por alguns minutos', async () => {
+    const routes: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith('/Autenticador/AutenticarUsuario')) return json(200, 'tok')
+      routes.push(url.split('/api/v1.0/')[1]!)
+      expect(JSON.parse(String(init.body))).toEqual({})
+      if (url.endsWith('/Empresa/ObterEmpresasAtivas')) {
+        return json(200, [{ Codigo_emp: 71, Desc_emp: 'SPE 71 ' }, { Codigo_emp: 1, Desc_emp: 'Unità' }, { Codigo_emp: null, Desc_emp: 'x' }])
+      }
+      return json(200, [
+        { Cod_obr: 'p071c', Empresa_obr: 1, Descr_obr: 'Residencial P071', Status_obr: 0, TipoObra_obr: 1 },
+        { Cod_obr: 'A100', Empresa_obr: 71, Descr_obr: 'Obra A', Status_obr: 0, TipoObra_obr: 4 },
+        { Cod_obr: 'A001', Empresa_obr: 1, Descr_obr: null, Status_obr: 0, TipoObra_obr: 2 },
+        { Cod_obr: 'P071C', Empresa_obr: 1, Descr_obr: 'Residencial P071', Status_obr: 0, TipoObra_obr: 1 },
+      ])
+    }))
+    const p = new UauERPProvider(config)
+    expect(await p.listCompanies()).toEqual([{ code: '1', name: 'Unità' }, { code: '71', name: 'SPE 71' }])
+    expect(await p.listWorkOptions()).toEqual([
+      { company: '1', code: 'A001', name: 'A001' },
+      { company: '1', code: 'P071C', name: 'Residencial P071' },
+      { company: '71', code: 'A100', name: 'Obra A' },
+    ])
+    await p.listWorkOptions()
+    expect(routes).toEqual(['Empresa/ObterEmpresasAtivas', 'Obras/ObterObrasAtivas'])
+  })
+
+  it('erro da UAU na lista → mensagem clara e nada em cache', async () => {
+    let fail = true
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/Autenticador/AutenticarUsuario')) return json(200, 'tok')
+      return fail ? json(500, { Descricao: 'Falha interna' }) : json(200, [{ Codigo_emp: 1, Desc_emp: 'Unità' }])
+    }))
+    const p = new UauERPProvider(config)
+    await expect(p.listCompanies()).rejects.toThrow('A UAU respondeu HTTP 500 ao listar empresas. Falha interna')
+    fail = false
+    expect(await p.listCompanies()).toHaveLength(1)
+  })
+})
+
 describe('createUauProvider', () => {
   it('lista as variáveis ausentes sem mostrar valores', () => {
     expect(() => createUauProvider({ UAU_BASE_URL: ' "https://uau.example" ', UAU_LOGIN: 'segredo-login' })).toThrow(

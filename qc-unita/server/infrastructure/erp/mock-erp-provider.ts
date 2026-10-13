@@ -5,13 +5,22 @@
  * revestimentos, esquadrias, pintura e grua).
  */
 import budgetFixture from './fixtures/budget-sample.json'
-import type { ERPProvider, ErpBudget, ErpContractPayload, ErpMaterial, ErpSupplier, ErpWork } from './erp-provider'
+import { byCompanyAndCode, type ERPProvider, type ErpBudget, type ErpCompany, type ErpContractPayload, type ErpMaterial, type ErpSupplier, type ErpWork, type ErpWorkOption } from './erp-provider'
 
 const WORKS: ErpWork[] = [
   { erpId: 'UAU-OBRA-2041', code: '2041', name: 'Residencial Alpha', clientName: 'SPE Alpha Empreendimentos', city: 'São Paulo', state: 'SP', status: 'active', costCenter: 'CC-2041' },
   { erpId: 'UAU-OBRA-2055', code: '2055', name: 'Edifício Vila Nova', clientName: 'SPE Vila Nova', city: 'São Paulo', state: 'SP', status: 'active', costCenter: 'CC-2055' },
   { erpId: 'UAU-OBRA-1980', code: '1980', name: 'Condomínio Jardins BH', clientName: 'SPE Jardins', city: 'Belo Horizonte', state: 'MG', status: 'completed', costCenter: 'CC-1980' },
 ]
+
+// Empresas fictícias e a empresa de cada obra (seletor de "Nova obra")
+const COMPANIES: ErpCompany[] = [
+  { code: '1', name: 'Unità Engenharia (exemplo)' },
+  { code: '2', name: 'Unità Incorporações (exemplo)' },
+]
+const COMPANY_OF: Record<string, string> = { '2041': '1', '2055': '1', '1980': '2' }
+/** Obra que existe só no ERP: permite criar uma obra nova no modo demonstração */
+const NEW_WORK_OPTIONS: ErpWorkOption[] = [{ company: '2', code: '2070', name: 'Residencial Beta' }]
 
 const SUPPLIERS: ErpSupplier[] = [
   { erpId: 'F-1001', legalName: 'Terra Forte Terraplenagem Ltda', tradeName: 'Terra Forte', taxId: '12345678000190', contactName: 'Marcos Lima', phone: '(11) 4002-1001', email: 'comercial@terraforte.example', cndValidUntil: '2027-03-31', city: 'São Paulo', state: 'SP', active: true },
@@ -74,5 +83,15 @@ export class MockERPProvider implements ERPProvider {
   async pushContract(payload: ErpContractPayload): Promise<{ erpContractId: string }> {
     await this.delay()
     return { erpContractId: `MOCK-CT-${payload.contractRequestId.slice(0, 8).toUpperCase()}` }
+  }
+
+  async listCompanies(): Promise<ErpCompany[]> {
+    await this.delay()
+    return COMPANIES.map((c) => ({ ...c }))
+  }
+
+  async listWorkOptions(): Promise<ErpWorkOption[]> {
+    await this.delay()
+    return [...WORKS.map((w) => ({ company: COMPANY_OF[w.code] ?? '1', code: w.code, name: w.name })), ...NEW_WORK_OPTIONS].sort(byCompanyAndCode)
   }
 }

@@ -1,8 +1,17 @@
 /**
- * ERPProvider da UAU. Hoje implementa só a leitura de fornecedores; o resto lança
- * ErpNotConfiguredError e fica fora da sincronização "Tudo" (ver `supports`).
+ * ERPProvider da UAU. Hoje implementa a leitura de fornecedores (sincronização) e as listas de
+ * empresas e obras ativas (seletor de "Nova obra"); o resto lança ErpNotConfiguredError e fica
+ * fora da sincronização "Tudo" (ver `supports`).
  */
-import { ErpNotConfiguredError, type ERPProvider, type ErpOperation, type ErpSupplier } from '../erp-provider'
+import {
+  byCompanyAndCode,
+  ErpNotConfiguredError,
+  type ERPProvider,
+  type ErpCompany,
+  type ErpOperation,
+  type ErpSupplier,
+  type ErpWorkOption,
+} from '../erp-provider'
 import { extractRows, uauError, UauClient, type UauConfig } from './uau-client'
 import { selectUauSuppliers } from './uau-suppliers'
 
@@ -21,6 +30,10 @@ export interface UauProviderOptions {
 }
 
 const PEOPLE_ROUTE = 'Pessoas/ConsultarPessoasPorCondicao'
+const COMPANIES_ROUTE = 'Empresa/ObterEmpresasAtivas'
+const WORKS_ROUTE = 'Obras/ObterObrasAtivas'
+/** As listas mudam pouco: guardadas por alguns minutos na instância */
+const LIST_TTL_MS = 5 * 60 * 1000
 
 export class UauERPProvider implements ERPProvider {
   readonly name = 'uau' as const
@@ -30,6 +43,7 @@ export class UauERPProvider implements ERPProvider {
   private readonly maxCode: number
   private readonly stopAfterEmptyCodes: number
   private readonly deadlineMs: number
+  private readonly lists = new Map<string, { at: number; value: Promise<unknown> }>()
 
   constructor(config: UauConfig, opts: UauProviderOptions = {}) {
     this.client = new UauClient(config)
@@ -68,6 +82,45 @@ export class UauERPProvider implements ERPProvider {
     return suppliers
   }
 
+  /** Empresas ativas (Codigo_emp · Desc_emp), por código */
+  listCompanies(): Promise<ErpCompany[]> {
+    return this.cachedList('companies', async () => {
+      const rows = await this.readList(COMPANIES_ROUTE, 'empresas')
+      return rows
+        .map((r) => ({ code: str(r.Codigo_emp), name: str(r.Desc_emp) }))
+        .filter((c) => c.code)
+        .sort((a, b) => Number(a.code) - Number(b.code) || a.code.localeCompare(b.code))
+    })
+  }
+
+  /** Obras ativas (Cod_obr · Empresa_obr · Descr_obr), todos os tipos de obra, por empresa e código */
+  listWorkOptions(): Promise<ErpWorkOption[]> {
+    return this.cachedList('works', async () => {
+      const rows = await this.readList(WORKS_ROUTE, 'obras')
+      const seen = new Set<string>()
+      return rows
+        .map((r) => ({ company: str(r.Empresa_obr), code: str(r.Cod_obr).toUpperCase(), name: str(r.Descr_obr) || str(r.Cod_obr) }))
+        .filter((w) => w.company && w.code && !seen.has(`${w.company}|${w.code}`) && seen.add(`${w.company}|${w.code}`))
+        .sort(byCompanyAndCode)
+    })
+  }
+
+  private async readList(route: string, what: string): Promise<Record<string, unknown>[]> {
+    const res = await this.client.call(route, {}, { timeoutMs: 20_000 })
+    if (!res.ok) throw uauError(`A UAU respondeu HTTP ${res.status} ao listar ${what}.${describe(res.data)}`)
+    return extractRows(res.data)
+  }
+
+  private cachedList<T>(key: string, load: () => Promise<T>): Promise<T> {
+    const hit = this.lists.get(key)
+    if (hit && Date.now() - hit.at < LIST_TTL_MS) return hit.value as Promise<T>
+    const value = load()
+    this.lists.set(key, { at: Date.now(), value })
+    // Falha não fica em cache
+    value.catch(() => this.lists.delete(key))
+    return value
+  }
+
   getWorks(): Promise<never> { return this.pending('Obras') }
   getWork(): Promise<never> { return this.pending('Obras') }
   getBudget(): Promise<never> { return this.pending('Orçamentos') }
@@ -78,6 +131,8 @@ export class UauERPProvider implements ERPProvider {
     return Promise.reject(new ErpNotConfiguredError(this.name, `${what}: ainda não implementado para a UAU.`))
   }
 }
+
+const str = (v: unknown) => (v === null || v === undefined ? '' : String(v).trim())
 
 /** Mensagem curta que a UAU manda nos erros (sem repassar a resposta inteira). */
 function describe(data: unknown): string {

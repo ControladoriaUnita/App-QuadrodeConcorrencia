@@ -1,5 +1,6 @@
 /**
  * Orçamento na estrutura da planilha "Orçamento": Item → composição (CPU/CPO) → insumos,
+ * com as composições auxiliares abertas (nó da auxiliar → seus insumos) dentro da composição,
  * com as mesmas colunas (Item · Código · Descrição · Unid · Quantidade · Custo Unit. · Custo Total ·
  * Vínculo PL · Classificação) e, à direita, o comprometido em concorrências e o saldo livre.
  * Níveis recolhíveis como o agrupamento do Excel; lista virtualizada (orçamentos com milhares de linhas).
@@ -8,17 +9,18 @@
  * Cada insumo marcado recebe o "% a consumir" (verba puxada = custo total × %). Em Item e composição,
  * a caixa marca todos os insumos abaixo e o % digitado vale para todos eles (limitado ao livre de cada um).
  */
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, ChevronsDownUp, Percent, Search } from 'lucide-react'
 import type { BudgetLineUsageDTO, BudgetStructureDTO } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
-import { buildBudgetTree, type BudgetTreeRow } from '@shared/domain/budget/structure'
+import { buildBudgetTree } from '@shared/domain/budget/structure'
 import { Badge, Button, DecimalInput, Input, Select } from '@/components/ui'
 import { cn } from '@/utils/cn'
-import { EMPTY, formatBRL, formatDecimal, formatPercent, formatQuantity } from '@/utils/format'
+import { EMPTY, formatBRL, formatCoefficient, formatDecimal, formatPercent, formatQuantity } from '@/utils/format'
 import { freeShare, pulledValue } from './BudgetLinesTable'
+import { withAuxCompositions, type AuxRow, type TreeRowWithAux } from './budgetAux'
 
-type Row = BudgetTreeRow<BudgetLineUsageDTO>
+type Row = TreeRowWithAux<BudgetLineUsageDTO>
 type LineRow = Extract<Row, { kind: 'line' }>
 type Depth = 'items' | 'compositions' | 'all'
 
@@ -69,9 +71,9 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [lines])
 
-  const tree = useMemo(() => buildBudgetTree(structure, lines), [structure, lines])
+  const tree = useMemo(() => withAuxCompositions(buildBudgetTree(structure, lines)), [structure, lines])
   const byKey = useMemo(() => new Map(tree.map((r) => [r.key, r])), [tree])
-  /** Insumos abaixo de cada Item/composição (para marcar em bloco) */
+  /** Insumos abaixo de cada Item/composição/auxiliar (para marcar em bloco) */
   const linesUnder = useMemo(() => {
     const m = new Map<string, LineRow[]>()
     for (const r of tree) {
@@ -90,14 +92,16 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
       const text = (r: Row) =>
         r.kind === 'line'
           ? `${r.line.code} ${r.line.description} ${r.line.packageCode ?? ''} ${r.line.packageDescription ?? ''}`
-          : `${r.wbs} ${r.kind === 'activity' ? (r.code ?? '') : ''} ${r.description}`
+          : r.kind === 'aux'
+            ? `${r.code} ${r.description}`
+            : `${r.wbs} ${r.kind === 'activity' ? (r.code ?? '') : ''} ${r.description}`
       for (const r of tree) {
         if (r.kind !== 'line') continue
         const l = r.line
         if (pkg && l.packageCode !== pkg) continue
         if (onlyBalance && !Decimal.from(l.balanceShare).isPositive()) continue
         if (onlySelected && !selection?.value.has(l.id)) continue
-        // busca casa no insumo ou em qualquer ancestral (composição/Item)
+        // busca casa no insumo ou em qualquer ancestral (auxiliar/composição/Item)
         let hit = !q || text(r).toLowerCase().includes(q)
         for (let p = r.parentKey; !hit && p; p = byKey.get(p)!.parentKey) hit = text(byKey.get(p)!).toLowerCase().includes(q)
         if (!hit) continue
@@ -149,15 +153,17 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
   }
   const pulledTotal = selection ? Decimal.sum(allLines.filter((r) => selection.value.has(r.line.id)).map((r) => pulledValue(r.line, selection.value.get(r.line.id)!))) : Decimal.ZERO
 
-  /** Filho aparece se o pai está aberto: pelo nível escolhido ou por expansão manual */
+  /** Filho aparece se o pai está aberto: pelo nível escolhido ou por expansão manual (auxiliar: aberta por padrão) */
   function childVisible(parent: Row, child: Row): boolean {
     if (collapsed.has(parent.key)) return false
-    if (child.kind === 'group') return true
+    if (child.kind === 'group' || parent.kind === 'aux') return true
     if (child.kind === 'activity') return depth !== 'items' || expanded.has(parent.key)
     return depth === 'all' || expanded.has(parent.key)
   }
   const isOpen = (r: Row) =>
-    !collapsed.has(r.key) && (r.kind === 'group' ? depth !== 'items' || expanded.has(r.key) || !tree.some((c) => c.parentKey === r.key && c.kind === 'activity') : depth === 'all' || expanded.has(r.key))
+    !collapsed.has(r.key) &&
+    (r.kind === 'aux' ||
+      (r.kind === 'group' ? depth !== 'items' || expanded.has(r.key) || !tree.some((c) => c.parentKey === r.key && c.kind === 'activity') : depth === 'all' || expanded.has(r.key)))
   const setDepth = (d: Depth) => {
     setDepthState(d)
     setCollapsed(new Set())
@@ -319,7 +325,7 @@ function TreeRow({ r, cols, top, open, onToggle, select }: { r: Row; cols: strin
       {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
     </button>
   )
-  const label = r.kind === 'line' ? `${r.line.code} ${r.line.activityWbs}` : r.wbs
+  const label = r.kind === 'line' ? `${r.line.code} ${r.line.activityWbs}` : r.kind === 'aux' ? `${r.code} ${r.activityWbs}` : r.wbs
   const base = cn('absolute inset-x-0 grid items-center border-b border-border', cols)
   const style = { top, height: ROW_H }
   const checked = select?.kind === 'line' ? select.share !== undefined : !!select && select.chosen.length > 0
@@ -380,6 +386,7 @@ function TreeRow({ r, cols, top, open, onToggle, select }: { r: Row; cols: strin
       </div>
     )
   }
+  if (r.kind === 'aux') return <AuxTreeRow r={r} style={style} base={base} lead={lead} tail={tail} chevron={chevron} />
   const l = r.line
   const free = Decimal.from(l.balanceShare)
   const dimmed = select?.kind === 'line' && select.disabled && !checked
@@ -416,6 +423,34 @@ function TreeRow({ r, cols, top, open, onToggle, select }: { r: Row; cols: strin
       >
         {formatBRL(Decimal.from(l.total).minus(l.committedValue))}
       </span>
+      {tail}
+    </div>
+  )
+}
+
+/**
+ * Composição auxiliar aberta dentro do serviço: na coluna Quantidade vai o coeficiente
+ * (quantidade da auxiliar por unidade do serviço), como na tabela de origem.
+ */
+function AuxTreeRow({ r, style, base, lead, tail, chevron }: { r: AuxRow; style: CSSProperties; base: string; lead: ReactNode; tail: ReactNode; chevron: ReactNode }) {
+  const cell = 'min-w-0 truncate px-2'
+  return (
+    <div role="row" style={style} className={cn(base, 'bg-ink-50/60 text-ink-800')}>
+      {lead}
+      <span className={cn(cell, 'flex items-center gap-1')} style={{ paddingLeft: `${0.5 + r.level * 0.9}rem` }}>
+        {chevron}
+        <Badge tone="neutral" className="px-1.5 text-[10px]" title="Composição auxiliar">AUX</Badge>
+      </span>
+      <span className={cn(cell, 'text-xs font-medium text-text')}>{r.code}</span>
+      <span className={cn(cell, 'pl-5 font-medium')} title={r.description}>{r.description}</span>
+      <span className={cn(cell, 'text-xs')}>{r.unit ?? ''}</span>
+      <span className={cn(cell, 'text-right')} title="Coeficiente: quantidade da auxiliar por unidade do serviço">{formatCoefficient(r.coefficient)}</span>
+      <span className={cn(cell, 'text-right')}>{formatDecimal(r.unitCost, 2)}</span>
+      <span className={cn(cell, 'text-right font-medium text-text')}>{formatBRL(r.total)}</span>
+      <span />
+      <span className={cn(cell, 'text-xs text-text-muted')}>{r.lines} insumo(s)</span>
+      <Aggregate total={r.total} committed={r.committed} />
+      <Free total={r.total} committed={r.committed} />
       {tail}
     </div>
   )

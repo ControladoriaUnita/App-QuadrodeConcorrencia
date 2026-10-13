@@ -5,7 +5,7 @@ import type { BudgetImportInput, BudgetLineUsageDTO, BudgetStructureDTO, CreateW
 import { Decimal } from '../../../shared/domain/decimal'
 import { summarizeWork } from '../../../shared/domain/work/overview'
 import { AppError, can, notFound, requirePermission, type RequestContext } from '../context'
-import type { Repositories } from '../ports'
+import type { BudgetImportSource, Repositories, SheetBudgetRef } from '../ports'
 
 async function competitionsOf(repos: Repositories, ctx: RequestContext, workId: string): Promise<WorkCompetitionDTO[]> {
   if (!can(ctx.actor, 'competition.read', workId)) return []
@@ -133,8 +133,11 @@ export async function importBudget(repos: Repositories, ctx: RequestContext, wor
   requirePermission(ctx, 'budget.import', workId)
   const work = await repos.catalog.getWork(workId)
   if (!work) throw notFound('Obra')
+  return saveBudgetVersion(repos, ctx, workId, input, { provider: 'excel', integrationId: input.fileName })
+}
 
-  // Consistência mínima (o cliente pode ter sido adulterado)
+/** Consistência mínima da estrutura (o cliente pode ter sido adulterado; a planilha pode ter falhas). */
+export function assertConsistentBudget(input: BudgetImportInput) {
   const keys = new Set<string>()
   for (const l of input.lines) {
     if (keys.has(l.lineKey)) throw new AppError('IMPORT_DUPLICATED_LINE', `Chave de linha duplicada: ${l.lineKey}`, 422)
@@ -146,17 +149,30 @@ export async function importBudget(repos: Repositories, ctx: RequestContext, wor
   const activities = new Set(input.activities.map((a) => a.wbs))
   const orphan = input.lines.find((l) => !activities.has(l.activityWbs))
   if (orphan) throw new AppError('IMPORT_ACTIVITY', `Linha ${orphan.sourceRow}: composição ${orphan.activityWbs} inexistente.`, 422)
+}
 
+/**
+ * Grava uma nova versão vigente do orçamento (Excel ou planilha do SharePoint) e registra o
+ * integration_log. Quem chama já conferiu a permissão e a obra.
+ */
+export async function saveBudgetVersion(
+  repos: Repositories,
+  ctx: RequestContext,
+  workId: string,
+  input: BudgetImportInput,
+  opts: { provider: BudgetImportSource; integrationId: string; sheet?: SheetBudgetRef },
+) {
+  assertConsistentBudget(input)
   const logId = await repos.integrationLogs.start({
-    correlationId: ctx.correlationId, provider: 'excel', operation: 'importBudget', direction: 'inbound', triggeredBy: ctx.actor.id, integrationId: input.fileName,
+    correlationId: ctx.correlationId, provider: opts.provider, operation: 'importBudget', direction: 'inbound', triggeredBy: ctx.actor.id, integrationId: opts.integrationId,
   })
   try {
-    const r = await repos.budgetWriter.importBudget(workId, input, { actorId: ctx.actor.id })
+    const r = await repos.budgetWriter.importBudget(workId, input, { actorId: ctx.actor.id, source: opts.provider, sheet: opts.sheet })
     const total = Decimal.sum(input.lines.map((l) => l.total))
     await repos.integrationLogs.finish(logId, {
       status: 'success', recordsProcessed: r.lines, recordsFailed: 0,
       message: `Orçamento v${r.version} importado de ${input.fileName} (${r.lines} linhas)`,
-      payloadSummary: { workId, fileName: input.fileName, sheet: input.sheetName, version: r.version, total: total.toDb() },
+      payloadSummary: { workId, fileName: input.fileName, sheet: input.sheetName, version: r.version, total: total.toDb(), ...(opts.sheet ? { key: opts.sheet } : {}) },
     })
     return { ...r, total: total.toDb() }
   } catch (err) {

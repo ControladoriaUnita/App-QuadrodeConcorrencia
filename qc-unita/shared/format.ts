@@ -47,6 +47,12 @@ export function formatQuantity(value: DecimalInput | null | undefined): string {
   return s.replace(/(,\d{2}\d*?)0+$/, '$1')
 }
 
+/** Coeficiente de composição com todas as casas significativas (até 8): 0,02545 · 1,24667 · 220 */
+export function formatCoefficient(value: DecimalInput | null | undefined): string {
+  if (value === null || value === undefined || value === '') return EMPTY
+  return formatDecimal(value, 8).replace(/,?0+$/, '')
+}
+
 /** "2026-09-01" → "01/09/2026" (sem Date → sem fuso). */
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return EMPTY

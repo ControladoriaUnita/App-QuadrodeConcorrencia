@@ -77,6 +77,15 @@ Na obra, **Importar orçamento (Excel)** lê a planilha no navegador — formato
 - A aba **Orçamento** da obra mostra a estrutura da planilha (Item → composição → insumos, níveis recolhíveis como no Excel, subtotais por Item) com cada linha com os QCs que a usam (com o % de cada um) e o % / R$ ainda livre.
 - Testado com a planilha de exemplo: 3.327 linhas, 903 composições, 176 IPs, R$ 51.752.715,62.
 
+### Nova obra pela UAU + orçamento do SharePoint
+
+**Nova obra** escolhe empresa e obra nas listas da UAU (`Empresa/ObterEmpresasAtivas`, `Obras/ObterObrasAtivas`) e o nº do orçamento na aba **BD_Orcamentos** do Excel no SharePoint (lida pelo Microsoft Graph, `server/infrastructure/budget-sheet`). A lista de orçamentos é filtrada só pelo código da obra (Obra_pla): a empresa na planilha (Empresa_pla) pode diferir da empresa da obra na UAU, e a obra guarda as duas.
+
+- O orçamento é lido e conferido **antes** de criar a obra; entra como versão vigente (origem `sharepoint`), ordenado pelos códigos, com as **composições auxiliares abertas** (cada insumo da auxiliar é uma linha e guarda de qual auxiliar veio). Se a gravação falhar depois de criada a obra, o erro avisa e indica "Atualizar orçamento".
+- **Atualizar orçamento** (`POST /works/:id/budget-sheet/refresh`) reimporta o mesmo nº (ou outro) como nova versão; QCs e versões anteriores ficam intactos.
+- A aba é grande: um índice só com as colunas de chave/total é lido em blocos e fica 5 min em memória; o orçamento escolhido lê só as linhas dele. Sem credenciais do Graph, o modo demonstração usa orçamentos de exemplo (obras 2041, 2055, 1980 e a nova 2070).
+- Rotas: `GET /uau/companies`, `GET /uau/works`, `GET /budget-sheet/budgets?work=`, `POST /works/from-uau`. Variáveis em `.env.example` (`MS_GRAPH_*`, `BUDGET_SHEET_*`); migration `017_budget_sheet.sql`.
+
 ### Vínculos de planejamento (aba "Vínculos e insumos")
 
 **Um QC pode reunir vários IPs.** Na criação escolhem-se os IPs e depois as linhas do orçamento, uma a uma (pré-selecionadas as que têm saldo). No QC, **Adicionar linhas do orçamento** inclui linhas de qualquer IP; cada linha vinculada pode ser ajustada ou desvinculada; itens podem ser removidos.
@@ -189,7 +198,7 @@ Trigger `audit_row_changes()` em todas as tabelas críticas grava **uma linha po
 
 ## Integração ERP
 
-`ERPProvider` (`getWorks`, `getWork`, `getBudget`, `getSuppliers`, `getMaterials`, `pushContract`). Hoje: `MockERPProvider` e `UauERPProvider` (só leitura; por enquanto apenas **fornecedores** = pessoas jurídicas ativas do cadastro de pessoas da UAU, deduplicadas por CNPJ; pessoas físicas ficam de fora). O que o provider ainda não implementa aparece como "ignorado" na sincronização "Tudo". `senior` lança `ErpNotConfiguredError`. Cada operação gera `integration_logs` (data/hora, provider, operação, ID, status, contagens, mensagem/erro, `correlationId`). A sincronização reconstrói as linhas do orçamento — QCs guardam cópia própria e revisões aprovadas estão congeladas.
+`ERPProvider` (`getWorks`, `getWork`, `getBudget`, `getSuppliers`, `getMaterials`, `pushContract`, e as listas `listCompanies`/`listWorkOptions` do seletor de nova obra). Hoje: `MockERPProvider` e `UauERPProvider` (só leitura; empresas e obras ativas para a nova obra e, na sincronização, apenas **fornecedores** = pessoas jurídicas ativas do cadastro de pessoas da UAU, deduplicadas por CNPJ; pessoas físicas ficam de fora). O que o provider ainda não implementa aparece como "ignorado" na sincronização "Tudo". `senior` lança `ErpNotConfiguredError`. Cada operação gera `integration_logs` (data/hora, provider, operação, ID, status, contagens, mensagem/erro, `correlationId`). A sincronização reconstrói as linhas do orçamento — QCs guardam cópia própria e revisões aprovadas estão congeladas.
 
 ---
 

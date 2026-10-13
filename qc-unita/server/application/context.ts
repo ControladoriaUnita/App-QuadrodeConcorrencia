@@ -70,6 +70,7 @@ export function toAppError(err: unknown): AppError {
   const locked = /(CONTRACT_LOCKED|ADDENDUM_LOCKED|ADDENDUM_NOT_ALLOWED): (.+)/.exec(msg)
   if (locked) return new AppError(locked[1]!, locked[2]!.charAt(0).toUpperCase() + locked[2]!.slice(1) + '.', 409)
   if (/works_code_key/.test(msg)) return new AppError('WORK_CODE_EXISTS', 'Já existe uma obra com este número.', 409)
+  if (/works_uau_key_idx|works_erp_id_key/.test(msg)) return new AppError('WORK_EXISTS', 'Já existe uma obra com esta chave da UAU.', 409)
   if (/contract_requests_one_active/.test(msg)) {
     return new AppError('CONTRACT_EXISTS', 'Já existe uma solicitação de contrato ativa para esta concorrência.', 409)
   }
