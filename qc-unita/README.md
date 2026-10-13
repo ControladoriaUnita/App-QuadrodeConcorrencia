@@ -20,7 +20,7 @@ No **modo demonstração** (`DATA_SOURCE=memory`) a API roda dentro do próprio 
 
 ### Com Supabase
 
-1. Crie o projeto e aplique as migrations: `supabase db push` (ou `supabase migration up`).
+1. Crie as tabelas. Banco **vazio**: Supabase → SQL Editor → cole `supabase/setup/qc_unita_schema_completo.sql` → Run (gerado por `npm run db:bundle` a partir das migrations; roda numa transação e registra as versões para o CLI). Com o CLI: `supabase db push`.
 2. Configure as variáveis (Vercel → Settings → Environment Variables):
 
 | Variável | Onde | Observação |
@@ -38,10 +38,17 @@ No **modo demonstração** (`DATA_SOURCE=memory`) a API roda dentro do próprio 
 
 ## Fluxo de telas
 
-1. **Obras** (tela inicial) — cada obra com seu orçamento geral e o % já comprometido.
-2. **Painel da obra** — consumo do orçamento geral (contratado · em aprovação · em cotação · saldo) e as concorrências agrupadas por **tipo de serviço** (vínculo de planejamento / pacote do orçamento), com orçado, consumo e saldo de cada tipo.
-3. **QC** — mapa de cotação, **Vínculos e insumos** (consolidador), dados, escopo, fornecedores, aprovações e histórico.
-4. **Solicitação de Contrato** — gerada do QC aprovado (botão "Gerar solicitação de contrato"); abas Solicitação, Itens e vínculos, Aditivos. Lista por obra em **Contratos e aditivos**.
+A barra superior tem o **seletor de obra** e as abas na ordem do fluxo: **1 Orçamento → 2 Concorrências → 3 Fornecedores → 4 Contratos e aditivos → 5 Integração ERP**. Ao entrar, o app abre o **orçamento da última obra usada** (ou da única disponível); sem obra escolhida, a seleção de obras.
+
+1. **Orçamento** (`/obras/:id/orcamento`, tela inicial) — a planilha do orçamento (Item → composição → insumos) com o comprometido por QC e o saldo livre; importar orçamento e "Nova concorrência" partem daqui.
+2. **Concorrências** (`/obras/:id/concorrencias`) — **quadro kanban** por etapa (Em cotação · Em aprovação · Aprovada · Contratada; canceladas sob demanda), uma caixa por QC com orçado × valor e economia. A visão **Por tipo de serviço** continua como alternativa.
+3. **Nova concorrência** (`/obras/:id/concorrencias/nova`) — os insumos são escolhidos **na mesma árvore do orçamento**: marca-se o insumo (ou um Item/composição inteiro) e informa-se o **% a consumir**; colunas "% a consumir" e "Verba puxada" ficam fixas à direita. Os IPs do QC saem das linhas marcadas. O "Adicionar linhas do orçamento" dentro do QC usa a mesma tela.
+4. **QC** — mapa de cotação, **Vínculos e insumos** (consolidador), dados, escopo, fornecedores, **anexos**, aprovações e histórico.
+5. **Solicitação de Contrato** — gerada do QC aprovado (botão "Gerar solicitação de contrato"); abas Solicitação, Itens e vínculos, Aditivos e Anexos. Lista por obra em **Contratos e aditivos**.
+
+### Anexos
+
+Aba **Anexos** no QC (propostas, com o fornecedor; memoriais; documentos) e na solicitação de contrato (contrato, aditivos). O arquivo vai **direto do navegador para o Storage** por URL assinada (`POST /api/attachments/upload-url` → `PUT` → `POST /api/attachments`), sem passar pela Vercel Function (limite de 4,5 MB); a API confere que o objeto chegou antes de gravar os metadados. Até 50 MB; PDF, imagem, Excel, Word, ZIP, CSV. Download por link de 1 minuto. Quem enviou remove o próprio anexo (exceto de revisão congelada); administrador remove qualquer um. Migration `014_attachments.sql`. No modo demonstração o binário fica em memória (`/api/dev-storage/:token`).
 
 ### Solicitação de Contrato e Aditivos (abas "Solic. Contrato" / "Solic. Aditivo")
 
@@ -196,7 +203,7 @@ O teste de integração foi executado contra Postgres 16 + PostgREST 12 com as m
 ## Próximos passos sugeridos
 
 1. ~~Telas de **Solicitação de Contrato** e **Aditivos**~~ — feito (migration 013).
-2. Upload de anexos (propostas/memoriais) usando o bucket e a tabela `attachments`.
+2. ~~Upload de anexos (propostas/memoriais)~~ — feito (migration 014).
 3. Implementar `UauERPProvider`/`SeniorERPProvider` e agendar a sincronização (Vercel Cron).
 4. Gerar tipos do banco (`supabase gen types typescript`) e tipar os repositórios.
 5. Exportação do mapa em PDF/Excel no layout atual da planilha.

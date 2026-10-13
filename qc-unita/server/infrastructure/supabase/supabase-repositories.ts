@@ -24,6 +24,7 @@ import { Decimal } from '../../../shared/domain/decimal'
 import type { Actor } from '../../application/context'
 import type { CompetitionData, NewLink, Repositories } from '../../application/ports'
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
+import { createSupabaseAttachments, createSupabaseStorage } from './supabase-attachments'
 import { createSupabaseContracts } from './supabase-contracts'
 
 type Json = Record<string, unknown>
@@ -208,6 +209,8 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
 
   return {
     contracts: createSupabaseContracts(db),
+    attachments: createSupabaseAttachments(db),
+    storage: createSupabaseStorage(db),
 
     // ------------------------------------------------------------------ identidade
     identity: {

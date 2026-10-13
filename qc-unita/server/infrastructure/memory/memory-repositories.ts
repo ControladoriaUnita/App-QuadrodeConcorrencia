@@ -20,6 +20,7 @@ import type { Actor } from '../../application/context'
 import type { CompetitionData, Repositories, WorkCommitments } from '../../application/ports'
 import { uid, type AuditCtx, type MemoryDb, type Row } from './memory-db'
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
+import { createMemoryAttachments, createMemoryStorage } from './memory-attachments'
 import { createMemoryContracts } from './memory-contracts'
 
 type R<T> = T & Row
@@ -167,6 +168,8 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
 
   return {
     contracts: createMemoryContracts(db, audit),
+    attachments: createMemoryAttachments(db, audit),
+    storage: createMemoryStorage(),
 
     // ------------------------------------------------------------------ identidade
     identity: {

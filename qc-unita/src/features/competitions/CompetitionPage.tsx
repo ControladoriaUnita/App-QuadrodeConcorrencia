@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ChevronDown, ClipboardList, FileSignature, Link2, FilePlus2, GitBranch, History, Lock, Send, ShieldCheck, Table2, Users } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ClipboardList, FileSignature, Link2, FilePlus2, GitBranch, History, Lock, Paperclip, Send, ShieldCheck, Table2, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { buildQcMap } from '@shared/domain/competition/qc-map'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth'
 import { useContracts, useCreateContract } from '@/features/contracts/api'
 import { contractStatus } from '@/features/contracts/status'
 import { formatBRL, formatDateTime, formatPercent, formatRevision } from '@/utils/format'
+import { AttachmentsPanel } from '@/features/attachments/AttachmentsPanel'
 import { useCompetition, useCreateRevision, useQcMutations } from './api'
 import { ApprovalsPanel } from './ApprovalsPanel'
 import { AuditPanel } from './AuditPanel'
@@ -21,7 +22,7 @@ import { ScopePanel } from './ScopePanel'
 import { SuppliersPanel } from './SuppliersPanel'
 import { budgetTone, competitionStatus, revisionStatus } from './status'
 
-type TabKey = 'mapa' | 'vinculos' | 'dados' | 'escopo' | 'fornecedores' | 'aprovacoes' | 'historico'
+type TabKey = 'mapa' | 'vinculos' | 'dados' | 'escopo' | 'fornecedores' | 'anexos' | 'aprovacoes' | 'historico'
 const today = () => new Date().toISOString().slice(0, 10)
 
 export function CompetitionPage() {
@@ -207,6 +208,7 @@ export function CompetitionPage() {
             { key: 'dados', label: 'Dados do QC', icon: <ClipboardList className="size-4" /> },
             { key: 'escopo', label: 'Escopo e distribuição', icon: <ClipboardList className="size-4" /> },
             { key: 'fornecedores', label: 'Fornecedores e condições', icon: <Users className="size-4" />, count: detail.suppliers.length },
+            { key: 'anexos', label: 'Anexos', icon: <Paperclip className="size-4" /> },
             { key: 'aprovacoes', label: 'Aprovações', icon: <ShieldCheck className="size-4" /> },
             { key: 'historico', label: 'Histórico', icon: <History className="size-4" /> },
           ]}
@@ -232,6 +234,16 @@ export function CompetitionPage() {
           onAddLines={(selection) => m.addLines.mutateAsync(selection)}
           onRemoveItem={(itemId) => m.removeItem.mutate(itemId)}
           onItemQuantity={(itemId, quantity) => m.updateItem.mutate({ itemId, quantity })}
+        />
+      )}
+      {tab === 'anexos' && (
+        <AttachmentsPanel
+          target={{ workId: c.workId, entityType: 'competition', entityId: c.id }}
+          categories={['proposal', 'memorial', 'supplier_document', 'other']}
+          defaultCategory="proposal"
+          suppliers={detail.suppliers.map((s) => ({ id: s.id, name: s.tradeName || s.legalName }))}
+          title="Anexos da concorrência"
+          description="Propostas dos fornecedores, memoriais descritivos, projetos e documentos. Valem para todas as revisões do QC."
         />
       )}
       {tab === 'dados' && <RevisionForm detail={detail} map={map} saving={m.updateRevision.isPending} onSave={(v) => m.updateRevision.mutate(v)} />}

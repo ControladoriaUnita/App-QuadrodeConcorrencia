@@ -4,7 +4,7 @@
  */
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Ban, ClipboardList, FileSignature, FileStack, Send, Server, Table2 } from 'lucide-react'
+import { AlertTriangle, Ban, ClipboardList, FileSignature, FileStack, Paperclip, Send, Server, Table2 } from 'lucide-react'
 import { Decimal } from '@shared/domain/decimal'
 import { currentEndOn } from '@shared/domain/contract/contract-request'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -12,13 +12,14 @@ import { Alert, Badge, Button, ConfirmDialog, Dialog, Field, Input, KpiStrip, Sk
 import { ApiError } from '@/lib/api'
 import { cn } from '@/utils/cn'
 import { formatBRL, formatDate, formatDateTime, formatPercent, formatRevision } from '@/utils/format'
+import { AttachmentsPanel } from '@/features/attachments/AttachmentsPanel'
 import { AddendaPanel } from './AddendaPanel'
 import { useContract, useContractMutations } from './api'
 import { ContractForm } from './ContractForm'
 import { ContractItemsTable } from './ContractItemsTable'
 import { contractStatus } from './status'
 
-type TabKey = 'solicitacao' | 'itens' | 'aditivos'
+type TabKey = 'solicitacao' | 'itens' | 'aditivos' | 'anexos'
 
 export function ContractPage() {
   const { id = '', workId = '' } = useParams()
@@ -158,6 +159,7 @@ export function ContractPage() {
             { key: 'solicitacao', label: 'Solicitação', icon: <ClipboardList className="size-4" /> },
             { key: 'itens', label: 'Itens e vínculos', icon: <Table2 className="size-4" />, count: c.items.length },
             { key: 'aditivos', label: 'Aditivos', icon: <FileStack className="size-4" />, count: pendingAddenda || c.addenda.length || undefined },
+            { key: 'anexos', label: 'Anexos', icon: <Paperclip className="size-4" /> },
           ]}
           trailing={<span className="text-xs text-text-muted">Vigência {formatDate(c.startOn)} → {formatDate(currentEndOn(c.endOn, approved))}</span>}
         />
@@ -174,6 +176,16 @@ export function ContractPage() {
           onDelete={(addendumId) => m.deleteAddendum.mutate(addendumId)}
           onSubmit={(addendumId) => m.submitAddendum.mutate(addendumId)}
           onDecide={(addendumId, decision, comment) => m.decideAddendum.mutate({ addendumId, decision, comment })}
+        />
+      )}
+
+      {tab === 'anexos' && (
+        <AttachmentsPanel
+          target={{ workId: c.work.id, entityType: 'contract_request', entityId: c.id }}
+          categories={['contract', 'addendum', 'memorial', 'supplier_document', 'other']}
+          defaultCategory="contract"
+          title="Anexos do contrato"
+          description="Minuta e contrato assinado, aditivos, projetos de referência e documentos do contratado."
         />
       )}
 

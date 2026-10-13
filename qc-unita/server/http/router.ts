@@ -25,16 +25,21 @@ import {
   signContractSchema,
   updateContractItemSchema,
   updateContractRequestSchema,
+  ATTACHMENT_ENTITIES,
+  confirmUploadSchema,
+  requestUploadSchema,
   type ApiErrorBody,
 } from '../../shared/contracts'
 import { AppError, toAppError, type RequestContext } from '../application/context'
 import type { Repositories } from '../application/ports'
+import * as attachments from '../application/use-cases/attachments'
 import * as catalog from '../application/use-cases/catalog'
 import * as contracts from '../application/use-cases/contracts'
 import * as qc from '../application/use-cases/competitions'
 import * as works from '../application/use-cases/works'
 import { syncFromErp } from '../application/use-cases/erp-sync'
 import { getErpProvider } from '../infrastructure/erp'
+import { handleDevStorage } from '../infrastructure/memory/memory-attachments'
 import { DEMO_USERS } from '../infrastructure/memory/seed'
 import { dataSource, openSession } from '../infrastructure/repositories'
 
@@ -174,6 +179,22 @@ route('POST', '/integration/erp-sync', async ({ repos, ctx, body }) => {
   return syncFromErp(repos, getErpProvider(), { ...ctx, origin: 'erp_sync' }, input)
 })
 
+// ----------------------------------------------------------------------------- anexos
+route('GET', '/attachments', async ({ repos, ctx, url }) =>
+  attachments.listAttachments(repos, ctx, {
+    workId: parse(uuidParam, url.searchParams.get('workId')),
+    entityType: url.searchParams.get('entityType') ? parse(z.enum(ATTACHMENT_ENTITIES), url.searchParams.get('entityType')) : undefined,
+    entityId: url.searchParams.get('entityId') ? parse(uuidParam, url.searchParams.get('entityId')) : undefined,
+  }),
+)
+route('POST', '/attachments/upload-url', async ({ repos, ctx, body }) => attachments.requestUpload(repos, ctx, parse(requestUploadSchema, await body())))
+route('POST', '/attachments', async ({ repos, ctx, body }) => attachments.confirmUpload(repos, ctx, parse(confirmUploadSchema, await body())), 201)
+route('GET', '/attachments/:id/download', async ({ repos, ctx, params }) => attachments.downloadUrl(repos, ctx, parse(uuidParam, params.id)))
+route('DELETE', '/attachments/:id', async ({ repos, ctx, params }) => {
+  await attachments.deleteAttachment(repos, ctx, parse(uuidParam, params.id))
+  return { ok: true }
+})
+
 // ----------------------------------------------------------------------------- dispatcher
 function json(data: unknown, status: number, correlationId: string) {
   return new Response(JSON.stringify(data), {
@@ -204,6 +225,11 @@ export async function handle(req: Request): Promise<Response> {
 
     if (dataSource() === 'memory' && process.env.VERCEL_ENV === 'production' && process.env.ALLOW_DEMO_MODE !== 'true') {
       throw new AppError('DEMO_DISABLED', 'Modo demonstração desabilitado em produção. Configure DATA_SOURCE=supabase.', 503)
+    }
+    // Armazenamento de arquivos do modo demonstração (o token assinado é a autorização)
+    if (path.startsWith('/dev-storage/')) {
+      if (dataSource() !== 'memory') throw new AppError('NOT_FOUND', 'Rota inexistente.', 404)
+      return handleDevStorage(req, path.slice('/dev-storage/'.length))
     }
     if (path === '/demo-users') {
       if (dataSource() !== 'memory') throw new AppError('NOT_FOUND', 'Rota inexistente.', 404)

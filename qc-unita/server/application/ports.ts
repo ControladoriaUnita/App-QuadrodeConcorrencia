@@ -3,6 +3,8 @@
  * interfaces; implementações: memória (dev/testes) e Supabase (produção).
  */
 import type {
+  AttachmentDTO,
+  AttachmentEntity,
   BudgetLineDTO,
   BudgetImportInput,
   BudgetStructureDTO,
@@ -290,8 +292,33 @@ export interface ContractRepository {
   approvedAddendaTotals(workId: string): Promise<{ competitionId: string; total: string }[]>
 }
 
+// ----------------------------------------------------------------------------- anexos
+export interface AttachmentRecord extends Omit<AttachmentDTO, 'canDelete'> {
+  storagePath: string
+}
+
+export interface AttachmentRepository {
+  list(filter: { workId: string; entityType?: AttachmentEntity; entityId?: string }): Promise<AttachmentRecord[]>
+  get(id: string): Promise<AttachmentRecord | null>
+  create(data: Omit<AttachmentRecord, 'id' | 'uploadedBy' | 'uploadedAt'>, actorId: string): Promise<string>
+  delete(id: string): Promise<void>
+}
+
+/** Binários dos anexos (Supabase Storage em produção; memória no modo demonstração) */
+export interface FileStorage {
+  /** URL assinada para o navegador enviar o arquivo com PUT */
+  createUploadUrl(path: string, mimeType: string): Promise<{ uploadUrl: string; headers: Record<string, string> }>
+  /** URL assinada de download (curta duração) */
+  createDownloadUrl(path: string, fileName: string): Promise<string>
+  /** Tamanho do objeto, ou null se ainda não foi enviado */
+  stat(path: string): Promise<{ size: number | null } | null>
+  remove(path: string): Promise<void>
+}
+
 export interface Repositories {
   identity: IdentityRepository
+  attachments: AttachmentRepository
+  storage: FileStorage
   contracts: ContractRepository
   catalog: CatalogRepository
   competitions: CompetitionRepository

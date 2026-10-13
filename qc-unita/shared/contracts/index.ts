@@ -726,3 +726,65 @@ export const decideAddendumSchema = z.object({
 export interface ApiErrorBody {
   error: { code: string; message: string; details?: unknown; correlationId: string }
 }
+
+// ----------------------------------------------------------------------------- anexos
+/** Onde o anexo está pendurado (mesma lista do check em public.attachments) */
+export const ATTACHMENT_ENTITIES = ['work', 'budget', 'competition', 'competition_revision', 'supplier_proposal', 'supplier', 'contract_request', 'contract_addendum'] as const
+export type AttachmentEntity = (typeof ATTACHMENT_ENTITIES)[number]
+export const ATTACHMENT_CATEGORIES = ['proposal', 'memorial', 'addendum', 'supplier_document', 'contract', 'other'] as const
+export type AttachmentCategory = (typeof ATTACHMENT_CATEGORIES)[number]
+/** Mesmo limite e tipos do bucket qc-attachments (007_storage.sql) */
+export const ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024
+export const ATTACHMENT_MIME_TYPES = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/zip',
+  'text/csv',
+] as const
+
+export interface AttachmentDTO {
+  id: string
+  workId: string
+  entityType: AttachmentEntity
+  entityId: string
+  category: AttachmentCategory
+  fileName: string
+  mimeType: string | null
+  sizeBytes: number | null
+  description: string | null
+  competitionSupplierId: string | null
+  uploadedBy: ProfileRefDTO | null
+  uploadedAt: string
+  /** Quem pede pode remover (dono enquanto não congelado, ou administrador) */
+  canDelete: boolean
+}
+
+const attachmentMeta = {
+  workId: uuid,
+  entityType: z.enum(ATTACHMENT_ENTITIES),
+  entityId: uuid,
+  category: z.enum(ATTACHMENT_CATEGORIES).default('other'),
+  fileName: z.string().trim().min(1).max(200),
+  mimeType: z.enum(ATTACHMENT_MIME_TYPES, { errorMap: () => ({ message: 'Tipo de arquivo não aceito (PDF, imagem, Excel, Word, ZIP ou CSV).' }) }),
+  sizeBytes: z.number().int().positive().max(ATTACHMENT_MAX_BYTES, 'Arquivo acima de 50 MB.'),
+  description: z.string().trim().max(500).nullable().optional(),
+  competitionSupplierId: uuid.nullable().optional(),
+}
+export const requestUploadSchema = z.object(attachmentMeta)
+export type RequestUploadInput = z.infer<typeof requestUploadSchema>
+
+/** Autorização de envio: o navegador faz PUT do arquivo direto no Storage */
+export interface UploadTicketDTO {
+  storagePath: string
+  uploadUrl: string
+  headers: Record<string, string>
+}
+
+export const confirmUploadSchema = z.object({ ...attachmentMeta, storagePath: z.string().min(10).max(600) })
+export type ConfirmUploadInput = z.infer<typeof confirmUploadSchema>
