@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-route
 import { AppShell } from '@/components/layout/AppShell'
 import { Spinner } from '@/components/ui'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { SuppliersPage } from '@/features/catalog/SuppliersPage'
 import { CompetitionPage } from '@/features/competitions/CompetitionPage'
 import { CompetitionsBoardPage } from '@/features/competitions/CompetitionsBoardPage'
@@ -22,7 +23,9 @@ const loading = (
 )
 
 function Protected() {
-  const { hasSession, loading: busy } = useAuth()
+  const { hasSession, recovering, loading: busy } = useAuth()
+  // Link de "esqueci minha senha" caiu na página inicial: leva para definir a senha
+  if (recovering) return <Navigate to="/redefinir-senha" replace />
   if (!hasSession) return <Navigate to="/entrar" replace />
   if (busy) return loading
   return <AppShell />
@@ -51,6 +54,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/entrar" element={<LoginPage />} />
+      <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
       <Route element={<Protected />}>
         <Route index element={<Home />} />
         <Route path="/obras" element={<WorkSelectPage />} />
