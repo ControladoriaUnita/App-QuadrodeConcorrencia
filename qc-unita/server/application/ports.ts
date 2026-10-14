@@ -11,6 +11,8 @@ import type {
   CreateWorkInput,
   CommitmentCategory,
   LinkCommitmentDTO,
+  MaterialPageDTO,
+  MaterialQuery,
   ApprovalDTO,
   AuditLogDTO,
   BudgetPackageDTO,
@@ -159,12 +161,19 @@ export interface CatalogRepository {
   getBudgetLines(ids: string[]): Promise<BudgetLineDTO[]>
   /** Insumo do cadastro pelo código (null se não existir) */
   findMaterialIdByCode(code: string): Promise<string | null>
+  /** Cadastro de insumos: IPs (código "IP…") ou os demais, com busca por código ou descrição */
+  listMaterials(query: MaterialQuery): Promise<MaterialPageDTO>
   /**
    * IP escolhido à mão para uma linha do orçamento (pela chave da linha); null volta ao IP da planilha.
    * A leitura das linhas já devolve o IP manual (vale também para as próximas versões importadas).
    * Retorna o IP efetivo da linha, ou null se a linha não existe no orçamento vigente.
    */
   setLinePlanning(workId: string, lineKey: string, planning: { code: string; description: string | null } | null): Promise<{ code: string | null; description: string | null } | null>
+  /**
+   * Nome de um Item da EAP dado no app (pelo código do item); null volta ao nome da planilha.
+   * Vale para todas as versões do orçamento da obra. Retorna false se o item não existe no orçamento vigente.
+   */
+  setBudgetGroupName(workId: string, wbs: string, description: string | null): Promise<boolean>
 }
 
 export interface CompetitionRepository {

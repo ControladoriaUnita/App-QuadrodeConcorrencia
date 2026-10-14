@@ -1,13 +1,14 @@
 /**
- * ERPProvider da UAU. Hoje implementa a leitura de fornecedores (sincronização) e as listas de
- * empresas e obras ativas (seletor de "Nova obra"); o resto lança ErpNotConfiguredError e fica
- * fora da sincronização "Tudo" (ver `supports`).
+ * ERPProvider da UAU. Implementa a leitura de fornecedores e do cadastro de insumos (sincronização),
+ * as listas de empresas e obras ativas (seletor de "Nova obra") e os insumos do orçamento de uma
+ * obra; o resto lança ErpNotConfiguredError e fica fora da sincronização "Tudo" (ver `supports`).
  */
 import {
   byCompanyAndCode,
   ErpNotConfiguredError,
   type ERPProvider,
   type ErpCompany,
+  type ErpMaterial,
   type ErpOperation,
   type ErpSupplier,
   type ErpWorkMaterial,
@@ -34,12 +35,13 @@ const PEOPLE_ROUTE = 'Pessoas/ConsultarPessoasPorCondicao'
 const COMPANIES_ROUTE = 'Empresa/ObterEmpresasAtivas'
 const WORKS_ROUTE = 'Obras/ObterObrasAtivas'
 const WORK_MATERIALS_ROUTE = 'Orcamento/ConsultarInsumosPorChave'
+const MATERIALS_ROUTE = 'InsumosGeral/ConsultarInsumosGeralPorDescricao'
 /** As listas mudam pouco: guardadas por alguns minutos na instância */
 const LIST_TTL_MS = 5 * 60 * 1000
 
 export class UauERPProvider implements ERPProvider {
   readonly name = 'uau' as const
-  readonly supports: ReadonlySet<ErpOperation> = new Set<ErpOperation>(['suppliers'])
+  readonly supports: ReadonlySet<ErpOperation> = new Set<ErpOperation>(['suppliers', 'materials'])
   private readonly client: UauClient
   private readonly rangeSize: number
   private readonly maxCode: number
@@ -82,6 +84,25 @@ export class UauERPProvider implements ERPProvider {
       console.info(`[uau] pessoas lidas ${stats.read}; fornecedores ${suppliers.length} (físicas ${stats.individual}, inativas ${stats.inactive}, inválidas ${stats.invalid}, CNPJ repetido ${stats.duplicates})`)
     }
     return suppliers
+  }
+
+  /**
+   * Cadastro inteiro de insumos (Cod_ins · Descr_ins · Unid_ins · AtInat_ins), numa chamada:
+   * descrição "%" casa com todos (~13 mil insumos; ~10 s, até 1 min com a UAU carregada).
+   */
+  async getMaterials(): Promise<ErpMaterial[]> {
+    const res = await this.client.call(MATERIALS_ROUTE, { Descricao: '%' }, { timeoutMs: this.deadlineMs })
+    if (!res.ok) throw uauError(`A UAU respondeu HTTP ${res.status} ao consultar o cadastro de insumos.${describe(res.data)}`)
+    const seen = new Set<string>()
+    return extractRows(res.data)
+      .map((r) => ({
+        code: str(r.Cod_ins).toUpperCase(),
+        description: str(r.Descr_ins),
+        unit: str(r.Unid_ins) || 'un',
+        // AtInat_ins: 0 = ativo, 1 = inativo
+        active: str(r.AtInat_ins) !== '1',
+      }))
+      .filter((m) => m.code && m.description && !seen.has(m.code) && seen.add(m.code))
   }
 
   /** Empresas ativas (Codigo_emp · Desc_emp), por código */
@@ -147,7 +168,6 @@ export class UauERPProvider implements ERPProvider {
   getWorks(): Promise<never> { return this.pending('Obras') }
   getWork(): Promise<never> { return this.pending('Obras') }
   getBudget(): Promise<never> { return this.pending('Orçamentos') }
-  getMaterials(): Promise<never> { return this.pending('Insumos') }
   pushContract(): Promise<never> { return this.pending('Envio de contrato') }
 
   private pending(what: string): Promise<never> {

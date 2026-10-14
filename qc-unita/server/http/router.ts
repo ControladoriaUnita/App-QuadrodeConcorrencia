@@ -19,6 +19,8 @@ import {
   addQcItemSchema,
   setItemReferencesSchema,
   setLinePlanningSchema,
+  setBudgetGroupNameSchema,
+  materialQuerySchema,
   updateItemSchema,
   updateRevisionSchema,
   updateSupplierTermsSchema,
@@ -99,7 +101,12 @@ route('GET', '/works/:id/planning-codes', async ({ repos, ctx, params }) => work
 route('GET', '/works/:id/work-materials', async ({ repos, ctx, params }) => works.listWorkMaterials(repos, getErpProvider(), ctx, parse(uuidParam, params.id)))
 route('PUT', '/works/:id/budget-lines/planning', async ({ repos, ctx, params, body }) =>
   works.setLinePlanning(repos, ctx, parse(uuidParam, params.id), parse(setLinePlanningSchema, await body())))
+route('PUT', '/works/:id/budget-groups', async ({ repos, ctx, params, body }) =>
+  works.setBudgetGroupName(repos, ctx, parse(uuidParam, params.id), parse(setBudgetGroupNameSchema, await body())))
 route('GET', '/suppliers', async ({ repos, ctx, url }) => catalog.listSuppliers(repos, ctx, url.searchParams.get('search') ?? undefined))
+// Cadastro de insumos sincronizado da UAU: ?type=ip|insumo&search=&offset=&limit=
+route('GET', '/materials', async ({ repos, ctx, url }) =>
+  catalog.listMaterials(repos, ctx, parse(materialQuerySchema, Object.fromEntries(url.searchParams))))
 route('GET', '/contract-types', async ({ repos }) => catalog.listContractTypes(repos))
 
 route('GET', '/competitions', async ({ repos, ctx, url }) =>

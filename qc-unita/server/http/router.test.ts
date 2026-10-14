@@ -2,7 +2,7 @@
  * Teste de integração da API em modo memória (mesmo router das Vercel Functions).
  */
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { BudgetLineUsageDTO, CompetitionDetailDTO, CompetitionListItemDTO } from '../../shared/contracts'
+import type { BudgetLineUsageDTO, BudgetStructureDTO, CompetitionDetailDTO, CompetitionListItemDTO } from '../../shared/contracts'
 import { parseBudgetSheet } from '../../shared/domain/budget/excel-import'
 import { buildQcMap } from '../../shared/domain/competition/qc-map'
 import { DEMO_USERS } from '../infrastructure/memory/seed'
@@ -245,9 +245,19 @@ describe('obra e vínculos de planejamento', () => {
     const alpha = works.find((w) => w.code === '2041')!
     const ips = await call<{ source: string; items: { code: string; description: string }[] }>('GET', `/works/${alpha.id}/planning-codes`)
     expect(ips.status).toBe(200)
-    expect(ips.data.source).toBe('budget') // modo demonstração: sem UAU, vem do orçamento importado
+    expect(ips.data.source).toBe('catalog') // cadastro de insumos sincronizado (no modo demonstração, pela sincronização da semente)
     expect(ips.data.items.length).toBeGreaterThan(3)
     expect(ips.data.items.every((i) => i.code.startsWith('IP'))).toBe(true)
+    // Consulta do cadastro: IPs e demais insumos, com busca e paginação
+    const ipPage = await call<{ total: number; items: { code: string }[]; syncedAt: string | null }>('GET', '/materials?type=ip&limit=5')
+    expect(ipPage.status).toBe(200)
+    expect(ipPage.data.items.length).toBeLessThanOrEqual(5)
+    expect(ipPage.data.total).toBe(ips.data.items.length)
+    expect(ipPage.data.syncedAt).not.toBeNull()
+    const cimento = await call<{ items: { code: string; description: string }[] }>('GET', '/materials?type=insumo&search=cimento')
+    expect(cimento.data.items.length).toBeGreaterThan(0)
+    expect(cimento.data.items.every((m) => !m.code.startsWith('IP') && /cimento/i.test(m.description))).toBe(true)
+    expect((await call('GET', '/materials?type=x')).status).toBe(422)
     const mats = await call<{ items: { code: string }[] }>('GET', `/works/${alpha.id}/work-materials`)
     expect(mats.data.items.some((m) => m.code.startsWith('IM'))).toBe(true)
 
@@ -269,6 +279,20 @@ describe('obra e vínculos de planejamento', () => {
     expect(back.packageCode).toBe(link.packageCode)
     expect(back.packageManual).toBe(false)
     expect((await call('PUT', `/works/${alpha.id}/budget-lines/planning`, { lineKey: 'nao-existe', code: 'IP1' })).status).toBe(404)
+  })
+
+  it('nome dos Itens da EAP editável, salvo por obra e removível', async () => {
+    const works = (await call<{ id: string; code: string }[]>('GET', '/works')).data
+    const alpha = works.find((w) => w.code === '2041')!
+    const before = (await call<BudgetStructureDTO>('GET', `/works/${alpha.id}/budget-structure`)).data
+    const group = before.groups[0]!
+    expect((await call('PUT', `/works/${alpha.id}/budget-groups`, { wbs: group.wbs, description: 'Infraestrutura geral' })).status).toBe(200)
+    const after = (await call<BudgetStructureDTO>('GET', `/works/${alpha.id}/budget-structure`)).data
+    expect(after.groups[0]).toMatchObject({ wbs: group.wbs, description: 'Infraestrutura geral', renamed: true })
+    await call('PUT', `/works/${alpha.id}/budget-groups`, { wbs: group.wbs, description: null })
+    const back = (await call<BudgetStructureDTO>('GET', `/works/${alpha.id}/budget-structure`)).data
+    expect(back.groups[0]).toMatchObject({ description: group.description, renamed: false })
+    expect((await call('PUT', `/works/${alpha.id}/budget-groups`, { wbs: '99.99', description: 'X' })).status).toBe(404)
   })
 
   it('inclui linha com % escolhido e respeita o saldo livre entre QCs', async () => {

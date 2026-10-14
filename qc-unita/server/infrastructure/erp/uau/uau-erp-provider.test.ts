@@ -53,8 +53,31 @@ describe('UauERPProvider.getSuppliers', () => {
 
   it('operações ainda não implementadas dão erro claro e ficam fora do "Tudo"', async () => {
     const p = new UauERPProvider(config)
-    expect([...p.supports]).toEqual(['suppliers'])
+    expect([...p.supports]).toEqual(['suppliers', 'materials'])
     await expect(p.getWorks()).rejects.toThrow('ainda não implementado para a UAU')
+  })
+})
+
+describe('UauERPProvider.getMaterials', () => {
+  it('lê o cadastro inteiro numa chamada (descrição "%"), com situação e sem repetir código', async () => {
+    const bodies: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith('/Autenticador/AutenticarUsuario')) return json(200, 'tok')
+      expect(url).toContain('/InsumosGeral/ConsultarInsumosGeralPorDescricao')
+      bodies.push(JSON.parse(String(init.body)))
+      return json(200, [
+        { Cod_ins: 'ip00001', Descr_ins: 'Aluguel de escritório', Unid_ins: 'VB', AtInat_ins: 0 },
+        { Cod_ins: 'IM00012', Descr_ins: 'Cimento CP II-32', Unid_ins: 'kg', AtInat_ins: 1 },
+        { Cod_ins: 'IM00012', Descr_ins: 'Cimento repetido', Unid_ins: 'kg', AtInat_ins: 0 },
+        { Cod_ins: '', Descr_ins: 'sem código', Unid_ins: 'un', AtInat_ins: 0 },
+      ])
+    }))
+    const materials = await new UauERPProvider(config).getMaterials()
+    expect(bodies).toEqual([{ Descricao: '%' }])
+    expect(materials).toEqual([
+      { code: 'IP00001', description: 'Aluguel de escritório', unit: 'VB', active: true },
+      { code: 'IM00012', description: 'Cimento CP II-32', unit: 'kg', active: false },
+    ])
   })
 })
 

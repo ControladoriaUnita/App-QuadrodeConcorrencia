@@ -233,6 +233,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
         <div class="card"><h3>1 · Orçamento</h3><p>Tela inicial da obra: o orçamento na estrutura da planilha (Item → composição → insumos), com o que cada concorrência já comprometeu e o saldo livre.</p></div>
         <div class="card"><h3>2 · Concorrências</h3><p>Quadro (kanban) com os QCs da obra por situação: em cotação, em aprovação, aprovados e contratados. Daqui se cria uma concorrência nova.</p></div>
         <div class="card"><h3>3 · Fornecedores</h3><p>Cadastro de fornecedores (vindos da UAU) com busca por nome ou CNPJ, contato e validade da CND.</p></div>
+        <div class="card"><h3>Consulta UAU</h3><p>Todos os vínculos de planejamento (IPs) e insumos do cadastro da UAU, com busca por código ou descrição e a data da última sincronização.</p></div>
         <div class="card"><h3>4 · Contratos e aditivos</h3><p>Solicitações de contrato geradas dos QCs aprovados, com aditivos e distratos.</p></div>
         <div class="card"><h3>5 · Integração ERP</h3><p>Sincronização com a UAU e o registro de cada execução (só administrador).</p></div>
       </div>
@@ -306,6 +307,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
       <div class="prose">
         <p><b>Nova obra.</b> Em <b>Selecione a obra › Nova obra</b>, escolha a empresa, a obra e o orçamento na lista vinda da planilha de orçamentos do SharePoint (aba <code>BD_Orcamento</code>). A obra já abre com o orçamento completo. Os códigos de empresa e obra são os da UAU, que só completa os nomes. Também dá para cadastrar a obra sem a planilha e importar o orçamento por Excel.</p>
         <p><b>Atualizar o orçamento.</b> <b>Atualizar da planilha</b> traz uma versão nova do mesmo orçamento; <b>Importar nova versão (Excel)</b> usa um arquivo. A versão nova passa a ser a vigente; os QCs já criados continuam ligados às linhas pela chave de cada linha.</p>
+        <p><b>Linhas zeradas.</b> Se a coluna PrecoItem da planilha vier vazia, o valor da linha sai do PrecoFinal ou de quantidade × unitário. Linhas que continuam com valor zero (preço zerado na própria UAU) aparecem no aviso da importação com o número da linha na aba.</p>
         <p><b>Ler o orçamento.</b> A árvore segue a planilha: Item → composição → composições auxiliares → insumos. Os botões <b>Itens / Composições / Insumos</b> recolhem ou abrem os níveis. À direita, <b>Comprometido em</b> mostra o % de cada QC na linha e <b>Livre</b>, o que sobra.</p>
       </div>
       <div class="grid2">
@@ -315,7 +317,11 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
         </div>
         <div class="card">
           <h3>IP manual da linha</h3>
-          <p>Clique no <b>Vínculo PL</b> de uma linha para escolher o IP na lista de IPs da obra (vinda da UAU). A linha fica marcada com <span class="badge b-pri">M</span>. A escolha vale para as próximas versões do orçamento e para os QCs em rascunho; <b>Voltar ao IP da planilha</b> desfaz.</p>
+          <p>Clique no <b>Vínculo PL</b> de uma linha para escolher o IP entre todos os IPs do cadastro da UAU. A linha fica marcada com <span class="badge b-pri">M</span>. A escolha vale para as próximas versões do orçamento e para os QCs em rascunho; <b>Voltar ao IP da planilha</b> desfaz.</p>
+        </div>
+        <div class="card">
+          <h3>Nome dos Itens</h3>
+          <p>A planilha não traz o nome dos Itens da EAP (02, 02.06…), que chegam como “Item 02”. Clique no nome para renomear: <b>Enter</b> salva, <b>Esc</b> cancela e o campo vazio volta ao nome da planilha. O nome fica salvo na obra e vale para as próximas versões do orçamento.</p>
         </div>
       </div>
     </section>
@@ -533,6 +539,8 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
             <tr><td>A revisão está aprovada e não pode ser alterada</td><td>Crie uma nova revisão com o motivo.</td></tr>
             <tr><td>Não foi possível ler a planilha de orçamentos</td><td>Credencial da Microsoft ou nome da aba. A mensagem diz se o arquivo não foi achado ou quais abas existem; avise o administrador.</td></tr>
             <tr><td>A lista vem do orçamento importado</td><td>A obra não tem a chave da UAU ou a UAU não respondeu; os IPs e insumos saem do orçamento importado.</td></tr>
+            <tr><td>Para ver todos os IPs, sincronize os insumos da UAU</td><td>O cadastro de insumos ainda não foi sincronizado. Use Atualizar da UAU na Consulta UAU ou Integração ERP › Insumos.</td></tr>
+            <tr><td>N linha(s) vieram com valor zero na planilha</td><td>O preço ou o coeficiente está zerado na UAU. Corrija na origem e atualize o orçamento pela planilha.</td></tr>
           </tbody>
         </table>
       </div>
@@ -547,7 +555,8 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
           <tbody>
             <tr><td>Planilha de orçamentos (SharePoint)</td><td>Lista de empresas, obras e orçamentos e o orçamento completo de cada obra (aba BD_Orcamento).</td></tr>
             <tr><td>UAU · Empresas e Obras</td><td>Nomes das empresas e obras.</td></tr>
-            <tr><td>UAU · Insumos do orçamento da obra</td><td>Lista de IPs (vínculos de planejamento) e de insumos da obra.</td></tr>
+            <tr><td>UAU · Cadastro de insumos</td><td>Todos os insumos e IPs da UAU (cerca de 13 mil), pela sincronização em Integração ERP (escopo Insumos) ou pelo botão Atualizar da UAU na Consulta UAU. É a lista de IPs para escolher no app.</td></tr>
+            <tr><td>UAU · Insumos do orçamento da obra</td><td>Insumos da obra para criar insumos no mapa (e IPs, enquanto o cadastro não foi sincronizado).</td></tr>
             <tr><td>UAU · Pessoas</td><td>Cadastro de fornecedores (pessoas jurídicas ativas), pela sincronização em Integração ERP.</td></tr>
           </tbody>
         </table>

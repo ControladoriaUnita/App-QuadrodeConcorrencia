@@ -11,7 +11,8 @@
  *
  * Filtros por coluna como no Excel (▾ no cabeçalho): lista de valores com busca ou faixa numérica;
  * a árvore mantém os ancestrais das linhas que passam. Com `planning`, a coluna Vínculo PL vira
- * um seletor do IP (lista de IPs da obra), gravado na hora.
+ * um seletor do IP (lista de IPs da obra), gravado na hora. Com `onRenameGroup`, o nome dos Itens
+ * da EAP fica editável (a planilha não traz esses nomes).
  */
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, ChevronsDownUp, FilterX, Pencil, Percent, Search } from 'lucide-react'
@@ -63,13 +64,15 @@ interface Props {
   selection?: BudgetTreeSelection
   initialOnlyBalance?: boolean
   planning?: BudgetTreePlanning
+  /** Renomeia um Item da EAP (null volta ao nome da planilha) */
+  onRenameGroup?: (wbs: string, description: string | null) => Promise<unknown>
 }
 
 type ColKey = 'item' | 'code' | 'description' | 'unit' | 'quantity' | 'unitCost' | 'total' | 'package' | 'classification' | 'usage' | 'free'
 const NUMERIC: ColKey[] = ['quantity', 'unitCost', 'total', 'free']
 const NO_USAGE = 'Sem compromisso'
 
-export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)', selection, initialOnlyBalance = false, planning }: Props) {
+export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)', selection, initialOnlyBalance = false, planning, onRenameGroup }: Props) {
   const selectable = !!selection
   const [search, setSearch] = useState('')
   const [pkg, setPkg] = useState('')
@@ -362,6 +365,7 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
                 open={filtering || isOpen(r)}
                 onToggle={() => toggle(r)}
                 onEditPlanning={planning ? setEditingLine : undefined}
+                onRenameGroup={onRenameGroup}
                 select={
                   selection &&
                   (r.kind === 'line'
@@ -400,7 +404,16 @@ type RowSelect =
   | { kind: 'line'; share: string | undefined; disabled: boolean; onCheck: (on: boolean) => void; onShare: (v: string) => void }
   | { kind: 'block'; ls: LineRow[]; pickable: LineRow[]; chosen: LineRow[]; pulled: Decimal; onCheck: (on: boolean) => void; onShare: (v: string) => void }
 
-function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning }: { r: Row; cols: string; top: number; open: boolean; onToggle: () => void; select?: RowSelect; onEditPlanning?: (l: BudgetLineUsageDTO) => void }) {
+function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning, onRenameGroup }: {
+  r: Row
+  cols: string
+  top: number
+  open: boolean
+  onToggle: () => void
+  select?: RowSelect
+  onEditPlanning?: (l: BudgetLineUsageDTO) => void
+  onRenameGroup?: (wbs: string, description: string | null) => Promise<unknown>
+}) {
   const cell = 'min-w-0 truncate px-2'
   const indent = { paddingLeft: `${0.5 + r.level * 0.9}rem` }
   const chevron = (
@@ -436,7 +449,7 @@ function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning }: { r: 
         {lead}
         <span className={cn(cell, 'flex items-center')} style={indent}>{chevron}{r.wbs}</span>
         <span className={cn(cell, 'text-xs text-text-muted')}>Item</span>
-        <span className={cell} title={r.description}>{r.description}</span>
+        {onRenameGroup ? <GroupName wbs={r.wbs} name={r.description} onRename={onRenameGroup} /> : <span className={cell} title={r.description}>{r.description}</span>}
         <span />
         <span />
         <span />
@@ -668,5 +681,60 @@ function LinePlanningDialog({ line, planning, onClose }: { line: BudgetLineUsage
         <Combobox options={options} value={code} onChange={setCode} loading={planning.loading} placeholder="Buscar IP por código ou descrição…" aria-label="IP da linha" />
       </Field>
     </Dialog>
+  )
+}
+
+/** Nome de um Item da EAP editável no lugar: lápis para editar, Enter salva, Esc cancela; vazio volta ao nome da planilha */
+function GroupName({ wbs, name, onRename }: { wbs: string; name: string; onRename: (wbs: string, description: string | null) => Promise<unknown> }) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(name)
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    const next = text.trim()
+    if (next === name) return setEditing(false)
+    setSaving(true)
+    try {
+      await onRename(wbs, next || null)
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+  if (editing) {
+    return (
+      <span className="min-w-0 px-1">
+        <input
+          autoFocus
+          aria-label={`Nome do item ${wbs}`}
+          value={text}
+          disabled={saving}
+          placeholder="Vazio = nome da planilha"
+          onChange={(e) => setText(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void save()
+            if (e.key === 'Escape') {
+              setText(name)
+              setEditing(false)
+            }
+          }}
+          className="h-7 w-full rounded-control border border-primary bg-surface px-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+        />
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setText(name)
+        setEditing(true)
+      }}
+      title="Renomear o item"
+      className="group/name mx-1 flex min-w-0 items-center gap-1.5 rounded px-1 text-left hover:bg-ink-200/60"
+    >
+      <span className="truncate">{name}</span>
+      <Pencil className="size-3 shrink-0 text-ink-400 opacity-0 group-hover/name:opacity-100" aria-hidden />
+    </button>
   )
 }

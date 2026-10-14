@@ -16,6 +16,7 @@ import type {
   AuditLogDTO,
   CompetitionListItemDTO,
   IntegrationLogDTO,
+  MaterialDTO,
   QcItemDTO,
   QcReferenceDTO,
   QcSupplierDTO,
@@ -363,13 +364,22 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
             if (page.length < 1000) return out
           }
         }
-        const [groups, acts] = await Promise.all([
+        const [groups, acts, budget] = await Promise.all([
           all('budget_items', 'wbs_code, description, sort_order'),
           all('activities', 'wbs_code, composition_code, description, unit, quantity::text, unit_cost::text, total_cost::text, sort_order'),
+          db.from('budgets').select('work_id').eq('id', budgetId).maybeSingle(),
         ])
+        // Nomes dados no app aos Itens da EAP (a planilha não traz o nome dos grupos)
+        const workId = (must(budget) as { work_id: string } | null)?.work_id
+        const names = workId
+          ? new Map((must(await db.from('budget_group_names').select('wbs_code, description').eq('work_id', workId)) as { wbs_code: string; description: string }[]).map((n) => [n.wbs_code, n.description]))
+          : new Map<string, string>()
         return {
           budgetId,
-          groups: groups.map((g) => ({ wbs: g.wbs_code as string, description: g.description as string })),
+          groups: groups.map((g) => {
+            const name = names.get(g.wbs_code as string)
+            return { wbs: g.wbs_code as string, description: name ?? (g.description as string), renamed: !!name }
+          }),
           activities: acts.map((a) => ({
             wbs: a.wbs_code as string, code: (a.composition_code as string) ?? null, description: a.description as string,
             unit: (a.unit as string) ?? null, quantity: a.quantity as string, unitCost: a.unit_cost as string, total: a.total_cost as string,
@@ -391,6 +401,38 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
       async findMaterialIdByCode(code) {
         const r = must(await db.from('materials').select('id').eq('code', code).maybeSingle()) as { id: string } | null
         return r?.id ?? null
+      },
+      async listMaterials(q) {
+        let query = db.from('materials').select('code, description, unit, active', { count: 'exact' })
+        query = q.type === 'ip' ? query.ilike('code', 'IP%') : query.not('code', 'ilike', 'IP%')
+        for (const term of (q.search ?? '').split(/\s+/).filter(Boolean)) {
+          const t = term.replace(/[%,()]/g, ' ').trim()
+          if (t) query = query.or(`code.ilike.%${t}%,description.ilike.%${t}%`)
+        }
+        const [page, last] = await Promise.all([
+          query.order('code').range(q.offset, q.offset + q.limit - 1),
+          db.from('materials').select('erp_synced_at').not('erp_synced_at', 'is', null).order('erp_synced_at', { ascending: false }).limit(1),
+        ])
+        return {
+          total: page.count ?? 0,
+          items: must(page) as MaterialDTO[],
+          syncedAt: (must(last) as { erp_synced_at: string }[])[0]?.erp_synced_at ?? null,
+        }
+      },
+      async setBudgetGroupName(workId, wbs, description) {
+        const current = must(await db.from('budgets').select('id').eq('work_id', workId).eq('is_current', true).maybeSingle()) as { id: string } | null
+        if (!current) return false
+        const group = must(await db.from('budget_items').select('id').eq('budget_id', current.id).eq('wbs_code', wbs).limit(1)) as { id: string }[]
+        if (!group.length) return false
+        if (description) {
+          must(await db.from('budget_group_names').upsert(
+            { work_id: workId, wbs_code: wbs, description, updated_at: new Date().toISOString() },
+            { onConflict: 'work_id,wbs_code' },
+          ))
+        } else {
+          must(await db.from('budget_group_names').delete().eq('work_id', workId).eq('wbs_code', wbs))
+        }
+        return true
       },
       async setLinePlanning(workId, lineKey, planning) {
         const work = must(await db.from('works').select('budgets(id, is_current)').eq('id', workId).maybeSingle()) as { budgets: { id: string; is_current: boolean }[] } | null
@@ -838,7 +880,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         const now = new Date().toISOString()
         for (let i = 0; i < materials.length; i += 500) {
           must(await service.from('materials').upsert(
-            materials.slice(i, i + 500).map((m) => ({ erp_id: m.erpId ?? null, code: m.code, description: m.description, unit: m.unit, source: 'erp', erp_synced_at: now })),
+            materials.slice(i, i + 500).map((m) => ({ erp_id: m.erpId ?? null, code: m.code, description: m.description, unit: m.unit, active: m.active ?? true, source: 'erp', erp_synced_at: now })),
             { onConflict: 'code' },
           ))
         }

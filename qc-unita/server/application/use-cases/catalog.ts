@@ -1,4 +1,4 @@
-import type { UserDTO } from '../../../shared/contracts'
+import type { MaterialQuery, UserDTO } from '../../../shared/contracts'
 import { can, notFound, requirePermission, type RequestContext } from '../context'
 import type { Repositories } from '../ports'
 
@@ -28,6 +28,12 @@ export async function listPackages(repos: Repositories, ctx: RequestContext, wor
 export async function listSuppliers(repos: Repositories, ctx: RequestContext, search?: string) {
   requirePermission(ctx, 'supplier.read')
   return repos.catalog.listSuppliers(search)
+}
+
+/** Cadastro de insumos sincronizado da UAU (consulta de IPs e insumos) */
+export async function listMaterials(repos: Repositories, ctx: RequestContext, query: MaterialQuery) {
+  requirePermission(ctx, 'budget.read')
+  return repos.catalog.listMaterials(query)
 }
 
 export async function listContractTypes(repos: Repositories) {

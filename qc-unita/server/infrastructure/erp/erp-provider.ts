@@ -37,6 +37,8 @@ export interface ErpMaterial {
   code: string
   description: string
   unit: string
+  /** Situação no cadastro do ERP (ausente = ativo) */
+  active?: boolean
 }
 
 export interface ErpBudget {

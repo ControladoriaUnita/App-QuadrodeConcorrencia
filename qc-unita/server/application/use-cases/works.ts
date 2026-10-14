@@ -1,7 +1,7 @@
 /**
  * Visão por obra: o orçamento geral da obra e o quanto as concorrências o consomem.
  */
-import type { BudgetImportInput, BudgetLineDTO, BudgetLineUsageDTO, BudgetStructureDTO, CreateWorkInput, PlanningCodeDTO, SetLinePlanningInput, WorkCompetitionDTO, WorkDTO, WorkListDTO, WorkMaterialDTO, WorkOverviewDTO } from '../../../shared/contracts'
+import type { BudgetImportInput, BudgetLineDTO, BudgetLineUsageDTO, BudgetStructureDTO, CreateWorkInput, PlanningCodeDTO, SetBudgetGroupNameInput, SetLinePlanningInput, WorkCompetitionDTO, WorkDTO, WorkListDTO, WorkMaterialDTO, WorkOverviewDTO } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import { summarizeWork } from '../../../shared/domain/work/overview'
 import { AppError, can, notFound, requirePermission, type RequestContext } from '../context'
@@ -223,10 +223,22 @@ async function workList<T extends { code: string }>(
   return { source: 'budget', warning, items: [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code)) }
 }
 
-/** Vínculos de planejamento (IPs) da obra: os insumos "IP…" do orçamento da obra. */
-export function listPlanningCodes(repos: Repositories, erp: ERPProvider, ctx: RequestContext, workId: string): Promise<WorkListDTO<PlanningCodeDTO>> {
+/**
+ * Vínculos de planejamento (IPs) para escolher: todos os IPs do cadastro sincronizado da UAU.
+ * Sem cadastro sincronizado, os IPs do orçamento da obra (UAU ou orçamento importado).
+ */
+export async function listPlanningCodes(repos: Repositories, erp: ERPProvider, ctx: RequestContext, workId: string): Promise<WorkListDTO<PlanningCodeDTO>> {
+  await loadWork(repos, ctx, workId)
+  // O cadastro tem centenas de IPs: lê em páginas até o fim
+  const ips: PlanningCodeDTO[] = []
+  for (let offset = 0, total = 1; offset < total; offset += 2000) {
+    const page = await repos.catalog.listMaterials({ type: 'ip', offset, limit: 2000 })
+    total = page.total
+    ips.push(...page.items.filter((m) => m.active).map(({ code, description }) => ({ code, description })))
+  }
+  if (ips.length) return { source: 'catalog', warning: null, items: ips }
   const isIp = (code: string | null): code is string => !!code?.startsWith('IP')
-  return workList(
+  const list = await workList(
     repos, erp, ctx, workId,
     (items) => items.filter((m) => isIp(m.code)).map((m) => ({ code: m.code, description: m.description })),
     (l) => [
@@ -234,6 +246,8 @@ export function listPlanningCodes(repos: Repositories, erp: ERPProvider, ctx: Re
       ...(isIp(l.packageCode) ? [{ code: l.packageCode, description: l.packageDescription ?? l.packageCode }] : []),
     ],
   )
+  const hint = 'Para ver todos os IPs, sincronize os insumos da UAU em Integração ERP.'
+  return { ...list, warning: list.warning ? `${list.warning} ${hint}` : hint }
 }
 
 /** Insumos da obra para criar insumos no mapa. */
@@ -248,4 +262,13 @@ export async function setLinePlanning(repos: Repositories, ctx: RequestContext, 
   if (!effective) throw new AppError('LINE_NOT_FOUND', 'Linha do orçamento não encontrada.', 404)
   await repos.competitions.setDraftLinksPlanning(workId, input.lineKey, effective)
   return effective
+}
+
+/** Nome de um Item da EAP do orçamento (a planilha não traz o nome dos grupos). */
+export async function setBudgetGroupName(repos: Repositories, ctx: RequestContext, workId: string, input: SetBudgetGroupNameInput) {
+  await loadWork(repos, ctx, workId, 'budget.import')
+  if (!(await repos.catalog.setBudgetGroupName(workId, input.wbs, input.description))) {
+    throw new AppError('GROUP_NOT_FOUND', `Item ${input.wbs} não encontrado no orçamento vigente.`, 404)
+  }
+  return { ok: true }
 }

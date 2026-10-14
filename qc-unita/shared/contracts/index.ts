@@ -258,7 +258,8 @@ export interface AuxCompositionDTO {
 /** Estrutura do orçamento como na planilha: grupos "Item" da EAP e composições (CPU/CPO) */
 export interface BudgetStructureDTO {
   budgetId: string
-  groups: { wbs: string; description: string }[]
+  /** Itens da EAP; `renamed` = nome dado no app (a planilha não traz o nome dos grupos) */
+  groups: { wbs: string; description: string; renamed?: boolean }[]
   activities: { wbs: string; code: string | null; description: string; unit: string | null; quantity: string; unitCost: string; total: string }[]
 }
 
@@ -500,6 +501,13 @@ export const addLinesSchema = z.object({
 })
 export type AddLinesInput = z.infer<typeof addLinesSchema>
 
+/** Nome de um Item da EAP do orçamento (null volta ao nome da planilha) */
+export const setBudgetGroupNameSchema = z.object({
+  wbs: z.string().trim().min(1).max(50),
+  description: z.string().trim().min(1, 'Informe o nome').max(300).nullable(),
+})
+export type SetBudgetGroupNameInput = z.infer<typeof setBudgetGroupNameSchema>
+
 /** IP escolhido à mão para uma linha do orçamento (null volta ao IP da planilha) */
 export const setLinePlanningSchema = z.object({
   lineKey: z.string().trim().min(1).max(300),
@@ -521,9 +529,33 @@ export interface WorkMaterialDTO {
   unit: string
 }
 
-/** Lista vinda da UAU ou, como alternativa, do orçamento importado */
+/** Insumo do cadastro (sincronizado da UAU em Integração ERP) */
+export interface MaterialDTO {
+  code: string
+  description: string
+  unit: string
+  active: boolean
+}
+
+/** Página do cadastro de insumos, com a data da última sincronização com a UAU */
+export interface MaterialPageDTO {
+  total: number
+  items: MaterialDTO[]
+  syncedAt: string | null
+}
+
+/** Consulta do cadastro: IPs (vínculos de planejamento) ou os demais insumos */
+export const materialQuerySchema = z.object({
+  type: z.enum(['ip', 'insumo']),
+  search: z.string().trim().max(100).optional(),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(2000).default(100),
+})
+export type MaterialQuery = z.infer<typeof materialQuerySchema>
+
+/** Lista para escolher: do cadastro sincronizado da UAU ou, sem ele, da UAU por obra / orçamento importado */
 export interface WorkListDTO<T> {
-  source: 'uau' | 'budget'
+  source: 'catalog' | 'uau' | 'budget'
   /** Motivo de não ter vindo da UAU (sem chave da obra, UAU fora do ar...) */
   warning: string | null
   items: T[]

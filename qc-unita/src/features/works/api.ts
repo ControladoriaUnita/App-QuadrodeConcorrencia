@@ -7,6 +7,7 @@ import type {
   CreateWorkInput,
   PlanningCodeDTO,
   RefreshSheetBudgetInput,
+  SetBudgetGroupNameInput,
   SetLinePlanningInput,
   WorkListDTO,
   WorkMaterialDTO,
@@ -69,6 +70,15 @@ export function useSetLinePlanning(workId: string) {
   return useMutation({
     mutationFn: (input: SetLinePlanningInput) => api<{ changed: number }>(`/works/${workId}/budget-lines/planning`, { method: 'PUT', body: input }),
     onSuccess: () => BUDGET_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+/** Nome de um Item da EAP do orçamento */
+export function useSetBudgetGroupName(workId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: SetBudgetGroupNameInput) => api(`/works/${workId}/budget-groups`, { method: 'PUT', body: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['budget-structure', workId] }),
   })
 }
 

@@ -35,6 +35,7 @@ export function AppShell() {
     { label: 'Orçamento', to: wid && workPath.budget(wid), match: /^\/obras\/[^/]+\/orcamento/ },
     { label: 'Concorrências', to: wid && workPath.competitions(wid), match: /^\/obras\/[^/]+\/(concorrencias|qc)|^\/concorrencias/ },
     { label: 'Fornecedores', to: '/fornecedores', match: /^\/fornecedores/ },
+    { label: 'Consulta UAU', to: '/consulta-uau', match: /^\/consulta-uau/, permission: 'budget.read' },
     { label: 'Contratos e aditivos', to: wid && workPath.contracts(wid), match: /^\/obras\/[^/]+\/contratos/, permission: 'contract.read' },
     { label: 'Integração ERP', to: '/integracao', match: /^\/integracao/, permission: 'integration.read' },
   ]

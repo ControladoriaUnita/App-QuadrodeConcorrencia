@@ -299,9 +299,14 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       },
       async getBudgetStructure(budgetId) {
         const bySort = (a: Row, b: Row) => ((a.sortOrder as number) ?? 0) - ((b.sortOrder as number) ?? 0)
+        const workId = db.get('budgets', budgetId)?.workId as string
+        const nameOf = (wbs: string) => db.get('budget_group_names', `${workId}|${wbs}`)?.description as string | undefined
         return {
           budgetId,
-          groups: db.find('budget_items', (g) => g.budgetId === budgetId).sort(bySort).map((g) => ({ wbs: g.wbs as string, description: g.description as string })),
+          groups: db.find('budget_items', (g) => g.budgetId === budgetId).sort(bySort).map((g) => {
+            const name = nameOf(g.wbs as string)
+            return { wbs: g.wbs as string, description: name ?? (g.description as string), renamed: !!name }
+          }),
           activities: db
             .find('activities', (a) => a.budgetId === budgetId)
             .sort(bySort)
@@ -321,6 +326,28 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       },
       async findMaterialIdByCode(code) {
         return db.find('materials', (m) => m.code === code)[0]?.id ?? null
+      },
+      async listMaterials(q) {
+        const terms = (q.search ?? '').toLowerCase().split(/\s+/).filter(Boolean)
+        const all = db
+          .all('materials')
+          .filter((m) => String(m.code).startsWith('IP') === (q.type === 'ip'))
+          .filter((m) => terms.every((t) => `${m.code} ${m.description}`.toLowerCase().includes(t)))
+          .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+        const syncedAt = db.all('materials').map((m) => m.erpSyncedAt as string | undefined).filter(Boolean).sort().at(-1) ?? null
+        return {
+          total: all.length,
+          syncedAt,
+          items: all.slice(q.offset, q.offset + q.limit).map((m) => ({ code: m.code as string, description: m.description as string, unit: m.unit as string, active: m.active !== false })),
+        }
+      },
+      async setBudgetGroupName(workId, wbs, description) {
+        const budget = db.find('budgets', (b) => b.workId === workId && b.isCurrent === true)[0]
+        if (!budget || !db.find('budget_items', (g) => g.budgetId === budget.id && g.wbs === wbs).length) return false
+        const key = `${workId}|${wbs}`
+        if (description) db.put('budget_group_names', { id: key, workId, wbs, description })
+        else db.t('budget_group_names').delete(key)
+        return true
       },
       async setLinePlanning(workId, lineKey, planning) {
         const budget = db.find('budgets', (b) => b.workId === workId && b.isCurrent === true)[0]
@@ -800,7 +827,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         const now = new Date().toISOString()
         for (const m of materials) {
           const existing = db.find('materials', (x) => x.code === m.code)[0]
-          db.put('materials', { ...(existing ?? { id: uid(), createdAt: now }), ...m, kind: kindFromCode(m.code), erpSyncedAt: now, updatedAt: now })
+          db.put('materials', { ...(existing ?? { id: uid(), createdAt: now }), ...m, active: m.active ?? true, kind: kindFromCode(m.code), erpSyncedAt: now, updatedAt: now })
         }
         return materials.length
       },

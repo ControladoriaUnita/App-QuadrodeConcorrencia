@@ -4,6 +4,7 @@ import { Spinner } from '@/components/ui'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { SuppliersPage } from '@/features/catalog/SuppliersPage'
+import { UauCatalogPage } from '@/features/catalog/UauCatalogPage'
 import { CompetitionPage } from '@/features/competitions/CompetitionPage'
 import { CompetitionsBoardPage } from '@/features/competitions/CompetitionsBoardPage'
 import { NewCompetitionPage } from '@/features/competitions/NewCompetitionPage'
@@ -67,6 +68,7 @@ export function App() {
         <Route path="/obras/:workId/contratos" element={<ContractsListPage />} />
         <Route path="/obras/:workId/contratos/:id" element={<ContractPage />} />
         <Route path="/fornecedores" element={<SuppliersPage />} />
+        <Route path="/consulta-uau" element={<UauCatalogPage />} />
         <Route path="/integracao" element={<IntegrationPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
