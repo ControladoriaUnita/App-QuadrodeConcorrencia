@@ -8,7 +8,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { FileSpreadsheet, Plus, RefreshCw, X } from 'lucide-react'
 import { Alert, Button, Card, CardHeader, EmptyState, Skeleton } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
-import { useBudgetLines, useBudgetStructure, type SheetBudgetImportResult } from './api'
+import { useBudgetLines, useBudgetStructure, usePlanningCodes, useSetLinePlanning, type SheetBudgetImportResult } from './api'
 import { BudgetImportDialog } from './BudgetImportDialog'
 import { BudgetTree } from './BudgetTree'
 import { workPath } from './currentWork'
@@ -33,6 +33,9 @@ export function BudgetPage() {
   const hasBudget = !!data?.work.currentBudgetId
   const lines = useBudgetLines(workId, {}, hasBudget)
   const structure = useBudgetStructure(workId, hasBudget)
+  const canPlan = can('budget.import')
+  const planningCodes = usePlanningCodes(workId, hasBudget && canPlan)
+  const setPlanning = useSetLinePlanning(workId)
 
   // Obra recém-criada (cadastro manual): abre a importação do orçamento
   useEffect(() => {
@@ -102,12 +105,26 @@ export function BudgetPage() {
         <Card>
           <CardHeader
             title="Orçamento da obra"
-            description="Estrutura da planilha: Item → composição → composições auxiliares e insumos com Vínculo PL. “Comprometido em” mostra o % de cada QC (revisão efetiva); “Livre”, o que resta."
+            description="Estrutura da planilha: Item → composição → composições auxiliares e insumos com Vínculo PL. Clique no Vínculo PL de uma linha para escolher o IP da lista da obra (M = escolhido à mão). Use ▾ nos cabeçalhos para filtrar como no Excel."
           />
           {lines.isLoading || structure.isLoading ? (
             <div className="grid gap-2 p-5">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-9" />)}</div>
           ) : (
-            <BudgetTree structure={structure.data ?? { budgetId: '', groups: [], activities: [] }} lines={lines.data ?? []} maxHeight="calc(100dvh - 19rem)" />
+            <BudgetTree
+              structure={structure.data ?? { budgetId: '', groups: [], activities: [] }}
+              lines={lines.data ?? []}
+              maxHeight="calc(100dvh - 19rem)"
+              planning={
+                canPlan
+                  ? {
+                      options: planningCodes.data?.items ?? [],
+                      loading: planningCodes.isLoading,
+                      warning: planningCodes.data?.warning ?? null,
+                      onSet: (line, value) => setPlanning.mutateAsync({ lineKey: line.lineKey, code: value?.code ?? null, description: value?.description ?? null }),
+                    }
+                  : undefined
+              }
+            />
           )}
         </Card>
       )}

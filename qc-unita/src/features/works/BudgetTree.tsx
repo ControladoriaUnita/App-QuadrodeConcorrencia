@@ -8,17 +8,22 @@
  * Modo seletor (`selectable`): a MESMA tela serve para escolher os insumos de uma concorrência.
  * Cada insumo marcado recebe o "% a consumir" (verba puxada = custo total × %). Em Item e composição,
  * a caixa marca todos os insumos abaixo e o % digitado vale para todos eles (limitado ao livre de cada um).
+ *
+ * Filtros por coluna como no Excel (▾ no cabeçalho): lista de valores com busca ou faixa numérica;
+ * a árvore mantém os ancestrais das linhas que passam. Com `planning`, a coluna Vínculo PL vira
+ * um seletor do IP (lista de IPs da obra), gravado na hora.
  */
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, ChevronsDownUp, Percent, Search } from 'lucide-react'
-import type { BudgetLineUsageDTO, BudgetStructureDTO } from '@shared/contracts'
+import { ChevronDown, ChevronRight, ChevronsDownUp, FilterX, Pencil, Percent, Search } from 'lucide-react'
+import type { BudgetLineUsageDTO, BudgetStructureDTO, PlanningCodeDTO } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import { buildBudgetTree } from '@shared/domain/budget/structure'
-import { Badge, Button, DecimalInput, Input, Select } from '@/components/ui'
+import { Badge, Button, Combobox, DecimalInput, Dialog, Field, Input, Select } from '@/components/ui'
 import { cn } from '@/utils/cn'
 import { EMPTY, formatBRL, formatCoefficient, formatDecimal, formatPercent, formatQuantity } from '@/utils/format'
 import { freeShare, pulledValue } from './BudgetLinesTable'
 import { withAuxCompositions, type AuxRow, type TreeRowWithAux } from './budgetAux'
+import { ColumnFilter, EMPTY_VALUE, matchesFilter, type ColumnFilterValue } from './ColumnFilter'
 
 type Row = TreeRowWithAux<BudgetLineUsageDTO>
 type LineRow = Extract<Row, { kind: 'line' }>
@@ -27,8 +32,8 @@ type Depth = 'items' | 'compositions' | 'all'
 const ROW_H = 34
 const OVERSCAN = 12
 // Classes literais (o Tailwind só gera o que encontra escrito por extenso)
-const COLS = 'grid-cols-[6.5rem_6.5rem_minmax(20rem,1fr)_3.5rem_7rem_7.5rem_8.5rem_5.5rem_9rem_10rem_7.5rem]'
-const SELECT_COLS = 'grid-cols-[2.25rem_6.5rem_6.5rem_minmax(18rem,1fr)_3.5rem_7rem_7.5rem_8.5rem_5.5rem_9rem_10rem_7.5rem_6.5rem_8.5rem]'
+const COLS = 'grid-cols-[6.5rem_6.5rem_minmax(20rem,1fr)_4.5rem_7rem_7.5rem_8.5rem_7rem_9rem_10rem_7.5rem]'
+const SELECT_COLS = 'grid-cols-[2.25rem_6.5rem_6.5rem_minmax(18rem,1fr)_4.5rem_7rem_7.5rem_8.5rem_7rem_9rem_10rem_7.5rem_6.5rem_8.5rem]'
 const tone = { contracted: 'success', in_approval: 'warning', quoting: 'primary' } as const
 /** Colunas do seletor fixas à direita (como "congelar painéis"): sempre visíveis ao rolar para o lado */
 const PIN_SHARE = 'sticky right-[8.5rem] z-[1] grid h-full items-center bg-primary-soft shadow-[-1px_0_0_var(--color-border)]'
@@ -42,21 +47,43 @@ export interface BudgetTreeSelection {
   disabledIds?: Set<string>
 }
 
+/** Escolha manual do IP de cada linha (tela do orçamento) */
+export interface BudgetTreePlanning {
+  options: PlanningCodeDTO[]
+  loading?: boolean
+  warning?: string | null
+  onSet: (line: BudgetLineUsageDTO, planning: { code: string; description: string | null } | null) => Promise<unknown>
+}
+
 interface Props {
   structure: BudgetStructureDTO
   lines: BudgetLineUsageDTO[]
   maxHeight?: string
   selection?: BudgetTreeSelection
   initialOnlyBalance?: boolean
+  planning?: BudgetTreePlanning
 }
 
-export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)', selection, initialOnlyBalance = false }: Props) {
+type ColKey = 'item' | 'code' | 'description' | 'unit' | 'quantity' | 'unitCost' | 'total' | 'package' | 'classification' | 'usage' | 'free'
+const NUMERIC: ColKey[] = ['quantity', 'unitCost', 'total', 'free']
+const NO_USAGE = 'Sem compromisso'
+
+export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)', selection, initialOnlyBalance = false, planning }: Props) {
   const selectable = !!selection
   const [search, setSearch] = useState('')
   const [pkg, setPkg] = useState('')
   const [onlyBalance, setOnlyBalance] = useState(initialOnlyBalance)
   const [onlySelected, setOnlySelected] = useState(false)
   const [bulk, setBulk] = useState<string | null>(null)
+  const [filters, setFilters] = useState<Partial<Record<ColKey, ColumnFilterValue>>>({})
+  const [editingLine, setEditingLine] = useState<BudgetLineUsageDTO | null>(null)
+  const setFilter = (k: ColKey) => (f: ColumnFilterValue | undefined) =>
+    setFilters((s) => {
+      const n = { ...s }
+      if (f) n[k] = f
+      else delete n[k]
+      return n
+    })
   const [depth, setDepthState] = useState<Depth>('all')
   /** Recolhidos / expandidos manualmente (sobre o nível escolhido) */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -82,7 +109,57 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
     }
     return m
   }, [tree, byKey])
-  const filtering = !!(search.trim() || pkg || onlyBalance || onlySelected)
+  /** Item (grupo de 1º nível) de cada linha, para o filtro da coluna Item */
+  const rootOf = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of tree) {
+      if (r.kind !== 'line') continue
+      let p = r.parentKey ? byKey.get(r.parentKey) : undefined
+      while (p?.parentKey) p = byKey.get(p.parentKey)
+      m.set(r.key, p && p.kind === 'group' ? `${p.wbs} — ${p.description}` : EMPTY_VALUE)
+    }
+    return m
+  }, [tree, byKey])
+  /** Valor de cada coluna numa linha do orçamento */
+  const valueOf = (r: LineRow, k: ColKey): string | Decimal | null => {
+    const l = r.line
+    switch (k) {
+      case 'item': return rootOf.get(r.key) ?? null
+      case 'code': return l.code
+      case 'description': return l.description
+      case 'unit': return l.unit
+      case 'quantity': return Decimal.from(l.quantity)
+      case 'unitCost': return Decimal.from(l.unitCost)
+      case 'total': return Decimal.from(l.total)
+      case 'package': return l.packageCode
+      case 'classification': return l.packageDescription
+      case 'free': return Decimal.from(l.total).minus(l.committedValue)
+      case 'usage': return null
+    }
+  }
+  const passes = (r: LineRow) =>
+    (Object.entries(filters) as [ColKey, ColumnFilterValue][]).every(([k, f]) => {
+      if (k !== 'usage') return matchesFilter(f, valueOf(r, k))
+      const codes = r.line.usage.length ? r.line.usage.map((u) => u.competitionCode) : [NO_USAGE]
+      return f.kind !== 'values' || codes.some((c) => f.values.has(c))
+    })
+  /** Valores distintos de cada coluna de lista (com contagem) */
+  const distinct = useMemo(() => {
+    const out = {} as Record<ColKey, { value: string; count: number }[]>
+    const keys: ColKey[] = ['item', 'code', 'description', 'unit', 'package', 'classification', 'usage']
+    for (const k of keys) {
+      const m = new Map<string, number>()
+      for (const r of tree) {
+        if (r.kind !== 'line') continue
+        const vals = k === 'usage' ? (r.line.usage.length ? r.line.usage.map((u) => u.competitionCode) : [NO_USAGE]) : [String(valueOf(r, k) ?? '') || EMPTY_VALUE]
+        for (const v of vals) m.set(v, (m.get(v) ?? 0) + 1)
+      }
+      out[k] = [...m.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value, 'pt-BR', { numeric: true }))
+    }
+    return out
+  }, [tree, rootOf]) // eslint-disable-line react-hooks/exhaustive-deps
+  const columnFilters = Object.keys(filters).length
+  const filtering = !!(search.trim() || pkg || onlyBalance || onlySelected || columnFilters)
 
   /** Linhas visíveis: filtro mantém os ancestrais; sem filtro, respeita os níveis recolhidos. */
   const visible = useMemo(() => {
@@ -101,6 +178,7 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
         if (pkg && l.packageCode !== pkg) continue
         if (onlyBalance && !Decimal.from(l.balanceShare).isPositive()) continue
         if (onlySelected && !selection?.value.has(l.id)) continue
+        if (columnFilters && !passes(r)) continue
         // busca casa no insumo ou em qualquer ancestral (auxiliar/composição/Item)
         let hit = !q || text(r).toLowerCase().includes(q)
         for (let p = r.parentKey; !hit && p; p = byKey.get(p)!.parentKey) hit = text(byKey.get(p)!).toLowerCase().includes(q)
@@ -118,7 +196,7 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
       out.push(r)
     }
     return out
-  }, [tree, byKey, search, pkg, onlyBalance, onlySelected, filtering, collapsed, expanded, depth, onlySelected && selection?.value]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tree, byKey, search, pkg, onlyBalance, onlySelected, filtering, collapsed, expanded, depth, filters, onlySelected && selection?.value]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shownLines = visible.filter((r): r is LineRow => r.kind === 'line')
   const allLines = tree.filter((r): r is LineRow => r.kind === 'line')
@@ -229,6 +307,11 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
             </button>
           ))}
         </div>
+        {columnFilters > 0 && (
+          <Button size="sm" variant="ghost" icon={<FilterX className="size-4" />} onClick={() => setFilters({})}>
+            Limpar filtros ({columnFilters})
+          </Button>
+        )}
         {selectable && (
           <div className="inline-flex items-center gap-1.5 rounded-control border border-border bg-surface pl-2">
             <Percent className="size-3.5 text-ink-400" aria-hidden />
@@ -257,17 +340,19 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
         <div className="tabular min-w-max text-sm" role="table" aria-label="Orçamento da obra" aria-rowcount={visible.length}>
           <div role="row" className={cn('sticky top-0 z-10 grid border-b border-border bg-ink-50', cols)}>
             {selectable && <span role="columnheader" className={hd} aria-label="Marcar" />}
-            <span role="columnheader" className={hd}>Item</span>
-            <span role="columnheader" className={hd}>Código</span>
-            <span role="columnheader" className={hd}>Descrição</span>
-            <span role="columnheader" className={hd}>Unid</span>
-            <span role="columnheader" className={cn(hd, 'text-right')}>Quantidade</span>
-            <span role="columnheader" className={cn(hd, 'text-right')}>Custo Unit.</span>
-            <span role="columnheader" className={cn(hd, 'text-right')}>Custo Total</span>
-            <span role="columnheader" className={hd}>Vínculo PL</span>
-            <span role="columnheader" className={hd}>Classificação</span>
-            <span role="columnheader" className={hd}>Comprometido em</span>
-            <span role="columnheader" className={cn(hd, 'text-right')}>Livre</span>
+            {([
+              ['item', 'Item'], ['code', 'Código'], ['description', 'Descrição'], ['unit', 'Unid'], ['quantity', 'Quantidade'],
+              ['unitCost', 'Custo Unit.'], ['total', 'Custo Total'], ['package', 'Vínculo PL'], ['classification', 'Classificação'],
+              ['usage', 'Comprometido em'], ['free', 'Livre'],
+            ] as [ColKey, string][]).map(([k, label]) => {
+              const numeric = NUMERIC.includes(k)
+              return (
+                <span key={k} role="columnheader" className={cn(hd, 'flex items-center', numeric && 'justify-end')}>
+                  <span className="truncate">{label}</span>
+                  <ColumnFilter label={label} numeric={numeric} values={numeric ? undefined : distinct[k]} filter={filters[k]} onChange={setFilter(k)} align={numeric ? 'right' : 'left'} />
+                </span>
+              )
+            })}
             {selectable && <span role="columnheader" className={cn(hd, PIN_SHARE, 'text-right text-primary')}>% a consumir</span>}
             {selectable && <span role="columnheader" className={cn(hd, PIN_VALUE, 'text-right text-primary')}>Verba puxada</span>}
           </div>
@@ -280,6 +365,7 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
                 top={(start + i) * ROW_H}
                 open={filtering || isOpen(r)}
                 onToggle={() => toggle(r)}
+                onEditPlanning={planning ? setEditingLine : undefined}
                 select={
                   selection &&
                   (r.kind === 'line'
@@ -298,6 +384,7 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
           {visible.length === 0 && <p className="px-5 py-8 text-center text-sm text-text-muted">Nenhuma linha encontrada.</p>}
         </div>
       </div>
+      {planning && editingLine && <LinePlanningDialog line={editingLine} planning={planning} onClose={() => setEditingLine(null)} />}
       <div className="tabular flex flex-wrap items-center justify-end gap-x-6 gap-y-1 border-t border-border bg-ink-50 px-5 py-2 text-sm">
         <span className="text-text-muted">{footer.count.toLocaleString('pt-BR')} insumo(s){filtering && ' filtrados'}</span>
         <span>Custo total <strong>{formatBRL(footer.total)}</strong></span>
@@ -317,7 +404,7 @@ type RowSelect =
   | { kind: 'line'; share: string | undefined; disabled: boolean; onCheck: (on: boolean) => void; onShare: (v: string) => void }
   | { kind: 'block'; ls: LineRow[]; pickable: LineRow[]; chosen: LineRow[]; pulled: Decimal; onCheck: (on: boolean) => void; onShare: (v: string) => void }
 
-function TreeRow({ r, cols, top, open, onToggle, select }: { r: Row; cols: string; top: number; open: boolean; onToggle: () => void; select?: RowSelect }) {
+function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning }: { r: Row; cols: string; top: number; open: boolean; onToggle: () => void; select?: RowSelect; onEditPlanning?: (l: BudgetLineUsageDTO) => void }) {
   const cell = 'min-w-0 truncate px-2'
   const indent = { paddingLeft: `${0.5 + r.level * 0.9}rem` }
   const chevron = (
@@ -404,7 +491,20 @@ function TreeRow({ r, cols, top, open, onToggle, select }: { r: Row; cols: strin
       <span className={cn(cell, 'text-right')}>{formatQuantity(l.quantity)}</span>
       <span className={cn(cell, 'text-right')}>{formatDecimal(l.unitCost, 2)}</span>
       <span className={cn(cell, 'text-right text-text')}>{formatBRL(l.total)}</span>
-      <span className={cn(cell, 'text-xs font-medium')}>{l.packageCode ?? EMPTY}</span>
+      {onEditPlanning ? (
+        <button
+          type="button"
+          onClick={() => onEditPlanning(l)}
+          title={l.packageManual ? 'IP escolhido à mão — clique para trocar' : 'Escolher o vínculo de planejamento (IP)'}
+          className={cn('group/ip mx-1 flex min-w-0 items-center gap-1 rounded px-1 text-left text-xs font-medium hover:bg-ink-100', l.packageManual && 'text-primary')}
+        >
+          <span className="truncate">{l.packageCode ?? EMPTY}</span>
+          {l.packageManual && <Badge tone="primary" className="px-1 py-0 text-[9px]">M</Badge>}
+          <Pencil className="size-3 shrink-0 text-ink-400 opacity-0 group-hover/ip:opacity-100" aria-hidden />
+        </button>
+      ) : (
+        <span className={cn(cell, 'text-xs font-medium')}>{l.packageCode ?? EMPTY}{l.packageManual && <Badge tone="primary" className="ml-1 px-1 py-0 text-[9px]">M</Badge>}</span>
+      )}
       <span className={cn(cell, 'text-xs')} title={l.packageDescription ?? undefined}>{l.packageDescription ?? EMPTY}</span>
       <span className={cn(cell, 'flex gap-1')}>
         {l.usage.length ? (
@@ -524,4 +624,59 @@ function Aggregate({ total, committed }: { total: Decimal; committed: Decimal })
 function Free({ total, committed }: { total: Decimal; committed: Decimal }) {
   const free = total.minus(committed)
   return <span className={cn('truncate px-2 text-right text-xs font-normal', free.isNegative() ? 'text-error' : 'text-text-muted')}>{formatBRL(free)}</span>
+}
+
+/** Escolha do IP de uma linha do orçamento (lista de IPs da obra) */
+function LinePlanningDialog({ line, planning, onClose }: { line: BudgetLineUsageDTO; planning: BudgetTreePlanning; onClose: () => void }) {
+  const [code, setCode] = useState<string | null>(line.packageCode)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const options = useMemo(() => {
+    const list = planning.options.map((c) => ({ value: c.code, label: `${c.code} — ${c.description}`, keywords: c.code }))
+    if (line.packageCode && !list.some((o) => o.value === line.packageCode)) {
+      list.unshift({ value: line.packageCode, label: `${line.packageCode} — ${line.packageDescription ?? ''}`, keywords: line.packageCode })
+    }
+    return list
+  }, [planning.options, line])
+  const save = async (value: { code: string; description: string | null } | null) => {
+    setSaving(true)
+    setError(null)
+    try {
+      await planning.onSet(line, value)
+      onClose()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      width="min(94vw, 34rem)"
+      title="Vínculo de planejamento da linha"
+      description={`${line.activityWbs} · ${line.code} — ${line.description}`}
+      footer={
+        <>
+          {line.packageManual && (
+            <Button variant="ghost" className="mr-auto" disabled={saving} onClick={() => save(null)}>Voltar ao IP da planilha</Button>
+          )}
+          <Button variant="ghost" className={line.packageManual ? undefined : 'mr-auto'} onClick={onClose}>Cancelar</Button>
+          <Button
+            variant="primary"
+            loading={saving}
+            disabled={!code || code === line.packageCode}
+            onClick={() => save({ code: code!, description: planning.options.find((o) => o.code === code)?.description ?? null })}
+          >
+            Salvar
+          </Button>
+        </>
+      }
+    >
+      <Field label="IP" hint={planning.warning ?? 'Vale para as próximas versões do orçamento e para os QCs em rascunho.'} error={error}>
+        <Combobox options={options} value={code} onChange={setCode} loading={planning.loading} placeholder="Buscar IP por código ou descrição…" aria-label="IP da linha" />
+      </Field>
+    </Dialog>
+  )
 }

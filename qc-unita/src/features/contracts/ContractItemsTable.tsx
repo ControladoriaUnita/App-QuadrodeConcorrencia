@@ -1,6 +1,7 @@
 /**
  * 2. Especificação dos serviços contratados: insumo, especificação, % retenção, quantidade, preço e
- * vínculos (IP · Qtd · Valor). Rodapé com os totais da planilha (orçado, verba, a contratar, resultado).
+ * vínculos (IP · Qtd · Valor). Abaixo de cada insumo, os insumos referência (do orçamento) usados
+ * para compará-lo no QC, com seus IPs e verba. Rodapé com os totais da planilha.
  */
 import { useState } from 'react'
 import type { ContractRequestDTO, UpdateContractItemInput } from '@shared/contracts'
@@ -20,7 +21,7 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
     <Card>
       <CardHeader
         title="2. Especificação dos serviços contratados"
-        description={`${c.items.length} item(ns) · preços da vencedora na ${c.competition.code}; vínculos de planejamento por IP`}
+        description={`${c.items.length} item(ns) · preços da vencedora na ${c.competition.code}; vínculos de planejamento por IP (herdados das referências ou escolhidos no mapa)`}
       />
       <div className="max-h-[calc(100dvh-14rem)] overflow-auto">
         <table className="tabular w-full border-separate border-spacing-0 text-sm">
@@ -41,6 +42,15 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
                 <td className={cn(td, 'max-w-80')}>
                   <p className="truncate font-medium" title={i.description}>{i.description}</p>
                   <p className="text-[11px] leading-4 text-text-muted">{i.code}</p>
+                  {i.references.length > 0 && (
+                    <ul className="mt-1 grid gap-0.5 border-l-2 border-border pl-2 text-[11px] leading-4 text-text-muted">
+                      {i.references.map((r) => (
+                        <li key={r.code} className="truncate" title={`${r.code} — ${r.description} · ${r.packageCodes.join(', ') || 'sem IP'} · verba ${formatBRL(r.budget)}`}>
+                          Ref. {r.code} · {r.packageCodes.join(', ') || 'sem IP'} · verba {formatBRL(r.budget)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </td>
                 <td className={td}>
                   {editable ? (

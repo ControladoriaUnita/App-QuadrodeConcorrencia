@@ -240,6 +240,37 @@ describe('obra e vínculos de planejamento', () => {
     expect((await call('DELETE', `/revisions/${before.revision.id}/items/${newItem.id}`)).status).toBe(200)
   })
 
+  it('IPs e insumos da obra; IP manual numa linha vale no orçamento e nos QCs em rascunho', async () => {
+    const works = (await call<{ id: string; code: string }[]>('GET', '/works')).data
+    const alpha = works.find((w) => w.code === '2041')!
+    const ips = await call<{ source: string; items: { code: string; description: string }[] }>('GET', `/works/${alpha.id}/planning-codes`)
+    expect(ips.status).toBe(200)
+    expect(ips.data.source).toBe('budget') // modo demonstração: sem UAU, vem do orçamento importado
+    expect(ips.data.items.length).toBeGreaterThan(3)
+    expect(ips.data.items.every((i) => i.code.startsWith('IP'))).toBe(true)
+    const mats = await call<{ items: { code: string }[] }>('GET', `/works/${alpha.id}/work-materials`)
+    expect(mats.data.items.some((m) => m.code.startsWith('IM'))).toBe(true)
+
+    const all = (await call<CompetitionListItemDTO[]>('GET', '/competitions')).data
+    const pav = all.find((c) => c.title.startsWith('Pavimentação'))!
+    const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${pav.id}`)
+    const link = d.links[0]!
+    const target = ips.data.items.find((i) => i.code !== link.packageCode)!
+    const r = await call('PUT', `/works/${alpha.id}/budget-lines/planning`, { lineKey: link.lineKey, code: target.code, description: target.description })
+    expect(r.status).toBe(200)
+    const line = (await call<BudgetLineUsageDTO[]>('GET', `/works/${alpha.id}/budget-lines`)).data.find((l) => l.lineKey === link.lineKey)!
+    expect(line.packageCode).toBe(target.code)
+    expect(line.packageManual).toBe(true)
+    const { data: after } = await call<CompetitionDetailDTO>('GET', `/competitions/${pav.id}`)
+    expect(after.links.find((l) => l.id === link.id)!.packageCode).toBe(target.code)
+    // Voltar ao IP da planilha
+    await call('PUT', `/works/${alpha.id}/budget-lines/planning`, { lineKey: link.lineKey, code: null })
+    const back = (await call<BudgetLineUsageDTO[]>('GET', `/works/${alpha.id}/budget-lines`)).data.find((l) => l.lineKey === link.lineKey)!
+    expect(back.packageCode).toBe(link.packageCode)
+    expect(back.packageManual).toBe(false)
+    expect((await call('PUT', `/works/${alpha.id}/budget-lines/planning`, { lineKey: 'nao-existe', code: 'IP1' })).status).toBe(404)
+  })
+
   it('inclui linha com % escolhido e respeita o saldo livre entre QCs', async () => {
     const works = (await call<{ id: string; code: string }[]>('GET', '/works')).data
     const alpha = works.find((w) => w.code === '2041')!
