@@ -51,8 +51,7 @@ const REVISION_COLS = `id, number, status, reason, serviceStartOn:service_start_
   engineeringNotes:engineering_notes, procurementNotes:procurement_notes, contractTypeId:contract_type_id,
   winnerSupplierId:winner_supplier_id, winnerJustification:winner_justification, submittedAt:submitted_at,
   decidedAt:decided_at, frozenAt:frozen_at, snapshotHash:snapshot_hash, createdAt:created_at, competitionId:competition_id`
-const ITEM_COLS = `id, sortOrder:sort_order, materialId:material_id, code, description, unit,
-  budgetQuantity:budget_quantity::text, budgetUnitCost:budget_unit_cost::text, quantity:quantity::text,
+const ITEM_COLS = `id, sortOrder:sort_order, materialId:material_id, code, description, unit, quantity:quantity::text,
   scopeDescription:scope_description, contractNotes:contract_notes, pctMaterial:pct_material::text,
   pctEquipment:pct_equipment::text, pctRetention:pct_retention::text, origin, planningCode:planning_code,
   planningDescription:planning_description, competition_item_references(reference_id)`
@@ -60,7 +59,7 @@ const REF_COLS = 'id, sortOrder:sort_order, materialId:material_id, code, descri
 const CS_COLS = `id, supplierId:supplier_id, sortOrder:sort_order, status, legalName:legal_name, tradeName:trade_name, taxId:tax_id,
   contactName:contact_name, phone, email, cndValidUntil:cnd_valid_until, deliveryTerms:delivery_terms,
   paymentTerms:payment_terms, readjustmentTerms:readjustment_terms, notes, strengths, weaknesses,
-  supplier_proposals(id, proposalRef:proposal_ref, receivedOn:received_on, validUntil:valid_until)`
+  supplier_proposals(id, proposalRef:proposal_ref, receivedOn:received_on, validUntil:valid_until), suppliers!supplier_id(is_placeholder)`
 
 const LINK_COLS = `id, referenceId:reference_id, activityItemId:activity_item_id, lineKey:line_key, materialId:material_id, packageCode:package_code, packageDescription:package_description,
   quantity:quantity::text, share:budget_share::text, budgetValue:budget_value::text, budgetUnitCost:budget_unit_cost::text, awardedUnitPrice:awarded_unit_price::text, awardedTotal:awarded_total::text`
@@ -99,9 +98,9 @@ function toWork(w: Json): WorkDTO {
 }
 
 const LINE_SELECT = `id, lineKey:line_key, quantity:quantity::text, unitCost:unit_cost::text, total:total_cost::text,
-  packageCode:package_code, packageDescription:package_description, packageManual:package_manual, sortOrder:sort_order,
+  packageCode:package_code, packageDescription:package_description, sortOrder:sort_order,
   aux_code, aux_description, aux_unit, aux_coefficient:aux_coefficient::text, aux_unit_cost:aux_unit_cost::text,
-  activities(wbs_code, composition_code, description), materials(id, code, description, unit)`
+  activities(wbs_code, composition_code, description), materials(id, code, description, unit), budgets(work_id)`
 
 function toLine(r: Json): BudgetLineDTO {
   const a = r.activities as { wbs_code: string; composition_code: string | null; description: string } | null
@@ -118,7 +117,7 @@ function toLine(r: Json): BudgetLineDTO {
     unit: m.unit,
     packageCode: (r.packageCode as string) ?? null,
     packageDescription: (r.packageDescription as string) ?? null,
-    packageManual: r.packageManual === true,
+    packageManual: false,
     quantity: r.quantity as string,
     unitCost: r.unitCost as string,
     total: r.total as string,
@@ -234,52 +233,42 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
     return rows.map(({ roles, ...a }) => ({ ...a, roleName: roles?.name ?? '', decidedByName: names.find((n) => n.id === a.decidedById)?.full_name ?? null }))
   }
 
+  /** Próximo sort_order livre de uma tabela filha da revisão */
+  const nextSortOrder = async (table: 'competition_items' | 'competition_references', revisionId: string): Promise<number> => {
+    const last = must(await db.from(table).select('sort_order').eq('revision_id', revisionId).order('sort_order', { ascending: false }).limit(1)) as { sort_order: number }[]
+    return (last[0]?.sort_order ?? 0) + 1
+  }
+
+  /** Ligações insumo do mapa ↔ referência, em lote */
+  const insertItemReferences = async (revisionId: string, pairs: (readonly [string, string])[]) => {
+    for (const part of chunk(pairs, 500)) {
+      must(await db.from('competition_item_references').insert(part.map(([itemId, referenceId]) => ({ revision_id: revisionId, competition_item_id: itemId, reference_id: referenceId }))))
+    }
+  }
+
   /** Insumos referência e suas linhas do orçamento */
   const insertReferences = async (revisionId: string, refs: AggregatedInput[]): Promise<string[]> => {
     if (!refs.length) return []
-    const current = must(await db.from('competition_references').select('sort_order').eq('revision_id', revisionId).order('sort_order', { ascending: false }).limit(1)) as { sort_order: number }[]
-    const base = current[0]?.sort_order ?? 0
+    const base = await nextSortOrder('competition_references', revisionId)
     const inserted = must(await db.from('competition_references').insert(
-      refs.map((r, k) => ({ revision_id: revisionId, material_id: r.materialId, sort_order: base + k + 1, code: r.code, description: r.description, unit: r.unit })),
+      refs.map((r, k) => ({ revision_id: revisionId, material_id: r.materialId, sort_order: base + k, code: r.code, description: r.description, unit: r.unit })),
     ).select('id, sort_order')) as { id: string; sort_order: number }[]
-    const ids = refs.map((_, k) => inserted.find((x) => x.sort_order === base + k + 1)!.id)
+    const idByOrder = new Map(inserted.map((x) => [x.sort_order, x.id]))
+    const ids = refs.map((_, k) => idByOrder.get(base + k)!)
     const links = refs.flatMap((r, k) => r.links.map((l, li) => linkRow(revisionId, ids[k]!, l, li)))
     for (const part of chunk(links, 500)) must(await db.from('competition_item_links').insert(part))
     return ids
   }
 
-  /**
-   * Aplica o IP manual (ou devolve o da planilha) nas linhas do orçamento da obra com a chave dada
-   * e nas linhas puxadas pelos QCs em rascunho. Retorna quantas linhas do orçamento mudaram.
-   */
-  const applyLinePlanning = async (workId: string, lineKey: string): Promise<number> => {
-    const manual = must(await service.from('budget_line_planning').select('package_code, package_description').eq('work_id', workId).eq('line_key', lineKey).maybeSingle()) as
-      { package_code: string; package_description: string | null } | null
-    const budgets = (must(await service.from('budgets').select('id').eq('work_id', workId)) as { id: string }[]).map((b) => b.id)
-    if (!budgets.length) return 0
-    const rows = must(await service.from('activity_items')
-      .select('id, package_code, package_description, package_manual, original_package_code, original_package_description')
-      .in('budget_id', budgets).eq('line_key', lineKey)) as
-      { id: string; package_code: string | null; package_description: string | null; package_manual: boolean; original_package_code: string | null; original_package_description: string | null }[]
-    let current: { code: string | null; description: string | null } | null = null
-    for (const r of rows) {
-      const original = r.package_manual ? { code: r.original_package_code, description: r.original_package_description } : { code: r.package_code, description: r.package_description }
-      const next = manual
-        ? { package_code: manual.package_code, package_description: manual.package_description, package_manual: true, original_package_code: original.code, original_package_description: original.description }
-        : { package_code: original.code, package_description: original.description, package_manual: false, original_package_code: null, original_package_description: null }
-      must(await service.from('activity_items').update(next).eq('id', r.id))
-      current = { code: next.package_code, description: next.package_description }
+  /** IP manual das linhas (budget_line_planning) por obra → chave da linha */
+  const manualPlanning = async (workIds: string[]) => {
+    const out = new Map<string, { code: string; description: string | null }>()
+    for (const part of chunk([...new Set(workIds)], 100)) {
+      const rows = must(await db.from('budget_line_planning').select('work_id, line_key, package_code, package_description').in('work_id', part)) as
+        { work_id: string; line_key: string; package_code: string; package_description: string | null }[]
+      for (const r of rows) out.set(`${r.work_id}|${r.line_key}`, { code: r.package_code, description: r.package_description })
     }
-    if (current) {
-      const comps = (must(await db.from('competitions').select('id').eq('work_id', workId)) as { id: string }[]).map((c) => c.id)
-      const drafts = comps.length
-        ? (must(await db.from('competition_revisions').select('id').in('competition_id', comps).eq('status', 'draft').is('frozen_at', null)) as { id: string }[]).map((r) => r.id)
-        : []
-      if (drafts.length) {
-        must(await db.from('competition_item_links').update({ package_code: current.code, package_description: current.description }).in('revision_id', drafts).eq('line_key', lineKey))
-      }
-    }
-    return rows.length
+    return out
   }
 
   return {
@@ -359,7 +348,8 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           id: r.id as string, lineKey: r.line_key as string, activityWbs: r.activity_wbs as string, activityCode: (r.activity_code as string) ?? null,
           activityDescription: r.activity_description as string, materialId: r.material_id as string, code: r.code as string,
           description: r.description as string, unit: r.unit as string, packageCode: (r.package_code as string) ?? null,
-          packageDescription: (r.package_description as string) ?? null, quantity: r.quantity as string, unitCost: r.unit_cost as string, total: r.total as string,
+          packageDescription: (r.package_description as string) ?? null, packageManual: r.package_manual === true,
+          quantity: r.quantity as string, unitCost: r.unit_cost as string, total: r.total as string,
           aux: auxOf(r),
         }))
       },
@@ -387,15 +377,28 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         }
       },
       async getBudgetLines(ids) {
-        const out: BudgetLineDTO[] = []
-        for (const part of chunk(ids, 150)) out.push(...(must(await db.from('activity_items').select(LINE_SELECT).in('id', part)) as Json[]).map(toLine))
-        return out
+        const rows: Json[] = []
+        for (const part of chunk(ids, 150)) rows.push(...(must(await db.from('activity_items').select(LINE_SELECT).in('id', part)) as Json[]))
+        // IP manual da obra no lugar do IP da planilha (como em qc_budget_lines)
+        const workOf = (r: Json) => (r.budgets as { work_id: string }).work_id
+        const manual = await manualPlanning(rows.map(workOf))
+        return rows.map((r) => {
+          const line = toLine(r)
+          const m = manual.get(`${workOf(r)}|${line.lineKey}`)
+          return m ? { ...line, packageCode: m.code, packageDescription: m.description, packageManual: true } : line
+        })
       },
       async findMaterialIdByCode(code) {
         const r = must(await db.from('materials').select('id').eq('code', code).maybeSingle()) as { id: string } | null
         return r?.id ?? null
       },
       async setLinePlanning(workId, lineKey, planning) {
+        const work = must(await db.from('works').select('budgets(id, is_current)').eq('id', workId).maybeSingle()) as { budgets: { id: string; is_current: boolean }[] } | null
+        const current = work?.budgets.find((b) => b.is_current)
+        if (!current) return null
+        const lines = must(await db.from('activity_items').select('package_code, package_description').eq('budget_id', current.id).eq('line_key', lineKey).limit(1)) as
+          { package_code: string | null; package_description: string | null }[]
+        if (!lines.length) return null
         if (planning) {
           must(await service.from('budget_line_planning').upsert(
             { work_id: workId, line_key: lineKey, package_code: planning.code, package_description: planning.description, updated_at: new Date().toISOString() },
@@ -404,7 +407,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         } else {
           must(await service.from('budget_line_planning').delete().eq('work_id', workId).eq('line_key', lineKey))
         }
-        return applyLinePlanning(workId, lineKey)
+        return planning ?? { code: lines[0]!.package_code, description: lines[0]!.package_description }
       },
     },
 
@@ -472,9 +475,9 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         const revision = must(rev) as unknown as (RevisionDTO & { competitionId: string }) | null
         if (!revision) return null
 
-        const supRows = must(sups) as unknown as (Json & { supplier_proposals: Json[] | Json | null })[]
+        const supRows = must(sups) as unknown as (Json & { supplier_proposals: Json[] | Json | null; suppliers: { is_placeholder: boolean } | null })[]
         const proposalIds: string[] = []
-        const suppliers: QcSupplierDTO[] = supRows.map(({ supplier_proposals, ...s }) => {
+        const suppliers: QcSupplierDTO[] = supRows.map(({ supplier_proposals, suppliers: catalog, ...s }) => {
           const p = (Array.isArray(supplier_proposals) ? supplier_proposals[0] : supplier_proposals) ?? null
           if (p) proposalIds.push(p.id as string)
           return {
@@ -482,6 +485,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
             proposalRef: (p?.proposalRef as string) ?? null,
             proposalReceivedOn: (p?.receivedOn as string) ?? null,
             proposalValidUntil: (p?.validUntil as string) ?? null,
+            isPlaceholder: catalog?.is_placeholder === true,
           }
         })
         const priceRows = proposalIds.length
@@ -649,34 +653,35 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
       },
 
       async addItems(revisionId, items) {
-        const current = must(await db.from('competition_items').select('sort_order').eq('revision_id', revisionId).order('sort_order', { ascending: false }).limit(1)) as { sort_order: number }[]
-        let order = current[0]?.sort_order ?? 0
-        const ids: string[] = []
-        for (const i of items) {
-          const row = must(await db.from('competition_items').insert({
-            revision_id: revisionId, material_id: i.materialId, sort_order: ++order, code: i.code, description: i.description,
-            unit: i.unit, budget_quantity: i.quantity, budget_unit_cost: i.budgetUnitCost ?? '0', quantity: i.quantity,
-            origin: i.origin, planning_code: i.planningCode, planning_description: i.planningDescription,
-          }).select('id').single()) as { id: string }
-          const refs = [...new Set(i.referenceIds)]
-          if (refs.length) {
-            must(await db.from('competition_item_references').insert(refs.map((r) => ({ revision_id: revisionId, competition_item_id: row.id, reference_id: r }))))
-          }
-          ids.push(row.id)
-        }
+        if (!items.length) return []
+        const base = await nextSortOrder('competition_items', revisionId)
+        const inserted = must(await db.from('competition_items').insert(
+          items.map((i, k) => ({
+            revision_id: revisionId, material_id: i.materialId, sort_order: base + k, code: i.code, description: i.description,
+            unit: i.unit, quantity: i.quantity, origin: i.origin, planning_code: i.planningCode, planning_description: i.planningDescription,
+          })),
+        ).select('id, sort_order')) as { id: string; sort_order: number }[]
+        const idByOrder = new Map(inserted.map((x) => [x.sort_order, x.id]))
+        const ids = items.map((_, k) => idByOrder.get(base + k)!)
+        await insertItemReferences(revisionId, items.flatMap((i, k) => [...new Set(i.referenceIds)].map((r) => [ids[k]!, r] as const)))
         return ids
       },
 
       async setItemReferences(revisionId, itemId, referenceIds) {
         must(await db.from('competition_item_references').delete().eq('competition_item_id', itemId))
-        const refs = [...new Set(referenceIds)]
-        if (refs.length) {
-          must(await db.from('competition_item_references').insert(refs.map((r) => ({ revision_id: revisionId, competition_item_id: itemId, reference_id: r }))))
-        }
+        await insertItemReferences(revisionId, [...new Set(referenceIds)].map((r) => [itemId, r] as const))
       },
 
       async removeItem(itemId) {
         must(await db.from('competition_items').delete().eq('id', itemId))
+      },
+
+      async setDraftLinksPlanning(workId, lineKey, planning) {
+        const drafts = must(await db.from('competition_revisions').select('id, competitions!competition_id!inner(work_id)')
+          .eq('competitions.work_id', workId).eq('status', 'draft').is('frozen_at', null)) as { id: string }[]
+        if (!drafts.length) return
+        must(await db.from('competition_item_links').update({ package_code: planning.code, package_description: planning.description })
+          .in('revision_id', drafts.map((r) => r.id)).eq('line_key', lineKey))
       },
 
       async workCommitments(workId) {
@@ -873,9 +878,6 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         const { total, count } = await writeBudgetLines(service, budget.id, { groups: input.groups, activities: input.activities, items: input.lines })
         must(await service.from('budgets').update({ is_current: false, status: 'superseded' }).eq('work_id', workId).eq('is_current', true))
         must(await service.from('budgets').update({ is_current: true, status: 'active', total_amount: total.toDb(), lines_count: count }).eq('id', budget.id))
-        // IPs escolhidos à mão continuam valendo na versão nova (pela chave da linha)
-        const manual = must(await service.from('budget_line_planning').select('line_key').eq('work_id', workId)) as { line_key: string }[]
-        for (const m of manual) await applyLinePlanning(workId, m.line_key)
         if (meta.sheet) {
           must(await service.from('works').update({
             uau_company_code: meta.sheet.company, uau_work_code: meta.sheet.work, uau_budget_number: meta.sheet.budget,

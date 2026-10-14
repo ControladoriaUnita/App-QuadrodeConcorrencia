@@ -108,7 +108,7 @@ export class UauERPProvider implements ERPProvider {
   }
 
   /**
-   * Insumos do orçamento da obra (Cod_ins · Descr_ins · CodUn_InsO · Categ_ins · Desc_cger), sem
+   * Insumos do orçamento da obra (Cod_ins · Descr_ins · CodUn_InsO), sem
    * quantidade nem preço. ~2 s para ~640 insumos; os IPs são os de código "IP…".
    */
   listWorkMaterials(key: { company: string; work: string; budget: string }): Promise<ErpWorkMaterial[]> {
@@ -122,8 +122,6 @@ export class UauERPProvider implements ERPProvider {
           code: str(r.Cod_ins).toUpperCase(),
           description: str(r.Descr_ins),
           unit: str(r.CodUn_InsO) || str(r.CodUn_UnIns),
-          category: str(r.Categ_ins) || null,
-          groupDescription: str(r.Desc_cger) || null,
         }))
         .filter((m) => m.code && !seen.has(m.code) && seen.add(m.code))
         .sort((a, b) => a.code.localeCompare(b.code))

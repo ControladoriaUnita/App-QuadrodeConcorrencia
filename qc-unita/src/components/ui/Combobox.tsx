@@ -6,6 +6,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { fold, matchesTerms, searchTerms } from '@/utils/search'
 import { controlClass } from './Input'
 import { Spinner } from './Spinner'
 
@@ -42,8 +43,6 @@ export interface ComboboxProps {
   'aria-invalid'?: boolean
 }
 
-/** Minúsculas e sem acentos: "Edifício" casa com "edificio". */
-const fold = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 
 interface Popup {
   left: number
@@ -82,12 +81,9 @@ export function Combobox({
 
   const selected = options.find((o) => o.value === value) ?? null
   const matches = useMemo(() => {
-    const terms = fold(query).split(/\s+/).filter(Boolean)
+    const terms = searchTerms(query)
     if (!terms.length || onQueryChange) return options
-    return options.filter((o) => {
-      const text = fold(`${o.label} ${o.keywords ?? ''}`)
-      return terms.every((t) => text.includes(t))
-    })
+    return options.filter((o) => matchesTerms(fold(`${o.label} ${o.keywords ?? ''}`), terms))
   }, [options, query, onQueryChange])
   useEffect(() => {
     if (!onQueryChange) return

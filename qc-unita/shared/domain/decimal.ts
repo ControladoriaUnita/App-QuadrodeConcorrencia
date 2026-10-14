@@ -48,6 +48,15 @@ export class Decimal {
    *   "1.234,56" → 1234.56 · "1234,56" → 1234.56 · "R$ 150.000" → 150000
    *   "12,5%" → 12.5 · "-3,2" → -3.2 · "1234.56" (ponto decimal único com 1-2 casas) → 1234.56
    */
+  /** parseBR que devolve null em vez de lançar erro (validação de campos) */
+  static tryParseBR(input: string): Decimal | null {
+    try {
+      return Decimal.parseBR(input)
+    } catch {
+      return null
+    }
+  }
+
   static parseBR(input: string): Decimal {
     let s = input.trim().replace(/R\$\s?/i, '').replace(/%$/, '').replace(/\s/g, '')
     if (s === '') throw new RangeError('Valor vazio')

@@ -130,10 +130,8 @@ route('DELETE', '/revisions/:rid/references/:refId', async ({ repos, ctx, params
   await qc.removeReference(repos, ctx, parse(uuidParam, params.rid), parse(uuidParam, params.refId))
   return { ok: true }
 })
-route('POST', '/revisions/:rid/lines', async ({ repos, ctx, params, body }) => {
-  const input = parse(addLinesSchema, await body())
-  return qc.addLines(repos, ctx, parse(uuidParam, params.rid), input.lineIds, input.shares, input.fillMap)
-})
+route('POST', '/revisions/:rid/lines', async ({ repos, ctx, params, body }) =>
+  qc.addLines(repos, ctx, parse(uuidParam, params.rid), parse(addLinesSchema, await body())))
 route('POST', '/revisions/:rid/items', async ({ repos, ctx, params, body }) =>
   qc.addQcItem(repos, ctx, parse(uuidParam, params.rid), parse(addQcItemSchema, await body())), 201)
 route('POST', '/revisions/:rid/items/fill-from-references', async ({ repos, ctx, params }) => qc.fillFromReferences(repos, ctx, parse(uuidParam, params.rid)))

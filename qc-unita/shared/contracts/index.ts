@@ -125,9 +125,6 @@ export interface QcItemDTO {
   code: string
   description: string
   unit: string
-  /** Orçado do item (verba das referências rateada) — derivado, gravado pelo recálculo */
-  budgetQuantity: string
-  budgetUnitCost: string
   quantity: string
   scopeDescription: string | null
   contractNotes: string | null
@@ -173,6 +170,8 @@ export interface QcSupplierDTO {
   proposalRef: string | null
   proposalReceivedOn: string | null
   proposalValidUntil: string | null
+  /** "Sem Fornecedor" (quadros internos): sem CNPJ real nem CND */
+  isPlaceholder: boolean
 }
 
 export interface QcPriceDTO {
@@ -276,7 +275,6 @@ export interface BudgetLineUsageDTO extends BudgetLineDTO {
   usage: { competitionId: string; competitionCode: string; category: CommitmentCategory; quantity: string; share: string; budgetValue: string }[]
 }
 
-/** Amarração de um item do QC a uma linha do orçamento */
 /** Linha do orçamento puxada por um insumo referência (com seu IP) */
 export interface QcLinkDTO {
   id: string
@@ -500,6 +498,7 @@ export const addLinesSchema = z.object({
   /** Cada insumo referência novo já ganha seu insumo no mapa (1:1) */
   fillMap: z.boolean().optional(),
 })
+export type AddLinesInput = z.infer<typeof addLinesSchema>
 
 /** IP escolhido à mão para uma linha do orçamento (null volta ao IP da planilha) */
 export const setLinePlanningSchema = z.object({
@@ -513,7 +512,6 @@ export type SetLinePlanningInput = z.infer<typeof setLinePlanningSchema>
 export interface PlanningCodeDTO {
   code: string
   description: string
-  unit: string | null
 }
 
 /** Insumo da obra (para criar insumos no mapa) */
@@ -521,7 +519,6 @@ export interface WorkMaterialDTO {
   code: string
   description: string
   unit: string
-  category: string | null
 }
 
 /** Lista vinda da UAU ou, como alternativa, do orçamento importado */
@@ -765,6 +762,8 @@ export interface ContractPartyDTO {
   email: string | null
   cndValidUntil: string | null
   erpId: string | null
+  /** "Sem Fornecedor" (quadros internos): sem CNPJ real nem CND */
+  isPlaceholder: boolean
 }
 
 /** Vínculo de planejamento (IP) de um item do aditivo/distrato; quantidade com o sinal do item */

@@ -102,7 +102,7 @@ export function ContractForm({ c, saving, onSave }: { c: ContractRequestDTO; sav
                   {(suppliers.data ?? [])
                     .filter((s) => s.id !== c.supplier.id)
                     .map((s) => (
-                      <option key={s.id} value={s.id}>{s.tradeName || s.legalName} — {formatTaxId(s.taxId)}</option>
+                      <option key={s.id} value={s.id}>{s.tradeName || s.legalName}{s.isPlaceholder ? '' : ` — ${formatTaxId(s.taxId)}`}</option>
                     ))}
                 </Select>
               </Field>
@@ -229,11 +229,17 @@ function Party({ p, className }: { p: ContractPartyDTO; className?: string }) {
         <dt className="text-xs text-text-muted">Razão social</dt>
         <dd className="font-medium">{p.legalName}{p.tradeName && <span className="font-normal text-text-muted"> · {p.tradeName}</span>}</dd>
       </div>
-      <Info label="CNPJ" value={formatTaxId(p.taxId)} numeric />
-      <Info label="Contato" value={p.contactName ?? '—'} />
-      <Info label="Tel/Cel" value={p.phone ?? '—'} />
-      <Info label="E-mail" value={p.email ?? '—'} />
-      <Info label="Validade CND" value={formatDate(p.cndValidUntil)} />
+      {p.isPlaceholder ? (
+        <Info label="Contratado" value="Quadro interno, sem fornecedor externo" />
+      ) : (
+        <>
+          <Info label="CNPJ" value={formatTaxId(p.taxId)} numeric />
+          <Info label="Contato" value={p.contactName ?? '—'} />
+          <Info label="Tel/Cel" value={p.phone ?? '—'} />
+          <Info label="E-mail" value={p.email ?? '—'} />
+          <Info label="Validade CND" value={formatDate(p.cndValidUntil)} />
+        </>
+      )}
       <Info label="Código no ERP" value={p.erpId ?? '—'} />
     </dl>
   )

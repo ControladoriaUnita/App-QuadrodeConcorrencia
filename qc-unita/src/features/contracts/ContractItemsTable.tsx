@@ -3,10 +3,9 @@
  * vínculos (IP · Qtd · Valor). Abaixo de cada insumo, os insumos referência (do orçamento) usados
  * para compará-lo no QC, com seus IPs e verba. Rodapé com os totais da planilha.
  */
-import { useState } from 'react'
 import type { ContractRequestDTO, UpdateContractItemInput } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
-import { Card, CardHeader, DecimalInput } from '@/components/ui'
+import { Card, CardHeader, DecimalInput, InlineTextInput } from '@/components/ui'
 import { cn } from '@/utils/cn'
 import { formatBRL, formatPercent, formatQuantity } from '@/utils/format'
 
@@ -54,7 +53,7 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
                 </td>
                 <td className={td}>
                   {editable ? (
-                    <TextCell value={i.specification} label={`Especificação de ${i.code}`} onCommit={(v) => onUpdate(i.id, { specification: v })} />
+                    <InlineTextInput value={i.specification} label={`Especificação de ${i.code}`} onCommit={(v) => onUpdate(i.id, { specification: v })} />
                   ) : (
                     <span className="text-ink-700">{i.specification ?? '—'}</span>
                   )}
@@ -107,22 +106,5 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
         </table>
       </div>
     </Card>
-  )
-}
-
-function TextCell({ value, onCommit, label }: { value: string | null; onCommit: (v: string | null) => void; label: string }) {
-  const [text, setText] = useState(value ?? '')
-  return (
-    <input
-      aria-label={label}
-      value={text}
-      placeholder="—"
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => {
-        const v = text.trim() || null
-        if (v !== (value ?? null)) onCommit(v)
-      }}
-      className="h-8 w-full rounded-control border border-transparent bg-transparent px-2 text-sm placeholder:text-ink-300 hover:border-border focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20"
-    />
   )
 }

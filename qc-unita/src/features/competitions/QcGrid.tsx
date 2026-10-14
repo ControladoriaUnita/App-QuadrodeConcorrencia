@@ -15,7 +15,7 @@ import { Decimal } from '@shared/domain/decimal'
 import { lineTotal } from '@shared/domain/competition/best-condition'
 import type { QcMap } from '@shared/domain/competition/qc-map'
 import { computeDistribution } from '@shared/domain/contract/distribution'
-import { Badge, Button, ConfirmDialog, DecimalInput } from '@/components/ui'
+import { Badge, Button, ConfirmDialog, DecimalInput, InlineTextInput } from '@/components/ui'
 import { cn } from '@/utils/cn'
 import { EMPTY, formatBRL, formatDecimal, formatPercent, formatQuantity, formatVariation } from '@/utils/format'
 import { AddItemDialog, EditItemDialog } from './MapItemDialogs'
@@ -56,12 +56,15 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
   }, [detail.prices])
   const supplierById = new Map(suppliers.map((s) => [s.id, s]))
   const refById = new Map(detail.references.map((r) => [r.id, r]))
+  const domainItemById = useMemo(() => new Map(map.items.map((i) => [i.id, i])), [map.items])
   const winnerCsId = suppliers.find((s) => s.supplierId === detail.revision.winnerSupplierId)?.id
-  const unusedRefs = detail.references.filter((r) => !map.referenceUsage.get(r.id)?.length)
-  const dist = computeDistribution(
-    map.items.map((i) => ({ total: map.bestByItem.get(i.id)?.totalPrice ?? Decimal.ZERO, pctMaterial: i.pctMaterial, pctEquipment: i.pctEquipment })),
+  const unused = map.unusedReferenceIds
+  const dist = useMemo(
+    () => computeDistribution(map.items.map((i) => ({ total: map.bestByItem.get(i.id)?.totalPrice ?? Decimal.ZERO, pctMaterial: i.pctMaterial, pctEquipment: i.pctEquipment }))),
+    [map],
   )
-  const distCols = showDist ? 5 : 0
+  /** Colunas antes do orçado: insumo, unidade, quantidade, distribuição (se aberta) e IP */
+  const lead = 4 + (showDist ? 5 : 0)
 
   return (
     <div className="grid gap-2">
@@ -74,11 +77,11 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
             <Button
               size="sm"
               icon={<ListPlus className="size-4" />}
-              disabled={!unusedRefs.length || saving}
-              title={unusedRefs.length ? 'Cria um insumo no mapa para cada referência ainda sem uso' : 'Todas as referências já estão no mapa'}
+              disabled={!unused.length || saving}
+              title={unused.length ? 'Cria um insumo no mapa para cada referência ainda sem uso' : 'Todas as referências já estão no mapa'}
               onClick={onFill}
             >
-              Preencher com insumos referência{unusedRefs.length ? ` (${unusedRefs.length})` : ''}
+              Preencher com insumos referência{unused.length ? ` (${unused.length})` : ''}
             </Button>
           </>
         )}
@@ -154,7 +157,7 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
               </tr>
             )}
             {items.map((item) => {
-              const domainItem = map.items.find((i) => i.id === item.id)!
+              const domainItem = domainItemById.get(item.id)!
               const best = map.bestByItem.get(item.id)
               const budgetTotal = best?.budgetTotal ?? Decimal.ZERO
               const qty = domainItem.quantity
@@ -233,10 +236,10 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                         </td>
                       ))}
                       <td className={cn(td, 'px-1 text-left group-hover:bg-ink-50')}>
-                        <TextCell value={item.scopeDescription} disabled={!can.edit} label={`Especificação de ${item.code}`} onCommit={(v) => onUpdateItem(item.id, { scopeDescription: v })} />
+                        <InlineTextInput value={item.scopeDescription} disabled={!can.edit} label={`Especificação de ${item.code}`} onCommit={(v) => onUpdateItem(item.id, { scopeDescription: v })} />
                       </td>
                       <td className={cn(td, 'px-1 text-left group-hover:bg-ink-50')}>
-                        <TextCell value={item.contractNotes} disabled={!can.edit} label={`Observação de ${item.code}`} onCommit={(v) => onUpdateItem(item.id, { contractNotes: v })} />
+                        <InlineTextInput value={item.contractNotes} disabled={!can.edit} label={`Observação de ${item.code}`} onCommit={(v) => onUpdateItem(item.id, { contractNotes: v })} />
                       </td>
                     </>
                   )}
@@ -326,7 +329,7 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
           <tfoot className="font-semibold">
             <FooterRow
               label="Total equalizado"
-              before={3 + distCols + 1}
+              before={lead}
               budget={formatBRL(map.budgetTotal)}
               cells={suppliers.map((s) => {
                 const sum = map.summaryBySupplier.get(s.id)!
@@ -342,7 +345,7 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
             <FooterRow
               label="Resultado QC / Orçamento"
               hint="Verba disponível − total"
-              before={3 + distCols + 1}
+              before={lead}
               budget={formatBRL(map.available)}
               cells={suppliers.map((s) => {
                 const sum = map.summaryBySupplier.get(s.id)!
@@ -363,9 +366,9 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
           </tfoot>
         </table>
       </div>
-      {unusedRefs.length > 0 && (
+      {unused.length > 0 && (
         <p className="text-xs text-warning">
-          {unusedRefs.length} insumo(s) referência sem uso no mapa (verba {formatBRL(Decimal.sum(unusedRefs.map((r) => map.referenceBudget.get(r.id) ?? Decimal.ZERO)))}) — fora da comparação.
+          {unused.length} insumo(s) referência sem uso no mapa (verba {formatBRL(Decimal.sum(unused.map((id) => map.referenceBudget.get(id) ?? Decimal.ZERO)))}) — fora da comparação.
         </p>
       )}
 
@@ -399,23 +402,5 @@ function FooterRow({ label, hint, before, budget, cells, best }: { label: string
       {cells}
       {best}
     </tr>
-  )
-}
-
-function TextCell({ value, onCommit, disabled, label }: { value: string | null; onCommit: (v: string | null) => void; disabled: boolean; label: string }) {
-  const [text, setText] = useState(value ?? '')
-  return (
-    <input
-      aria-label={label}
-      value={text}
-      disabled={disabled}
-      placeholder="—"
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => {
-        const v = text.trim() || null
-        if (v !== (value ?? null)) onCommit(v)
-      }}
-      className="h-8 w-full rounded-control border border-transparent bg-transparent px-2 text-sm placeholder:text-ink-300 hover:border-border focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:hover:border-transparent"
-    />
   )
 }

@@ -10,9 +10,9 @@ import { Fragment, useMemo, useState } from 'react'
 import { ChevronRight, ListPlus, Trash2, Unlink } from 'lucide-react'
 import type { CompetitionDetailDTO, SetReferenceLinesInput } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
-import { consolidate } from '@shared/domain/planning/links'
+import { consolidate, lineBalances } from '@shared/domain/planning/links'
 import type { QcMap } from '@shared/domain/competition/qc-map'
-import { Badge, Button, Card, CardHeader, ConfirmDialog, ConsumptionMeter, DecimalInput, Dialog, Skeleton } from '@/components/ui'
+import { Badge, Button, Card, CardHeader, ConfirmDialog, ConsumptionMeter, DecimalInput, Dialog, SegmentedControl, Skeleton } from '@/components/ui'
 import { freeShare, pulledValue } from '@/features/works/BudgetLinesTable'
 import { BudgetTree } from '@/features/works/BudgetTree'
 import { useBudgetLines, useBudgetStructure } from '@/features/works/api'
@@ -45,29 +45,14 @@ export function LinksPanel({ detail, map, saving, adding, onSaveLines, onAddLine
   const [picking, setPicking] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
   const cons = useMemo(() => consolidate(detail.budgetLines, map.links, detail.otherCommitments), [detail.budgetLines, detail.otherCommitments, map.links])
+  const byMaterial = useMemo(() => new Map(cons.byMaterial.map((m) => [m.materialId, m])), [cons])
   const pulledTotal = Decimal.sum(detail.links.map((l) => l.budgetValue))
-  const unused = detail.references.filter((r) => !map.referenceUsage.get(r.id)?.length)
+  const unused = map.unusedReferenceIds
 
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <div role="radiogroup" aria-label="Visão" className="inline-flex rounded-control border border-border bg-surface p-0.5">
-          {VIEWS.map((v) => (
-            <button
-              key={v.key}
-              type="button"
-              role="radio"
-              aria-checked={view === v.key}
-              onClick={() => setView(v.key)}
-              className={cn(
-                'rounded-[calc(var(--radius-control)-2px)] px-3 py-1 text-sm font-medium whitespace-nowrap transition-colors',
-                view === v.key ? 'bg-secondary text-white' : 'text-ink-600 hover:text-text',
-              )}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="Visão" items={VIEWS} value={view} onChange={setView} />
         {unused.length > 0 && <Badge tone="warning">{unused.length} referência(s) sem uso no mapa de cotação</Badge>}
         <span className="tabular ml-auto text-sm text-text-muted">
           {detail.references.length} insumo(s) referência · verba puxada <span className="font-semibold text-text">{formatBRL(pulledTotal)}</span>
@@ -80,7 +65,7 @@ export function LinksPanel({ detail, map, saving, adding, onSaveLines, onAddLine
         <ReferencesView
           detail={detail}
           map={map}
-          byMaterial={new Map(cons.byMaterial.map((m) => [m.materialId, m]))}
+          byMaterial={byMaterial}
           saving={saving}
           onSaveLines={onSaveLines}
           onAdd={() => setPicking(true)}
@@ -118,8 +103,21 @@ export function LinksPanel({ detail, map, saving, adding, onSaveLines, onAddLine
 function PlanningView({ detail, map, packages }: { detail: CompetitionDetailDTO; map: QcMap; packages: ReturnType<typeof consolidate>['byPackage'] }) {
   const [open, setOpen] = useState<Set<string>>(new Set())
   const toggle = (code: string) => setOpen((s) => (s.has(code) ? (s.delete(code), new Set(s)) : new Set(s.add(code))))
-  const refById = new Map(detail.references.map((r) => [r.id, r]))
-  const itemById = new Map(detail.items.map((i) => [i.id, i]))
+  const refById = useMemo(() => new Map(detail.references.map((r) => [r.id, r])), [detail.references])
+  /** Por IP: verba de cada referência e os insumos do mapa (com a parte de cada um) */
+  const byPackage = useMemo(() => {
+    const out = new Map<string, { verba: Map<string, Decimal>; items: { item: (typeof detail.items)[number]; share: Decimal; quantity: Decimal }[] }>()
+    const entry = (code: string) => out.get(code) ?? (out.set(code, { verba: new Map(), items: [] }), out.get(code)!)
+    for (const l of detail.links) {
+      if (!l.packageCode) continue
+      const e = entry(l.packageCode)
+      e.verba.set(l.referenceId, (e.verba.get(l.referenceId) ?? Decimal.ZERO).plus(l.budgetValue))
+    }
+    for (const item of detail.items) {
+      for (const a of map.allocationsByItem.get(item.id) ?? []) if (a.packageCode) entry(a.packageCode).items.push({ item, share: a.share, quantity: a.quantity })
+    }
+    return out
+  }, [detail.links, detail.items, map.allocationsByItem])
 
   return (
     <Card>
@@ -143,8 +141,9 @@ function PlanningView({ detail, map, packages }: { detail: CompetitionDetailDTO;
           <tbody>
             {packages.map((p) => {
               const isOpen = open.has(p.packageCode)
-              const refs = [...new Set(detail.links.filter((l) => l.packageCode === p.packageCode).map((l) => l.referenceId))]
-              const items = detail.items.filter((i) => (map.allocationsByItem.get(i.id) ?? []).some((a) => a.packageCode === p.packageCode))
+              const info = byPackage.get(p.packageCode)
+              const refs = [...(info?.verba.keys() ?? [])]
+              const items = info?.items ?? []
               return (
                 <Fragment key={p.packageCode}>
                   <tr className="cursor-pointer hover:bg-ink-50" onClick={() => toggle(p.packageCode)}>
@@ -186,31 +185,24 @@ function PlanningView({ detail, map, packages }: { detail: CompetitionDetailDTO;
                           <div>
                             <p className="mb-1 text-xs font-semibold text-text-muted">Insumos referência (orçamento)</p>
                             <ul className="grid gap-1 text-sm">
-                              {refs.map((rid) => {
-                                const r = refById.get(rid)
-                                const verba = Decimal.sum(detail.links.filter((l) => l.referenceId === rid && l.packageCode === p.packageCode).map((l) => l.budgetValue))
-                                return (
-                                  <li key={rid} className="flex justify-between gap-3">
-                                    <span className="min-w-0 truncate">{r?.code} · {r?.description}</span>
-                                    <span className="tabular shrink-0">{formatBRL(verba)}</span>
-                                  </li>
-                                )
-                              })}
+                              {refs.map((rid) => (
+                                <li key={rid} className="flex justify-between gap-3">
+                                  <span className="min-w-0 truncate">{refById.get(rid)?.code} · {refById.get(rid)?.description}</span>
+                                  <span className="tabular shrink-0">{formatBRL(info!.verba.get(rid)!)}</span>
+                                </li>
+                              ))}
                             </ul>
                           </div>
                           <div>
                             <p className="mb-1 text-xs font-semibold text-text-muted">Insumos do mapa (contrato)</p>
                             {items.length ? (
                               <ul className="grid gap-1 text-sm">
-                                {items.map((i) => {
-                                  const a = map.allocationsByItem.get(i.id)!.find((x) => x.packageCode === p.packageCode)!
-                                  return (
-                                    <li key={i.id} className="flex justify-between gap-3">
-                                      <span className="min-w-0 truncate">{itemById.get(i.id)?.code} · {i.description}{i.planningCode && <Badge tone="neutral" className="ml-1">IP manual</Badge>}</span>
-                                      <span className="tabular shrink-0">{formatQuantity(a.quantity)} {i.unit} · {formatPercent(a.share, 0)}</span>
-                                    </li>
-                                  )
-                                })}
+                                {items.map(({ item: i, share, quantity }) => (
+                                  <li key={i.id} className="flex justify-between gap-3">
+                                    <span className="min-w-0 truncate">{i.code} · {i.description}{i.planningCode && <Badge tone="neutral" className="ml-1">IP manual</Badge>}</span>
+                                    <span className="tabular shrink-0">{formatQuantity(quantity)} {i.unit} · {formatPercent(share, 0)}</span>
+                                  </li>
+                                ))}
                               </ul>
                             ) : (
                               <p className="text-sm text-text-muted">Nenhum insumo do mapa neste IP.</p>
@@ -247,18 +239,22 @@ function ReferencesView({
 }) {
   const [onlyUnused, setOnlyUnused] = useState(false)
   const lineByKey = useMemo(() => new Map(detail.budgetLines.map((l) => [l.lineKey, l])), [detail.budgetLines])
-  const othersByLine = useMemo(() => {
-    const m = new Map<string, { share: Decimal; value: Decimal }>()
-    for (const o of detail.otherCommitments) {
-      if (!o.lineKey) continue
-      const e = m.get(o.lineKey) ?? { share: Decimal.ZERO, value: Decimal.ZERO }
-      m.set(o.lineKey, { share: e.share.plus(o.share), value: e.value.plus(o.budgetValue) })
+  /** Comprometido por outros QCs em cada linha do orçamento */
+  const others = useMemo(() => lineBalances(detail.budgetLines, detail.otherCommitments), [detail.budgetLines, detail.otherCommitments])
+  const linksOf = useMemo(() => {
+    const m = new Map<string, typeof detail.links>()
+    for (const l of detail.links) {
+      const own = m.get(l.referenceId)
+      if (own) own.push(l)
+      else m.set(l.referenceId, [l])
     }
     return m
-  }, [detail.otherCommitments])
-  const itemById = new Map(detail.items.map((i) => [i.id, i]))
+  }, [detail.links])
+  const mapLinkById = useMemo(() => new Map(map.links.map((l) => [l.id, l])), [map.links])
+  const itemById = useMemo(() => new Map(detail.items.map((i) => [i.id, i])), [detail.items])
   const editable = detail.can.edit
-  const refs = onlyUnused ? detail.references.filter((r) => !map.referenceUsage.get(r.id)?.length) : detail.references
+  const unused = new Set(map.unusedReferenceIds)
+  const refs = onlyUnused ? detail.references.filter((r) => unused.has(r.id)) : detail.references
 
   return (
     <Card>
@@ -296,7 +292,7 @@ function ReferencesView({
           </thead>
           <tbody>
             {refs.map((ref) => {
-              const own = detail.links.filter((l) => l.referenceId === ref.id)
+              const own = linksOf.get(ref.id) ?? []
               const verba = map.referenceBudget.get(ref.id) ?? Decimal.ZERO
               const qty = Decimal.sum(own.map((l) => l.quantity))
               const usedBy = (map.referenceUsage.get(ref.id) ?? []).map((id) => itemById.get(id)).filter((i): i is NonNullable<typeof i> => !!i)
@@ -343,11 +339,11 @@ function ReferencesView({
                   </tr>
                   {own.map((l, idx) => {
                     const line = l.lineKey ? lineByKey.get(l.lineKey) : undefined
-                    const others = (l.lineKey && othersByLine.get(l.lineKey)) || null
-                    const value = map.links.find((x) => x.id === l.id)
-                    const share = Decimal.from(l.share)
-                    const free = Decimal.from(1).minus(others?.share ?? Decimal.ZERO)
-                    const over = share.gt(free)
+                    const bal = l.lineKey ? others.get(l.lineKey) : undefined
+                    const committed = bal && !bal.committedShare.isZero() ? bal : null
+                    const value = mapLinkById.get(l.id)
+                    const free = bal?.balanceShare ?? Decimal.from(1)
+                    const over = Decimal.from(l.share).gt(free)
                     return (
                       <tr key={l.id} className="hover:bg-ink-50">
                         <td className={cn(td, 'pl-6 whitespace-nowrap')}>
@@ -373,10 +369,10 @@ function ReferencesView({
                           ) : EMPTY}
                         </td>
                         <td className={cn(td, 'text-right whitespace-nowrap text-ink-700')}>
-                          {others ? (
+                          {committed ? (
                             <>
-                              {formatPercent(others.share, 1)}
-                              <span className="block text-[11px] leading-4 text-text-muted">{formatBRL(others.value)}</span>
+                              {formatPercent(committed.committedShare, 1)}
+                              <span className="block text-[11px] leading-4 text-text-muted">{formatBRL(committed.committedValue)}</span>
                             </>
                           ) : EMPTY}
                         </td>

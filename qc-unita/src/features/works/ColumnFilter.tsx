@@ -9,28 +9,25 @@ import { Filter } from 'lucide-react'
 import { Decimal } from '@shared/domain/decimal'
 import { Button, Input } from '@/components/ui'
 import { cn } from '@/utils/cn'
+import { formatDecimal } from '@/utils/format'
+import { fold, matchesTerms, searchTerms } from '@/utils/search'
 
-/** Valores escolhidos (lista) ou faixa numérica */
-export type ColumnFilterValue = { kind: 'values'; values: Set<string> } | { kind: 'range'; min: string | null; max: string | null }
+/** Valores escolhidos (lista) ou faixa numérica (já convertida ao aplicar) */
+export type ColumnFilterValue = { kind: 'values'; values: Set<string> } | { kind: 'range'; min: Decimal | null; max: Decimal | null }
 
 export const EMPTY_VALUE = '(vazio)'
-const fold = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 
-/** A linha passa no filtro da coluna? */
-export function matchesFilter(f: ColumnFilterValue | undefined, value: string | Decimal | null): boolean {
-  if (!f) return true
-  if (f.kind === 'values') return f.values.has(value === null || value === '' ? EMPTY_VALUE : String(value))
-  if (value === null) return false
-  const n = value instanceof Decimal ? value : Decimal.from(value)
-  if (f.min && n.lt(Decimal.parseBR(f.min))) return false
-  if (f.max && n.gt(Decimal.parseBR(f.max))) return false
-  return true
+/** A linha passa no filtro da coluna? Colunas de lista recebem os valores da linha (um ou vários). */
+export function matchesFilter(f: ColumnFilterValue, value: string[] | Decimal): boolean {
+  if (f.kind === 'values') return Array.isArray(value) && value.some((v) => f.values.has(v))
+  if (Array.isArray(value)) return false
+  return (!f.min || !value.lt(f.min)) && (!f.max || !value.gt(f.max))
 }
 
 interface Props {
   label: string
   /** Valores distintos da coluna com a contagem de linhas (colunas de lista) */
-  values?: { value: string; label?: string; count: number }[]
+  values?: { value: string; count: number }[]
   numeric?: boolean
   filter: ColumnFilterValue | undefined
   onChange: (f: ColumnFilterValue | undefined) => void
@@ -106,8 +103,9 @@ export function ColumnFilter({ label, values = [], numeric, filter, onChange, al
 function ValuesEditor({ values, filter, onApply }: { values: NonNullable<Props['values']>; filter: { values: Set<string> } | null; onApply: (f: ColumnFilterValue | undefined) => void }) {
   const [q, setQ] = useState('')
   const [chosen, setChosen] = useState<Set<string>>(() => new Set(filter ? filter.values : values.map((v) => v.value)))
-  const terms = fold(q).split(/\s+/).filter(Boolean)
-  const shown = useMemo(() => values.filter((v) => !terms.length || terms.every((t) => fold(`${v.value} ${v.label ?? ''}`).includes(t))), [values, q]) // eslint-disable-line react-hooks/exhaustive-deps
+  const folded = useMemo(() => values.map((v) => ({ ...v, text: fold(v.value) })), [values])
+  const terms = searchTerms(q)
+  const shown = useMemo(() => folded.filter((v) => matchesTerms(v.text, terms)), [folded, q]) // eslint-disable-line react-hooks/exhaustive-deps
   const allShown = shown.length > 0 && shown.every((v) => chosen.has(v.value))
   const toggleAll = () =>
     setChosen((s) => {
@@ -130,7 +128,7 @@ function ValuesEditor({ values, filter, onApply }: { values: NonNullable<Props['
           <li key={v.value}>
             <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-ink-50">
               <input type="checkbox" className="size-4 accent-primary" checked={chosen.has(v.value)} onChange={() => toggle(v.value)} />
-              <span className="min-w-0 flex-1 truncate" title={v.label ?? v.value}>{v.label ?? v.value}</span>
+              <span className="min-w-0 flex-1 truncate" title={v.value}>{v.value}</span>
               <span className="tabular text-xs text-text-muted">{v.count}</span>
             </label>
           </li>
@@ -152,14 +150,12 @@ function ValuesEditor({ values, filter, onApply }: { values: NonNullable<Props['
   )
 }
 
-function RangeEditor({ filter, onApply }: { filter: { min: string | null; max: string | null } | null; onApply: (f: ColumnFilterValue | undefined) => void }) {
-  const [min, setMin] = useState(filter?.min ?? '')
-  const [max, setMax] = useState(filter?.max ?? '')
-  const valid = (s: string) => {
-    if (!s.trim()) return true
-    try { Decimal.parseBR(s); return true } catch { return false }
-  }
-  const ok = valid(min) && valid(max)
+function RangeEditor({ filter, onApply }: { filter: { min: Decimal | null; max: Decimal | null } | null; onApply: (f: ColumnFilterValue | undefined) => void }) {
+  const text = (d: Decimal | null | undefined) => (d ? formatDecimal(d, 4).replace(/,?0+$/, '') : '')
+  const [min, setMin] = useState(text(filter?.min))
+  const [max, setMax] = useState(text(filter?.max))
+  const parse = (s: string) => (s.trim() ? Decimal.tryParseBR(s) : null)
+  const ok = (!min.trim() || !!parse(min)) && (!max.trim() || !!parse(max))
   return (
     <div className="grid gap-2">
       <div className="grid grid-cols-2 gap-2">
@@ -169,7 +165,7 @@ function RangeEditor({ filter, onApply }: { filter: { min: string | null; max: s
       {!ok && <p className="text-xs text-error">Use números no formato 1.234,56</p>}
       <div className="flex justify-between gap-2 border-t border-border pt-2">
         <Button size="sm" variant="ghost" onClick={() => onApply(undefined)}>Limpar filtro</Button>
-        <Button size="sm" variant="primary" disabled={!ok} onClick={() => onApply(min.trim() || max.trim() ? { kind: 'range', min: min.trim() || null, max: max.trim() || null } : undefined)}>
+        <Button size="sm" variant="primary" disabled={!ok} onClick={() => onApply(min.trim() || max.trim() ? { kind: 'range', min: parse(min), max: parse(max) } : undefined)}>
           Aplicar
         </Button>
       </div>

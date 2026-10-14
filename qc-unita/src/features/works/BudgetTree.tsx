@@ -24,6 +24,7 @@ import { EMPTY, formatBRL, formatCoefficient, formatDecimal, formatPercent, form
 import { freeShare, pulledValue } from './BudgetLinesTable'
 import { withAuxCompositions, type AuxRow, type TreeRowWithAux } from './budgetAux'
 import { ColumnFilter, EMPTY_VALUE, matchesFilter, type ColumnFilterValue } from './ColumnFilter'
+import { planningOptions } from './planning'
 
 type Row = TreeRowWithAux<BudgetLineUsageDTO>
 type LineRow = Extract<Row, { kind: 'line' }>
@@ -120,39 +121,34 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
     }
     return m
   }, [tree, byKey])
-  /** Valor de cada coluna numa linha do orçamento */
-  const valueOf = (r: LineRow, k: ColKey): string | Decimal | null => {
+  /** Valor de cada coluna numa linha: número (colunas de valor) ou lista de textos (as demais) */
+  const valueOf = (r: LineRow, k: ColKey): string[] | Decimal => {
     const l = r.line
+    const text = (v: string | null) => [v || EMPTY_VALUE]
     switch (k) {
-      case 'item': return rootOf.get(r.key) ?? null
-      case 'code': return l.code
-      case 'description': return l.description
-      case 'unit': return l.unit
+      case 'item': return text(rootOf.get(r.key) ?? null)
+      case 'code': return text(l.code)
+      case 'description': return text(l.description)
+      case 'unit': return text(l.unit)
+      case 'package': return text(l.packageCode)
+      case 'classification': return text(l.packageDescription)
+      case 'usage': return l.usage.length ? l.usage.map((u) => u.competitionCode) : [NO_USAGE]
       case 'quantity': return Decimal.from(l.quantity)
       case 'unitCost': return Decimal.from(l.unitCost)
       case 'total': return Decimal.from(l.total)
-      case 'package': return l.packageCode
-      case 'classification': return l.packageDescription
       case 'free': return Decimal.from(l.total).minus(l.committedValue)
-      case 'usage': return null
     }
   }
-  const passes = (r: LineRow) =>
-    (Object.entries(filters) as [ColKey, ColumnFilterValue][]).every(([k, f]) => {
-      if (k !== 'usage') return matchesFilter(f, valueOf(r, k))
-      const codes = r.line.usage.length ? r.line.usage.map((u) => u.competitionCode) : [NO_USAGE]
-      return f.kind !== 'values' || codes.some((c) => f.values.has(c))
-    })
+  const activeFilters = Object.entries(filters) as [ColKey, ColumnFilterValue][]
+  const passes = (r: LineRow) => activeFilters.every(([k, f]) => matchesFilter(f, valueOf(r, k)))
   /** Valores distintos de cada coluna de lista (com contagem) */
   const distinct = useMemo(() => {
     const out = {} as Record<ColKey, { value: string; count: number }[]>
-    const keys: ColKey[] = ['item', 'code', 'description', 'unit', 'package', 'classification', 'usage']
-    for (const k of keys) {
+    for (const k of ['item', 'code', 'description', 'unit', 'package', 'classification', 'usage'] as ColKey[]) {
       const m = new Map<string, number>()
       for (const r of tree) {
         if (r.kind !== 'line') continue
-        const vals = k === 'usage' ? (r.line.usage.length ? r.line.usage.map((u) => u.competitionCode) : [NO_USAGE]) : [String(valueOf(r, k) ?? '') || EMPTY_VALUE]
-        for (const v of vals) m.set(v, (m.get(v) ?? 0) + 1)
+        for (const v of valueOf(r, k) as string[]) m.set(v, (m.get(v) ?? 0) + 1)
       }
       out[k] = [...m.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value, 'pt-BR', { numeric: true }))
     }
@@ -631,13 +627,7 @@ function LinePlanningDialog({ line, planning, onClose }: { line: BudgetLineUsage
   const [code, setCode] = useState<string | null>(line.packageCode)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const options = useMemo(() => {
-    const list = planning.options.map((c) => ({ value: c.code, label: `${c.code} — ${c.description}`, keywords: c.code }))
-    if (line.packageCode && !list.some((o) => o.value === line.packageCode)) {
-      list.unshift({ value: line.packageCode, label: `${line.packageCode} — ${line.packageDescription ?? ''}`, keywords: line.packageCode })
-    }
-    return list
-  }, [planning.options, line])
+  const options = useMemo(() => planningOptions(planning.options, { code: line.packageCode, description: line.packageDescription }), [planning.options, line])
   const save = async (value: { code: string; description: string | null } | null) => {
     setSaving(true)
     setError(null)

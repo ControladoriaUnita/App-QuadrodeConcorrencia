@@ -8,7 +8,7 @@ import type { QcItem, QcPrice, QcSupplier } from './types'
 
 const item = (id: string, order: number, qty: string, unit: string): QcItem => ({
   id, sortOrder: order, code: `IS${id}`, description: id, unit: 'm³',
-  budgetQuantity: D(qty), budgetUnitCost: D(unit), quantity: D(qty),
+  budgetTotal: D(qty).times(unit).round(4), quantity: D(qty),
   pctMaterial: D(0), pctEquipment: D(0), pctRetention: D(0),
 })
 const sup = (id: string, order: number, status: QcSupplier['status'] = 'responded'): QcSupplier => ({

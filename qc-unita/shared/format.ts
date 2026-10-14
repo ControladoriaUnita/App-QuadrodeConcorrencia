@@ -68,14 +68,6 @@ export function formatDateTime(iso: string | null | undefined): string {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' }).format(d)
 }
 
-const MONTHS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']
-/** "2027-01-15" → "JAN/27" */
-export function formatMonth(iso: string | null | undefined): string {
-  if (!iso) return EMPTY
-  const m = /^(\d{4})-(\d{2})/.exec(iso)
-  return m ? `${MONTHS[Number(m[2]) - 1]}/${m[1]!.slice(2)}` : EMPTY
-}
-
 /** CNPJ/CPF somente dígitos → máscara */
 export function formatTaxId(digits: string | null | undefined): string {
   if (!digits) return EMPTY

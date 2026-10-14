@@ -1,6 +1,7 @@
 /**
  * Monta o "mapa" calculado do QC a partir do DTO bruto.
  * Função pura usada pela API (persistência/validação) e pela UI (recalcular ao digitar).
+ * O orçado de cada insumo do mapa vem das referências ligadas (ver ../planning/references.ts).
  */
 import type { CompetitionDetailDTO } from '../../contracts'
 import { Decimal } from '../decimal'
@@ -14,6 +15,7 @@ import {
   comparisonGroups,
   itemPlanningAllocations,
   linkAwardedAmounts,
+  linksByReference,
   referenceBudgets,
   validateReferences,
   type ComparisonGroup,
@@ -46,6 +48,8 @@ export interface QcMap {
   referenceBudget: Map<string, Decimal>
   /** Insumos do mapa que usam cada referência */
   referenceUsage: Map<string, string[]>
+  /** Referências que nenhum insumo do mapa usa (ficam fora da comparação) */
+  unusedReferenceIds: string[]
   /** Grupos de comparação (insumos do mapa ↔ referências ligados entre si) */
   groups: ComparisonGroup[]
   groupOfItem: Map<string, ComparisonGroup>
@@ -57,25 +61,23 @@ export interface QcMap {
 
 export type QcMapSource = Omit<CompetitionDetailDTO, 'can' | 'budgetLines' | 'otherCommitments'>
 
-export function toDomainItems(d: QcMapSource): QcItem[] {
+/** Itens do domínio com o orçado informado (padrão: zero, antes do rateio pelas referências) */
+export function toDomainItems(d: QcMapSource, budgetOf: (itemId: string) => Decimal = () => Decimal.ZERO): QcItem[] {
   return d.items.map((i) => ({
     id: i.id,
     sortOrder: i.sortOrder,
     code: i.code,
     description: i.description,
     unit: i.unit,
-    budgetQuantity: Decimal.from(i.budgetQuantity),
-    budgetUnitCost: Decimal.from(i.budgetUnitCost),
     quantity: Decimal.from(i.quantity),
     pctMaterial: Decimal.from(i.pctMaterial),
     pctEquipment: Decimal.from(i.pctEquipment),
     pctRetention: Decimal.from(i.pctRetention),
-    referenceIds: i.referenceIds ?? [],
+    budgetTotal: budgetOf(i.id),
   }))
 }
 
 export function buildQcMap(d: QcMapSource, opts: { today?: string } = {}): QcMap {
-  const items = toDomainItems(d)
   const suppliers: QcSupplier[] = d.suppliers.map((s) => ({
     id: s.id,
     supplierId: s.supplierId,
@@ -94,104 +96,100 @@ export function buildQcMap(d: QcMapSource, opts: { today?: string } = {}): QcMap
     usedAmount: Decimal.from(d.revision.budgetUsedAmount),
     adjustmentAmount: Decimal.from(d.revision.budgetAdjustmentAmount),
   }
+  const winnerSupplier = suppliers.find((s) => s.supplierId === d.revision.winnerSupplierId)
+  const winnerCsId = winnerSupplier?.id ?? null
 
-  // Insumos referência: verba de cada uma (linhas puxadas do orçamento)
-  const planning: PlanningLink[] = (d.links ?? []).map((l) => ({
+  // Insumos referência: linhas puxadas do orçamento e a verba de cada referência
+  const planning: PlanningLink[] = d.links.map((l) => ({
     id: l.id,
     referenceId: l.referenceId,
     materialId: l.materialId,
     packageCode: l.packageCode,
+    packageDescription: l.packageDescription,
     lineKey: l.lineKey,
     activityItemId: l.activityItemId,
     quantity: Decimal.from(l.quantity),
     budgetUnitCost: Decimal.from(l.budgetUnitCost),
-    share: l.share != null ? Decimal.from(l.share) : undefined,
-    budgetValue: l.budgetValue != null ? Decimal.from(l.budgetValue) : undefined,
+    share: Decimal.from(l.share),
+    budgetValue: Decimal.from(l.budgetValue),
   }))
-  const refLinks = planning.map((l, k) => ({
-    id: l.id,
-    referenceId: l.referenceId,
-    packageCode: l.packageCode,
-    packageDescription: d.links?.[k]?.packageDescription ?? null,
-    budgetValue: l.budgetValue ?? lineTotal(l.budgetUnitCost, l.quantity),
-  }))
-  const referenceIds = (d.references ?? []).map((r) => r.id)
-  const refBudget = referenceBudgets(referenceIds, refLinks)
+  const referenceIds = d.references.map((r) => r.id)
+  const referenceBudget = referenceBudgets(referenceIds, planning)
+  const byReference = linksByReference(planning)
   const mapItems: MapItemRef[] = d.items.map((i) => ({
     id: i.id,
     quantity: Decimal.from(i.quantity),
-    referenceIds: (i.referenceIds ?? []).filter((r) => refBudget.has(r)),
-    planningCode: i.planningCode ?? null,
-    planningDescription: i.planningDescription ?? null,
+    referenceIds: i.referenceIds.filter((r) => referenceBudget.has(r)),
+    planningCode: i.planningCode,
+    planningDescription: i.planningDescription,
   }))
-  const { groups, groupOfItem, groupOfReference } = comparisonGroups(mapItems, refBudget)
-  const winnerCsIdEarly = suppliers.find((s) => s.supplierId === d.revision.winnerSupplierId)?.id ?? null
+  const { groups, groupOfItem, groupOfReference } = comparisonGroups(mapItems, referenceBudget)
 
-  // 1ª passada: preços → valor de cada insumo; 2ª: orçado rateado pelo grupo → variações
-  const contractedOf = (bestList: BestCondition[], its: QcItem[]) => {
-    const unit = awardedUnitPrices(its, bestList, prices, winnerCsIdEarly)
-    return new Map(its.map((i) => {
-      const u = unit.get(i.id)
-      return [i.id, u ? lineTotal(u, i.quantity) : null] as const
-    }))
+  /** Valor de cada insumo do mapa: preço da vencedora (se cotou) ou da melhor condição × quantidade */
+  const contractedOf = (its: QcItem[], bestList: BestCondition[]) => {
+    const unit = awardedUnitPrices(its, bestList, prices, winnerCsId)
+    return new Map(its.map((i) => [i.id, unit.get(i.id) ? lineTotal(unit.get(i.id)!, i.quantity) : null] as const))
   }
-  const firstPass = computeBestConditions(items, suppliers, prices, d.overrides)
-  const allocated = allocateGroupBudgets(groups, contractedOf(firstPass, items))
-  // QCs sem referências (dados antigos) mantêm o orçado gravado no item
-  const withBudget = d.references ? items.map((i) => ({ ...i, referenceBudget: allocated.get(i.id) ?? Decimal.ZERO })) : items
-  items.splice(0, items.length, ...withBudget)
+
+  // Orçado de cada insumo: a verba do grupo. Só quando um grupo tem vários insumos é preciso uma
+  // 1ª passada de preços para ratear pelo valor contratado.
+  const shared = groups.some((g) => g.itemIds.length > 1)
+  const firstPass = shared ? toDomainItems(d) : []
+  const allocated = allocateGroupBudgets(groups, shared ? contractedOf(firstPass, computeBestConditions(firstPass, suppliers, prices, d.overrides)) : new Map())
+  const items = toDomainItems(d, (id) => allocated.get(id) ?? Decimal.ZERO)
 
   const best = computeBestConditions(items, suppliers, prices, d.overrides)
   const summaries = computeSupplierSummaries(items, suppliers, prices, envelope, best)
   const mixTotal = bestMixTotal(best)
   const budgetTotal = Decimal.sum(best.map((b) => b.budgetTotal))
-
-  const winnerSupplier = suppliers.find((s) => s.supplierId === d.revision.winnerSupplierId)
   const winnerSummary = winnerSupplier ? summaries.find((s) => s.competitionSupplierId === winnerSupplier.id) : undefined
 
-  const issues = validateForSubmission({
-    revision: {
-      id: d.revision.id,
-      number: d.revision.number,
-      status: d.revision.status,
-      frozenAt: d.revision.frozenAt,
-      requestedOn: d.competition.requestedOn,
-      serviceStartOn: d.revision.serviceStartOn,
-      serviceEndOn: d.revision.serviceEndOn,
-      engineeringOwnerId: d.competition.engineeringOwner?.id ?? null,
-      procurementOwnerId: d.competition.procurementOwner?.id ?? null,
-      contractTypeId: d.revision.contractTypeId,
-      winnerSupplierId: d.revision.winnerSupplierId,
-      winnerJustification: d.revision.winnerJustification,
-    },
-    items,
-    suppliers,
-    best,
-    today: opts.today,
-  })
+  const issues = [
+    ...validateForSubmission({
+      revision: {
+        id: d.revision.id,
+        number: d.revision.number,
+        status: d.revision.status,
+        frozenAt: d.revision.frozenAt,
+        requestedOn: d.competition.requestedOn,
+        serviceStartOn: d.revision.serviceStartOn,
+        serviceEndOn: d.revision.serviceEndOn,
+        engineeringOwnerId: d.competition.engineeringOwner?.id ?? null,
+        procurementOwnerId: d.competition.procurementOwner?.id ?? null,
+        contractTypeId: d.revision.contractTypeId,
+        winnerSupplierId: d.revision.winnerSupplierId,
+        winnerJustification: d.revision.winnerJustification,
+      },
+      items,
+      suppliers,
+      best,
+      today: opts.today,
+    }),
+    ...validateReferences(mapItems, referenceIds),
+  ]
 
-  const winnerCsId = winnerSupplier?.id ?? null
   const awardedByItem = awardedUnitPrices(items, best, prices, winnerCsId)
-  const contractedByItem = contractedOf(best, items)
-  const linkAmounts = linkAwardedAmounts(refLinks, groupOfReference, contractedByItem)
+  const contractedByItem = contractedOf(items, best)
+  const linkAmounts = linkAwardedAmounts(planning, groupOfReference, contractedByItem)
   const links = planning.map((l) => {
-    const total = l.id ? linkAmounts.get(l.id) ?? null : null
+    const total = linkAmounts.get(l.id!) ?? null
     return { ...l, awardedTotal: total, awardedUnitPrice: total && l.quantity.isPositive() ? total.div(l.quantity, 4) : null }
   })
-  if (d.references) issues.push(...validateReferences(mapItems, referenceIds))
-  const referenceUsage = new Map(referenceIds.map((r) => [r, mapItems.filter((i) => i.referenceIds.includes(r)).map((i) => i.id)]))
-  const allocationsByItem = new Map(mapItems.map((i) => [i.id, itemPlanningAllocations(i, refLinks)]))
+
+  const referenceUsage = new Map(referenceIds.map((r) => [r, [] as string[]]))
+  for (const i of mapItems) for (const r of i.referenceIds) referenceUsage.get(r)!.push(i.id)
 
   return {
     awardedByItem,
     awardedTotal: awardedTotal(items, awardedByItem),
     links,
-    referenceBudget: refBudget,
+    referenceBudget,
     referenceUsage,
+    unusedReferenceIds: referenceIds.filter((r) => !referenceUsage.get(r)!.length),
     groups,
     groupOfItem,
     contractedByItem,
-    allocationsByItem,
+    allocationsByItem: new Map(mapItems.map((i) => [i.id, itemPlanningAllocations(i, byReference)])),
     items,
     suppliers,
     prices,

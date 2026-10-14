@@ -15,19 +15,15 @@ interface Props {
   detail: CompetitionDetailDTO
   map: QcMap
   today: string
+  adding: boolean
   onAdd: (supplierId: string) => Promise<unknown>
   onUpdate: (id: string, patch: UpdateSupplierTermsInput) => void
   onRemove: (id: string) => Promise<unknown>
 }
 
-/** "Sem Fornecedor" usa CNPJ só de zeros */
-export const isPlaceholderTaxId = (taxId: string) => /^0+$/.test(taxId)
-
-export function SuppliersPanel({ detail, map, today, onAdd, onUpdate, onRemove }: Props) {
+export function SuppliersPanel({ detail, map, today, adding, onAdd, onUpdate, onRemove }: Props) {
   const [search, setSearch] = useState('')
   const catalog = useSuppliers(search)
-  const [selected, setSelected] = useState('')
-  const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<QcSupplierDTO | null>(null)
   const participating = new Set(detail.suppliers.map((s) => s.supplierId))
   const options = (catalog.data ?? []).map((s) => ({
@@ -37,16 +33,6 @@ export function SuppliersPanel({ detail, map, today, onAdd, onUpdate, onRemove }
     aside: participating.has(s.id) ? 'já participa' : undefined,
     disabled: participating.has(s.id),
   }))
-  const add = async (id: string) => {
-    setSelected(id)
-    setAdding(true)
-    try {
-      await onAdd(id)
-    } finally {
-      setAdding(false)
-      setSelected('')
-    }
-  }
 
   return (
     <div className="grid gap-3">
@@ -56,8 +42,8 @@ export function SuppliersPanel({ detail, map, today, onAdd, onUpdate, onRemove }
             <Field label="Convidar fornecedor" hint="Digite o nome ou o CNPJ; a lista abre abaixo. Para quadros internos, escolha “Sem Fornecedor”." className="min-w-72 flex-1">
               <Combobox
                 options={options}
-                value={selected || null}
-                onChange={add}
+                value={null}
+                onChange={(id) => void onAdd(id)}
                 onQueryChange={setSearch}
                 loading={catalog.isFetching && !catalog.data}
                 disabled={adding}
@@ -154,7 +140,7 @@ function SupplierCard({
         }
         description={
           <span className="tabular">
-            {isPlaceholderTaxId(s.taxId) ? 'Quadro interno, sem fornecedor externo' : `${s.legalName} · ${formatTaxId(s.taxId)}`} · Total {formatBRL(total)}
+            {s.isPlaceholder ? 'Quadro interno, sem fornecedor externo' : `${s.legalName} · ${formatTaxId(s.taxId)}`} · Total {formatBRL(total)}
           </span>
         }
         actions={

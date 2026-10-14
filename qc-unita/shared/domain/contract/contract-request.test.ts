@@ -7,14 +7,14 @@ const D = Decimal.from
 
 function source(): QcMapSource {
   const item = (id: string, code: string, quantity: string, pctMaterial = '0') => ({
-    id, sortOrder: 1, materialId: `m-${id}`, code, description: `Insumo ${code}`, unit: 'm³', budgetQuantity: quantity,
-    budgetUnitCost: '10.0000', quantity, scopeDescription: `Escopo ${code}`, contractNotes: null, pctMaterial, pctEquipment: '0', pctRetention: '0.05',
+    id, sortOrder: 1, materialId: `m-${id}`, code, description: `Insumo ${code}`, unit: 'm³',
+    quantity, scopeDescription: `Escopo ${code}`, contractNotes: null, pctMaterial, pctEquipment: '0', pctRetention: '0.05',
     origin: 'reference' as const, planningCode: null, planningDescription: null, referenceIds: id === 'i1' ? ['r1'] : [],
   })
   const sup = (id: string, supplierId: string) => ({
     id, supplierId, sortOrder: 1, status: 'responded' as const, legalName: supplierId, tradeName: null, taxId: '1', contactName: null, phone: null,
     email: null, cndValidUntil: null, deliveryTerms: null, paymentTerms: null, readjustmentTerms: null, notes: null, strengths: null,
-    weaknesses: null, proposalRef: null, proposalReceivedOn: null, proposalValidUntil: null,
+    weaknesses: null, proposalRef: null, proposalReceivedOn: null, proposalValidUntil: null, isPlaceholder: false,
   })
   return {
     competition: {

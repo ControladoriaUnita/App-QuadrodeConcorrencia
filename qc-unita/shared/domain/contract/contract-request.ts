@@ -68,7 +68,9 @@ export function buildContractDraft(source: QcMapSource, map: QcMap): ContractDra
       .map((p) => [p.itemId, p.unitPrice as Decimal]),
   )
   const dto = new Map(source.items.map((i) => [i.id, i]))
-  const refById = new Map((source.references ?? []).map((r) => [r.id, r]))
+  const refById = new Map(source.references.map((r) => [r.id, r]))
+  const packagesOf = new Map<string, Set<string>>()
+  for (const l of source.links) if (l.packageCode) packagesOf.set(l.referenceId, (packagesOf.get(l.referenceId) ?? new Set()).add(l.packageCode))
   const items: DraftContractItem[] = []
   const excluded: ContractDraft['excluded'] = []
 
@@ -81,11 +83,11 @@ export function buildContractDraft(source: QcMapSource, map: QcMap): ContractDra
     }
     const allocations = (map.allocationsByItem.get(i.id) ?? []).map((a) => ({ packageCode: a.packageCode, quantity: a.quantity }))
     const raw = dto.get(i.id)!
-    const references = (raw.referenceIds ?? []).map((rid) => refById.get(rid)).filter((r): r is NonNullable<typeof r> => !!r).map((r) => ({
+    const references = raw.referenceIds.map((rid) => refById.get(rid)).filter((r): r is NonNullable<typeof r> => !!r).map((r) => ({
       code: r.code,
       description: r.description,
       unit: r.unit,
-      packageCodes: [...new Set(source.links.filter((l) => l.referenceId === r.id).map((l) => l.packageCode).filter((p): p is string => !!p))].sort(),
+      packageCodes: [...(packagesOf.get(r.id) ?? [])].sort(),
       budget: map.referenceBudget.get(r.id) ?? ZERO,
     }))
     items.push({
@@ -117,11 +119,6 @@ export function buildContractDraft(source: QcMapSource, map: QcMap): ContractDra
 
 export function contractDistribution(items: { totalPrice: Decimal; pctMaterial: Decimal; pctEquipment: Decimal }[]): ContractDistribution {
   return computeDistribution(items.map((i) => ({ total: i.totalPrice, pctMaterial: i.pctMaterial, pctEquipment: i.pctEquipment })))
-}
-
-/** Valor de um vínculo do item contratado. */
-export function allocationAmount(quantity: Decimal, unitPrice: Decimal): Decimal {
-  return lineTotal(unitPrice, quantity)
 }
 
 // ----------------------------------------------------------------------------- validação da solicitação

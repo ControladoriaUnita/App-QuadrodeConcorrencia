@@ -90,9 +90,6 @@ export interface ErpWorkMaterial {
   code: string
   description: string
   unit: string
-  category: string | null
-  /** Grupo/categoria descrita (ex.: "Planejamento e Orçamento") */
-  groupDescription: string | null
 }
 
 /** Operações de leitura/envio; usadas para saber o que cada provider já implementa. */

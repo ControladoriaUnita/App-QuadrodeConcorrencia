@@ -20,7 +20,7 @@ import type {
 } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import type { Actor } from '../../application/context'
-import type { AggregatedInput, CompetitionData, Repositories, WorkCommitments } from '../../application/ports'
+import type { AggregatedInput, CompetitionData, NewLink, Repositories, WorkCommitments } from '../../application/ports'
 import type { ErpBudget } from '../erp/erp-provider'
 import { uid, type AuditCtx, type MemoryDb, type Row } from './memory-db'
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
@@ -36,32 +36,6 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
     return (comp?.workId as string) ?? null
   }
 
-  /**
-   * Aplica o IP manual (ou devolve o da planilha) nas linhas do orçamento da obra com a chave dada
-   * e nas linhas puxadas pelos QCs em rascunho. Retorna quantas linhas do orçamento mudaram.
-   */
-  const applyLinePlanning = (workId: string, lineKey: string): number => {
-    const manual = db.get('budget_line_planning', `${workId}|${lineKey}`)
-    const budgets = new Set(db.find('budgets', (b) => b.workId === workId).map((b) => b.id))
-    let changed = 0
-    for (const ai of db.find('activity_items', (a) => budgets.has(a.budgetId as string) && a.lineKey === lineKey)) {
-      const original = ai.packageManual ? { code: ai.originalPackageCode, description: ai.originalPackageDescription } : { code: ai.packageCode, description: ai.packageDescription }
-      const next = manual
-        ? { packageCode: manual.packageCode, packageDescription: manual.packageDescription, packageManual: true, originalPackageCode: original.code, originalPackageDescription: original.description }
-        : { packageCode: original.code, packageDescription: original.description, packageManual: false, originalPackageCode: null, originalPackageDescription: null }
-      db.put('activity_items', { ...ai, ...next })
-      changed++
-    }
-    const drafts = new Set(
-      db.find('competitions', (c) => c.workId === workId).flatMap((c) => db.find('competition_revisions', (r) => r.competitionId === c.id && r.status === 'draft' && !r.frozenAt).map((r) => r.id)),
-    )
-    const line = db.find('activity_items', (a) => budgets.has(a.budgetId as string) && a.lineKey === lineKey)[0]
-    for (const l of db.find('competition_item_links', (x) => drafts.has(x.revisionId as string) && x.lineKey === lineKey)) {
-      db.update('competition_item_links', l.id, { packageCode: line?.packageCode ?? null, packageDescription: line?.packageDescription ?? null }, audit, { workId })
-    }
-    return changed
-  }
-
   /** Insumos referência e suas linhas do orçamento */
   const insertReferences = (revisionId: string, refs: AggregatedInput[], scope: { workId: string | null }): string[] => {
     let order = db.find('competition_references', (x) => x.revisionId === revisionId).reduce((m, r) => Math.max(m, r.sortOrder as number), 0)
@@ -69,12 +43,26 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       const ref = db.insert('competition_references', {
         revisionId, materialId: r.materialId, sortOrder: ++order, code: r.code, description: r.description, unit: r.unit,
       }, audit, scope)
-      r.links.forEach((l, li) =>
-        db.insert('competition_item_links', { revisionId, referenceId: ref.id, ...l, awardedUnitPrice: null, awardedTotal: null, sortOrder: li }, audit, scope),
-      )
+      insertLinks(revisionId, ref.id, r.links, scope)
       return ref.id
     })
   }
+
+  /** Linhas do orçamento de uma referência */
+  const insertLinks = (revisionId: string, referenceId: string, links: NewLink[], scope: { workId: string | null }) =>
+    links.forEach((l, i) =>
+      db.insert('competition_item_links', { revisionId, referenceId, ...l, awardedUnitPrice: null, awardedTotal: null, sortOrder: i }, audit, scope),
+    )
+  const removeLinksOf = (referenceId: string, scope: { workId: string | null }) => {
+    for (const l of db.find('competition_item_links', (x) => x.referenceId === referenceId)) db.remove('competition_item_links', l.id, audit, scope)
+  }
+  /** Ligações insumo do mapa ↔ referência */
+  const insertItemReferences = (revisionId: string, itemId: string, referenceIds: string[], scope: { workId: string | null }) => {
+    for (const referenceId of new Set(referenceIds)) db.insert('competition_item_references', { revisionId, itemId, referenceId }, audit, scope)
+  }
+
+  /** IP manual (budget_line_planning) de uma linha do orçamento */
+  const manualPlanningOf = (budgetId: string, lineKey: string) => db.get('budget_line_planning', `${db.get('budgets', budgetId)?.workId}|${lineKey}`)
 
   const toWork = (w: Row): WorkDTO => {
     const budget = db.find('budgets', (b) => b.workId === w.id && b.isCurrent === true)[0]
@@ -111,6 +99,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
   const toLine = (l: Row): BudgetLineDTO => {
     const m = db.get('materials', l.materialId as string)!
     const a = db.get('activities', l.activityId as string)
+    const manual = manualPlanningOf(l.budgetId as string, l.lineKey as string)
     return {
       id: l.id,
       lineKey: l.lineKey as string,
@@ -121,9 +110,9 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       code: m.code as string,
       description: m.description as string,
       unit: m.unit as string,
-      packageCode: (l.packageCode as string) ?? null,
-      packageDescription: (l.packageDescription as string) ?? null,
-      packageManual: l.packageManual === true,
+      ...(manual
+        ? { packageCode: manual.packageCode as string, packageDescription: (manual.packageDescription as string) ?? null, packageManual: true }
+        : { packageCode: (l.packageCode as string) ?? null, packageDescription: (l.packageDescription as string) ?? null, packageManual: false }),
       quantity: l.quantity as string,
       unitCost: l.unitCost as string,
       total: l.totalCost as string,
@@ -334,10 +323,13 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         return db.find('materials', (m) => m.code === code)[0]?.id ?? null
       },
       async setLinePlanning(workId, lineKey, planning) {
+        const budget = db.find('budgets', (b) => b.workId === workId && b.isCurrent === true)[0]
+        const line = budget && db.find('activity_items', (a) => a.budgetId === budget.id && a.lineKey === lineKey)[0]
+        if (!line) return null
         const key = `${workId}|${lineKey}`
         if (planning) db.put('budget_line_planning', { id: key, workId, lineKey, packageCode: planning.code, packageDescription: planning.description })
         else db.t('budget_line_planning').delete(key)
-        return applyLinePlanning(workId, lineKey)
+        return planning ?? { code: (line.packageCode as string) ?? null, description: (line.packageDescription as string) ?? null }
       },
     },
 
@@ -424,7 +416,10 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         const suppliers = db
           .find<R<QcSupplierDTO & { revisionId: string }>>('competition_suppliers', (s) => s.revisionId === revId)
           .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map(({ revisionId: _r, createdAt: _c, updatedAt: _u, proposalTotal: _p, ...s }) => s as QcSupplierDTO)
+          .map(({ revisionId: _r, createdAt: _c, updatedAt: _u, proposalTotal: _p, ...s }) => ({
+            ...s,
+            isPlaceholder: db.get('suppliers', s.supplierId)?.isPlaceholder === true,
+          }) as QcSupplierDTO)
         const prices = db
           .find('prices', (p) => p.revisionId === revId)
           .map<QcPriceDTO>((p) => ({
@@ -580,17 +575,15 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         const ref = db.get('competition_references', referenceId)
         if (!ref) return
         const workId = workOfRevision(ref.revisionId as string)
-        for (const l of db.find('competition_item_links', (x) => x.referenceId === referenceId)) db.remove('competition_item_links', l.id, audit, { workId })
+        removeLinksOf(referenceId, { workId })
         for (const x of db.find('competition_item_references', (x) => x.referenceId === referenceId)) db.remove('competition_item_references', x.id, audit, { workId })
         db.remove('competition_references', referenceId, audit, { workId })
       },
 
       async setReferenceLinks(revisionId, referenceId, links) {
         const workId = workOfRevision(revisionId)
-        for (const l of db.find('competition_item_links', (x) => x.referenceId === referenceId)) db.remove('competition_item_links', l.id, audit, { workId })
-        links.forEach((l, i) =>
-          db.insert('competition_item_links', { revisionId, referenceId, ...l, awardedUnitPrice: null, awardedTotal: null, sortOrder: i }, audit, { workId }),
-        )
+        removeLinksOf(referenceId, { workId })
+        insertLinks(revisionId, referenceId, links, { workId })
       },
 
       async addItems(revisionId, items) {
@@ -599,10 +592,10 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         return items.map((i) => {
           const { referenceIds, ...rest } = i
           const item = db.insert('competition_items', {
-            revisionId, ...rest, sortOrder: ++order, budgetQuantity: i.quantity, budgetUnitCost: i.budgetUnitCost ?? '0.0000',
+            revisionId, ...rest, sortOrder: ++order,
             scopeDescription: null, contractNotes: null, pctMaterial: '0', pctEquipment: '0', pctRetention: '0',
           }, audit, { workId })
-          for (const referenceId of new Set(referenceIds)) db.insert('competition_item_references', { revisionId, itemId: item.id, referenceId }, audit, { workId })
+          insertItemReferences(revisionId, item.id, referenceIds, { workId })
           return item.id
         })
       },
@@ -610,7 +603,14 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       async setItemReferences(revisionId, itemId, referenceIds) {
         const workId = workOfRevision(revisionId)
         for (const x of db.find('competition_item_references', (x) => x.itemId === itemId)) db.remove('competition_item_references', x.id, audit, { workId })
-        for (const referenceId of new Set(referenceIds)) db.insert('competition_item_references', { revisionId, itemId, referenceId }, audit, { workId })
+        insertItemReferences(revisionId, itemId, referenceIds, { workId })
+      },
+
+      async setDraftLinksPlanning(workId, lineKey, planning) {
+        const drafts = new Set(db.find('competition_revisions', (r) => r.status === 'draft' && !r.frozenAt && workOfRevision(r.id) === workId).map((r) => r.id))
+        for (const l of db.find('competition_item_links', (x) => drafts.has(x.revisionId as string) && x.lineKey === lineKey)) {
+          db.update('competition_item_links', l.id, { packageCode: planning.code, packageDescription: planning.description }, audit, { workId })
+        }
       },
 
       async removeItem(itemId) {
@@ -835,8 +835,6 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         }, audit, { workId })
         const { total, count } = writeBudget(budget.id, input.groups, input.activities, input.lines)
         db.put('budgets', { ...db.get('budgets', budget.id)!, isCurrent: true, totalAmount: total.toDb(), linesCount: count })
-        // IPs escolhidos à mão continuam valendo na versão nova (pela chave da linha)
-        for (const o of db.find('budget_line_planning', (x) => x.workId === workId)) applyLinePlanning(workId, o.lineKey as string)
         if (meta.sheet) {
           db.update('works', workId, { uauCompanyCode: meta.sheet.company, uauWorkCode: meta.sheet.work, uauBudgetNumber: meta.sheet.budget }, audit, { workId })
         }

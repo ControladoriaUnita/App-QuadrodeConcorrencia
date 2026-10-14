@@ -19,7 +19,7 @@ function must<T = any>(res: { data: unknown; error: { message: string } | null }
 const snake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
 const toSnake = (o: object) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).map(([k, v]) => [snake(k), v]))
 
-const PARTY = 'id, legal_name, trade_name, tax_id, contact_name, phone, email, cnd_valid_until, erp_id'
+const PARTY = 'id, legal_name, trade_name, tax_id, contact_name, phone, email, cnd_valid_until, erp_id, is_placeholder'
 const HEADER = `id, code, status, start_on, end_on, total_amount::text, pct_material::text, pct_equipment::text, pct_service::text,
   budget_amount::text, available_amount::text, erp_contract_id, projects, scope_definitions, direct_billing_materials,
   measurement_criteria, notes, submitted_at, submitted_by, sent_to_erp_at, signed_on, cancel_reason, created_at, created_by,
@@ -41,7 +41,7 @@ const party = (s: Json | null): ContractPartyDTO | null =>
     ? {
         id: s.id as string, legalName: s.legal_name as string, tradeName: (s.trade_name as string) ?? null, taxId: s.tax_id as string,
         contactName: (s.contact_name as string) ?? null, phone: (s.phone as string) ?? null, email: (s.email as string) ?? null,
-        cndValidUntil: (s.cnd_valid_until as string) ?? null, erpId: (s.erp_id as string) ?? null,
+        cndValidUntil: (s.cnd_valid_until as string) ?? null, erpId: (s.erp_id as string) ?? null, isPlaceholder: s.is_placeholder === true,
       }
     : null
 

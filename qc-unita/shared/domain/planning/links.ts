@@ -20,12 +20,13 @@ export interface PlanningLink {
   lineKey?: string | null
   materialId: string
   packageCode: string | null
+  packageDescription?: string | null
   quantity: Decimal
   budgetUnitCost: Decimal
   /** Percentual da linha comprometido (0..1) */
-  share?: Decimal
+  share: Decimal
   /** Verba puxada da linha (custo total × percentual) */
-  budgetValue?: Decimal
+  budgetValue: Decimal
 }
 
 const ONE = Decimal.from(1)
@@ -145,8 +146,6 @@ export function consolidate(
 ): { byPackage: PackageConsolidation[]; byMaterial: MaterialConsolidation[] } {
   const packages = [...new Set(links.map((l) => l.packageCode).filter((p): p is string => !!p))].sort()
   const materials = [...new Set(links.map((l) => l.materialId))]
-  const lineByKey = new Map(lines.map((l) => [l.lineKey, l]))
-
   const byPackage = packages.map<PackageConsolidation>((code) => {
     const rows = lines.filter((i) => i.packageCode === code)
     const own = links.filter((l) => l.packageCode === code)
@@ -159,13 +158,7 @@ export function consolidate(
       description: rows[0]?.packageDescription ?? code,
       budgetTotal,
       othersAmount,
-      thisBudget: Decimal.sum(
-        own.map((l) => {
-          const line = l.lineKey ? lineByKey.get(l.lineKey) : undefined
-          if (l.budgetValue) return l.budgetValue
-          return line ? lineBudgetValue(line, l.quantity) : lineTotal(l.budgetUnitCost, l.quantity)
-        }),
-      ),
+      thisBudget: Decimal.sum(own.map((l) => l.budgetValue)),
       thisAmount,
       balance: budgetTotal.minus(used),
       consumption: budgetTotal.isZero() ? null : used.div(budgetTotal, RATIO),

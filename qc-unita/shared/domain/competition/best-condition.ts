@@ -28,10 +28,6 @@ export function lineTotal(unitPrice: Decimal, quantity: Decimal): Decimal {
   return unitPrice.times(quantity).round(MONEY_SCALE)
 }
 
-export function budgetTotalOf(item: QcItem): Decimal {
-  return item.referenceBudget ?? lineTotal(item.budgetUnitCost, item.budgetQuantity)
-}
-
 function isEligible(s: QcSupplier) {
   return s.status !== 'declined' && s.status !== 'disqualified'
 }
@@ -59,7 +55,7 @@ export function computeBestConditions(
   return [...items]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((item) => {
-      const budgetTotal = budgetTotalOf(item)
+      const budgetTotal = item.budgetTotal
       let winner: { supplierId: string; unit: Decimal } | null = null
 
       const override = overrideByItem.get(item.id)
@@ -154,10 +150,4 @@ export function computeSupplierSummaries(
 /** Soma das melhores condições item a item (cenário "mix" de fornecedores). */
 export function bestMixTotal(best: BestCondition[]): Decimal {
   return Decimal.sum(best.map((b) => b.totalPrice ?? Decimal.ZERO))
-}
-
-/** Itens com quantidade > 0 sem nenhuma cotação válida. */
-export function itemsWithoutQuote(best: BestCondition[], items: QcItem[]): QcItem[] {
-  const byId = new Map(best.map((b) => [b.itemId, b]))
-  return items.filter((i) => i.quantity.isPositive() && !byId.get(i.id)?.competitionSupplierId)
 }

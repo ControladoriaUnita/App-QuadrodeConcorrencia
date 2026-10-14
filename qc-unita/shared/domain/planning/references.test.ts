@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { D, Decimal } from '../decimal'
 import type { QcItemDTO, QcLinkDTO } from '../../contracts'
 import { buildQcMap, type QcMapSource } from '../competition/qc-map'
-import { allocateGroupBudgets, comparisonGroups, itemPlanningAllocations, referenceBudgets, validateReferences } from './references'
+import { allocateGroupBudgets, comparisonGroups, itemPlanningAllocations, linksByReference, referenceBudgets, validateReferences } from './references'
 
 const link = (id: string, referenceId: string, pkg: string, budgetValue: string): QcLinkDTO => ({
   id, referenceId, activityItemId: `a-${id}`, lineKey: `k-${id}`, materialId: `m-${referenceId}`, packageCode: pkg, packageDescription: null,
   quantity: '10.0000', share: '1', budgetValue, budgetUnitCost: '1', awardedUnitPrice: null, awardedTotal: null,
 })
 const item = (id: string, quantity: string, referenceIds: string[], extra: Partial<QcItemDTO> = {}): QcItemDTO => ({
-  id, sortOrder: 1, materialId: null, code: id.toUpperCase(), description: id, unit: 'un', budgetQuantity: '0', budgetUnitCost: '0', quantity,
+  id, sortOrder: 1, materialId: null, code: id.toUpperCase(), description: id, unit: 'un', quantity,
   scopeDescription: null, contractNotes: null, pctMaterial: '0', pctEquipment: '0', pctRetention: '0',
   origin: 'manual', planningCode: null, planningDescription: null, referenceIds, ...extra,
 })
@@ -31,7 +31,7 @@ function source(items: QcItemDTO[], links: QcLinkDTO[], prices: [string, string]
     suppliers: [{
       id: 'cs1', supplierId: 's1', sortOrder: 1, status: 'responded', legalName: 'S1', tradeName: null, taxId: '1', contactName: null, phone: null,
       email: null, cndValidUntil: null, deliveryTerms: null, paymentTerms: null, readjustmentTerms: null, notes: null, strengths: null,
-      weaknesses: null, proposalRef: null, proposalReceivedOn: null, proposalValidUntil: null,
+      weaknesses: null, proposalRef: null, proposalReceivedOn: null, proposalValidUntil: null, isPlaceholder: false,
     }],
     prices: prices.map(([itemId, unitPrice]) => ({ competitionSupplierId: 'cs1', itemId, unitPrice, notes: null })),
     overrides: [],
@@ -73,9 +73,9 @@ describe('insumos do mapa × insumos referência', () => {
       { referenceId: 'r1', packageCode: 'IP2', budgetValue: D(600) },
       { referenceId: 'r1', packageCode: 'IP1', budgetValue: D(400) },
     ]
-    const inherited = itemPlanningAllocations({ id: 'a', quantity: D(10), referenceIds: ['r1'] }, links)
+    const inherited = itemPlanningAllocations({ id: 'a', quantity: D(10), referenceIds: ['r1'] }, linksByReference(links))
     expect(inherited.map((a) => [a.packageCode, a.quantity.toFixed(), a.share.toFixed(2)])).toEqual([['IP1', '4.0000', '0.40'], ['IP2', '6.0000', '0.60']])
-    const manual = itemPlanningAllocations({ id: 'a', quantity: D(10), referenceIds: ['r1'], planningCode: 'IP9' }, links)
+    const manual = itemPlanningAllocations({ id: 'a', quantity: D(10), referenceIds: ['r1'], planningCode: 'IP9' }, linksByReference(links))
     expect(manual.map((a) => [a.packageCode, a.quantity.toFixed()])).toEqual([['IP9', '10']])
   })
 

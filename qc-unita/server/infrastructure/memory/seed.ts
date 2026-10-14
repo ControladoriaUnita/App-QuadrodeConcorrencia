@@ -9,6 +9,7 @@ import * as addenda from '../../application/use-cases/addenda'
 import * as contracts from '../../application/use-cases/contracts'
 import { currentAllocations, suggestAllocations } from '../../../shared/domain/contract/addendum'
 import * as qc from '../../application/use-cases/competitions'
+import { buildQcMap } from '../../../shared/domain/competition/qc-map'
 import { syncFromErp } from '../../application/use-cases/erp-sync'
 import { MockERPProvider } from '../erp/mock-erp-provider'
 import { type MemoryDb, uid } from './memory-db'
@@ -138,11 +139,17 @@ async function seed(db: MemoryDb) {
     const ids: string[] = []
     for (const [trade] of opts.suppliers) ids.push((await qc.addSupplier(s.repos, s.ctx, revisionId, sup(trade).id)).id)
     const data = (await s.repos.competitions.getData(competitionId, revisionId))!
+    // Base das cotações: o orçado unitário de cada insumo (verba das referências ÷ quantidade)
+    const map = buildQcMap(data)
+    const budgetUnit = (id: string) => {
+      const i = map.items.find((x) => x.id === id)!
+      return i.quantity.isPositive() ? i.budgetTotal.div(i.quantity, 4).toDb() : '0'
+    }
     const prices = data.items.flatMap((item, ii) =>
       ids.map((csId, si) => ({
         competitionSupplierId: csId,
         itemId: item.id,
-        unitPrice: opts.skip?.some(([a, b]) => a === ii && b === si) ? null : quote(item.budgetUnitCost, opts.suppliers[si]![1], ii + si * 3),
+        unitPrice: opts.skip?.some(([a, b]) => a === ii && b === si) ? null : quote(budgetUnit(item.id), opts.suppliers[si]![1], ii + si * 3),
       })),
     )
     await qc.upsertPrices(s.repos, s.ctx, revisionId, { prices })

@@ -8,6 +8,7 @@ import type {
   CompetitionDetailDTO,
   CreateCompetitionInput,
   DecideApprovalInput,
+  AddLinesInput,
   SetReferenceLinesInput,
   UpdateItemInput,
   UpdateRevisionInput,
@@ -21,6 +22,7 @@ import { buildQcMap, type QcMap } from '../../../shared/domain/competition/qc-ma
 import {
   approvalAmount,
   assertEditable,
+  baseRevisionFor,
   canCreateRevision,
   DomainError,
   isEditable,
@@ -142,9 +144,9 @@ export async function createCompetition(repos: Repositories, ctx: RequestContext
 }
 
 /** Insumo do mapa igual à referência (mesmo insumo e quantidade), ligado a ela */
-function itemFromReference(r: Pick<AggregatedInput, 'materialId' | 'code' | 'description' | 'unit' | 'quantity'> & { unitCost?: string }, referenceId: string): NewQcItem {
+function itemFromReference(r: Pick<AggregatedInput, 'materialId' | 'code' | 'description' | 'unit' | 'quantity'>, referenceId: string): NewQcItem {
   return {
-    materialId: r.materialId, code: r.code, description: r.description, unit: r.unit, quantity: r.quantity, budgetUnitCost: r.unitCost,
+    materialId: r.materialId, code: r.code, description: r.description, unit: r.unit, quantity: r.quantity,
     origin: 'reference', planningCode: null, planningDescription: null, referenceIds: [referenceId],
   }
 }
@@ -172,10 +174,18 @@ function serializeBest(map: QcMap): ComputedPersistence['best'] {
   }))
 }
 
-/** Recalcula melhores condições/totais com o domínio e persiste o resultado. */
+/**
+ * Recalcula melhores condições/totais com o domínio e persiste o resultado. O total orçado da
+ * revisão acompanha a verba dos insumos referência (Σ linhas puxadas do orçamento).
+ */
 export async function recompute(repos: Repositories, competitionId: string, revisionId: string): Promise<QcMap> {
   const data = await repos.competitions.getData(competitionId, revisionId)
   if (!data) throw notFound('Concorrência')
+  const budgetAmount = Decimal.sum(data.links.map((l) => l.budgetValue)).round(4)
+  if (!budgetAmount.eq(data.revision.budgetAmount)) {
+    await repos.competitions.updateRevision(revisionId, { budgetAmount: budgetAmount.toDb() })
+    data.revision.budgetAmount = budgetAmount.toDb()
+  }
   const map = buildQcMap(data)
 
   const itemQty = new Map(map.items.map((i) => [i.id, i.quantity]))
@@ -188,11 +198,11 @@ export async function recompute(repos: Repositories, competitionId: string, revi
     proposalTotals: map.summaries.map((s) => ({ competitionSupplierId: s.competitionSupplierId, total: s.total.toDb() })),
     best: serializeBest(map),
     awardedTotal: map.awardedTotal.toDb(),
-    linkValues: map.links.map((l) => ({
-      linkId: l.id!,
-      awardedUnitPrice: l.awardedUnitPrice?.toDb() ?? null,
-      awardedTotal: l.awardedTotal?.toDb() ?? null,
-    })),
+    // Só as linhas cujo valor contratado mudou
+    linkValues: map.links
+      .map((l, k) => ({ linkId: l.id!, awardedUnitPrice: l.awardedUnitPrice?.toDb() ?? null, awardedTotal: l.awardedTotal?.toDb() ?? null, before: data.links[k]! }))
+      .filter((v) => v.awardedTotal !== v.before.awardedTotal || v.awardedUnitPrice !== v.before.awardedUnitPrice)
+      .map(({ before: _b, ...v }) => v),
   }
   await repos.competitions.persistComputed(revisionId, computed)
   return map
@@ -209,14 +219,13 @@ export async function updateRevision(repos: Repositories, ctx: RequestContext, r
 }
 
 export async function updateItem(repos: Repositories, ctx: RequestContext, revisionId: string, itemId: string, input: UpdateItemInput) {
-  const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
+  const { ref, data } = await loadDraft(repos, ctx, revisionId)
   if (input.pctMaterial !== undefined && input.pctEquipment !== undefined) {
     if (Decimal.from(input.pctMaterial).plus(input.pctEquipment).gt(1)) {
       throw new DomainError('PCT_INVALID', '% material + % equipamento não pode exceder 100%.')
     }
   }
   if (input.code !== undefined || input.description !== undefined || input.unit !== undefined) {
-    const data = (await repos.competitions.getData(ref.competitionId, revisionId))!
     if (data.items.find((i) => i.id === itemId)?.origin !== 'manual') {
       throw new DomainError('ITEM_FROM_REFERENCE', 'Código, descrição e unidade só podem ser alterados em insumos criados no mapa.')
     }
@@ -344,13 +353,6 @@ function buildLink(line: BudgetLineDTO, spec: { share?: Decimal; quantity?: Deci
   }
 }
 
-/** Total orçado da revisão = Σ verba dos insumos referência (linhas puxadas do orçamento). */
-async function syncRevisionBudget(repos: Repositories, competitionId: string, revisionId: string) {
-  const data = (await repos.competitions.getData(competitionId, revisionId))!
-  const budgetAmount = Decimal.sum(data.links.map((l) => Decimal.from(l.budgetValue))).round(4)
-  if (!budgetAmount.eq(data.revision.budgetAmount)) await repos.competitions.updateRevision(revisionId, { budgetAmount: budgetAmount.toDb() })
-}
-
 async function loadDraft(repos: Repositories, ctx: RequestContext, revisionId: string) {
   const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
   const data = (await repos.competitions.getData(ref.competitionId, revisionId))!
@@ -384,7 +386,6 @@ export async function setReferenceLines(repos: Repositories, ctx: RequestContext
     if (oldQty.eq(item.quantity) && !newQty.eq(item.quantity)) await repos.competitions.updateItem(item.id, { quantity: newQty.toDb() })
   }
   await repos.competitions.setReferenceLinks(revisionId, referenceId, links)
-  await syncRevisionBudget(repos, ref.competitionId, revisionId)
   await recompute(repos, ref.competitionId, revisionId)
 }
 
@@ -393,9 +394,9 @@ export async function setReferenceLines(repos: Repositories, ctx: RequestContext
  * que já é referência viram linhas dela; as demais criam referências novas.
  * `fillMap`: cada referência nova já ganha seu insumo no mapa (1:1).
  */
-export async function addLines(repos: Repositories, ctx: RequestContext, revisionId: string, lineIds: string[], rawShares?: Record<string, string>, fillMap = false) {
+export async function addLines(repos: Repositories, ctx: RequestContext, revisionId: string, input: AddLinesInput) {
   const { ref, data } = await loadDraft(repos, ctx, revisionId)
-  const lines = await repos.catalog.getBudgetLines([...new Set(lineIds)])
+  const lines = await repos.catalog.getBudgetLines([...new Set(input.lineIds)])
   const already = new Set(data.links.map((l) => l.lineKey))
   const fresh = lines.filter((l) => !already.has(l.lineKey))
   if (!fresh.length) throw new AppError('LINES_ALREADY_LINKED', 'As linhas selecionadas já estão neste QC.', 409)
@@ -403,31 +404,27 @@ export async function addLines(repos: Repositories, ctx: RequestContext, revisio
   const commitments = await repos.competitions.workCommitments(ref.workId)
   const others = commitments.links.filter((l) => l.competitionId !== ref.competitionId)
   const balances = lineBalances(fresh, others)
-  const shares = parseShares(rawShares)
+  const shares = parseShares(input.shares)
   assertSharesWithinBalance(fresh, shares, balances)
   const available = new Map([...balances].map(([k, v]) => [k, v.balanceShare]))
   const groups = groupBudgetLines(fresh, { available, shares })
   if (!groups.length) throw new AppError('NO_BALANCE', 'As linhas selecionadas já estão totalmente comprometidas em outras concorrências.', 422)
 
-  let merged = 0
-  const newRefs: GroupedItem[] = []
-  for (const g of groups) {
-    const existing = data.references.find((r) => r.materialId === g.materialId)
-    if (!existing) {
-      newRefs.push(g)
-      continue
-    }
-    const current = data.links.filter((l) => l.referenceId === existing.id)
-    const extra = toAggregated([g])[0]!.links
-    await repos.competitions.setReferenceLinks(revisionId, existing.id, [...current.map(keepLink), ...extra])
-    merged++
-  }
+  const refByMaterial = new Map(data.references.map((r) => [r.materialId, r]))
+  const merges = groups.filter((g) => refByMaterial.has(g.materialId))
+  const newRefs = groups.filter((g) => !refByMaterial.has(g.materialId))
+  await Promise.all(
+    merges.map((g) => {
+      const existing = refByMaterial.get(g.materialId)!
+      const current = data.links.filter((l) => l.referenceId === existing.id).map(keepLink)
+      return repos.competitions.setReferenceLinks(revisionId, existing.id, [...current, ...toAggregated([g])[0]!.links])
+    }),
+  )
   const aggregated = toAggregated(newRefs)
   const created = aggregated.length ? await repos.competitions.addReferences(revisionId, aggregated) : []
-  if (fillMap && created.length) await repos.competitions.addItems(revisionId, aggregated.map((r, k) => itemFromReference(r, created[k]!)))
-  await syncRevisionBudget(repos, ref.competitionId, revisionId)
+  if (input.fillMap && created.length) await repos.competitions.addItems(revisionId, aggregated.map((r, k) => itemFromReference(r, created[k]!)))
   await recompute(repos, ref.competitionId, revisionId)
-  return { createdReferences: created.length, mergedReferences: merged }
+  return { createdReferences: created.length, mergedReferences: merges.length }
 }
 
 /** Vínculo já gravado reaproveitado como está (mesmo % e verba). */
@@ -442,15 +439,16 @@ export async function removeReference(repos: Repositories, ctx: RequestContext, 
   const { ref, data } = await loadDraft(repos, ctx, revisionId)
   if (!data.references.some((r) => r.id === referenceId)) throw notFound('Insumo referência')
   await repos.competitions.removeReference(referenceId)
-  await syncRevisionBudget(repos, ref.competitionId, revisionId)
   await recompute(repos, ref.competitionId, revisionId)
 }
 
 /** Insumo novo no mapa (da lista da obra ou livre), ligado às referências escolhidas. */
 export async function addQcItem(repos: Repositories, ctx: RequestContext, revisionId: string, input: AddQcItemInput) {
-  const { ref, data } = await loadDraft(repos, ctx, revisionId)
+  const [{ ref, data }, materialId] = await Promise.all([
+    loadDraft(repos, ctx, revisionId),
+    input.materialCode ? repos.catalog.findMaterialIdByCode(input.materialCode) : null,
+  ])
   assertReferences(data, input.referenceIds)
-  const materialId = input.materialCode ? await repos.catalog.findMaterialIdByCode(input.materialCode) : null
   const [id] = await repos.competitions.addItems(revisionId, [{
     materialId,
     code: input.code,
@@ -471,13 +469,11 @@ export async function fillFromReferences(repos: Repositories, ctx: RequestContex
   const { ref, data } = await loadDraft(repos, ctx, revisionId)
   const used = new Set(data.items.flatMap((i) => i.referenceIds))
   const free = data.references.filter((r) => !used.has(r.id))
-  const sums = (rid: string) => {
-    const own = data.links.filter((l) => l.referenceId === rid)
-    const q = Decimal.sum(own.map((l) => Decimal.from(l.quantity))).round(4)
-    const v = Decimal.sum(own.map((l) => Decimal.from(l.budgetValue))).round(4)
-    return { quantity: q.toDb(), unitCost: q.isZero() ? '0.0000' : v.div(q, 4).toDb() }
+  const quantity = new Map<string, Decimal>()
+  for (const l of data.links) quantity.set(l.referenceId, (quantity.get(l.referenceId) ?? Decimal.ZERO).plus(l.quantity))
+  if (free.length) {
+    await repos.competitions.addItems(revisionId, free.map((r) => itemFromReference({ ...r, quantity: (quantity.get(r.id) ?? Decimal.ZERO).round(4).toDb() }, r.id)))
   }
-  if (free.length) await repos.competitions.addItems(revisionId, free.map((r) => itemFromReference({ ...r, ...sums(r.id) }, r.id)))
   await recompute(repos, ref.competitionId, revisionId)
   return { created: free.length }
 }
@@ -518,9 +514,7 @@ export async function createRevision(repos: Repositories, ctx: RequestContext, c
   requirePermission(ctx, 'competition.edit', data.competition.workId)
   const check = canCreateRevision(data.revisions)
   if (!check.ok) throw new DomainError('REVISION_NOT_ALLOWED', check.reason!)
-  const base = [...data.revisions]
-    .filter((r) => r.status === 'approved' || r.status === 'rejected')
-    .sort((a, b) => b.number - a.number)[0]!
+  const base = baseRevisionFor(data.revisions)!
   const revisionId = await repos.competitions.cloneRevision(base.id, reason)
   if (data.competition.status === 'contracted') await repos.competitions.updateCompetition(competitionId, { status: 'contracted' })
   await recompute(repos, competitionId, revisionId)

@@ -95,8 +95,6 @@ export interface NewQcItem {
   description: string
   unit: string
   quantity: string
-  /** Custo unitário orçado de partida (insumo igual à referência); o orçado efetivo vem das referências */
-  budgetUnitCost?: string
   origin: QcItemOrigin
   planningCode: string | null
   planningDescription: string | null
@@ -162,10 +160,11 @@ export interface CatalogRepository {
   /** Insumo do cadastro pelo código (null se não existir) */
   findMaterialIdByCode(code: string): Promise<string | null>
   /**
-   * IP escolhido à mão para uma linha do orçamento (pela chave da linha): vale para a versão vigente,
-   * para as próximas versões importadas e para os QCs em rascunho. null volta ao IP da planilha.
+   * IP escolhido à mão para uma linha do orçamento (pela chave da linha); null volta ao IP da planilha.
+   * A leitura das linhas já devolve o IP manual (vale também para as próximas versões importadas).
+   * Retorna o IP efetivo da linha, ou null se a linha não existe no orçamento vigente.
    */
-  setLinePlanning(workId: string, lineKey: string, planning: { code: string; description: string | null } | null): Promise<number>
+  setLinePlanning(workId: string, lineKey: string, planning: { code: string; description: string | null } | null): Promise<{ code: string | null; description: string | null } | null>
 }
 
 export interface CompetitionRepository {
@@ -176,7 +175,7 @@ export interface CompetitionRepository {
   getRevisionRef(revisionId: string): Promise<{ competitionId: string; workId: string; status: RevisionStatus; number: number; frozenAt: string | null } | null>
   updateCompetition(id: string, patch: { engineeringOwnerId?: string | null; procurementOwnerId?: string | null; status?: CompetitionStatus; currentRevisionId?: string }): Promise<void>
   updateRevision(revisionId: string, patch: Record<string, unknown>): Promise<void>
-  updateItem(itemId: string, patch: UpdateItemInput & { budgetQuantity?: string; budgetUnitCost?: string }): Promise<void>
+  updateItem(itemId: string, patch: UpdateItemInput): Promise<void>
   addSupplier(revisionId: string, supplier: SupplierDTO, sortOrder: number): Promise<string>
   updateSupplier(competitionSupplierId: string, patch: UpdateSupplierTermsInput): Promise<void>
   removeSupplier(competitionSupplierId: string): Promise<void>
@@ -195,6 +194,8 @@ export interface CompetitionRepository {
   setItemReferences(revisionId: string, itemId: string, referenceIds: string[]): Promise<void>
   /** Remove um insumo do mapa (preços e ligações juntos) */
   removeItem(itemId: string): Promise<void>
+  /** IP das linhas puxadas pelos QCs em rascunho da obra (revisões congeladas guardam o IP da aprovação) */
+  setDraftLinksPlanning(workId: string, lineKey: string, planning: { code: string | null; description: string | null }): Promise<void>
   /** Revisões efetivas e compromissos por vínculo de todas as concorrências da obra */
   workCommitments(workId: string): Promise<WorkCommitments>
   setRevisionStatus(revisionId: string, change: RevisionStatusChange): Promise<void>

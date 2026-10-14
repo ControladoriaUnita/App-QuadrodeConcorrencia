@@ -1,7 +1,7 @@
 /**
  * Visão por obra: o orçamento geral da obra e o quanto as concorrências o consomem.
  */
-import type { BudgetImportInput, BudgetLineUsageDTO, BudgetStructureDTO, CreateWorkInput, PlanningCodeDTO, SetLinePlanningInput, WorkCompetitionDTO, WorkDTO, WorkListDTO, WorkMaterialDTO, WorkOverviewDTO } from '../../../shared/contracts'
+import type { BudgetImportInput, BudgetLineDTO, BudgetLineUsageDTO, BudgetStructureDTO, CreateWorkInput, PlanningCodeDTO, SetLinePlanningInput, WorkCompetitionDTO, WorkDTO, WorkListDTO, WorkMaterialDTO, WorkOverviewDTO } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import { summarizeWork } from '../../../shared/domain/work/overview'
 import { AppError, can, notFound, requirePermission, type RequestContext } from '../context'
@@ -185,60 +185,67 @@ export async function saveBudgetVersion(
 }
 
 // ----------------------------------------------------------------------------- IPs e insumos da obra
-/**
- * Insumos do orçamento da obra na UAU (Orcamento/ConsultarInsumosPorChave). Sem chave da obra na
- * UAU, sem provider ou com a UAU fora do ar, devolve null e o motivo (a tela usa o orçamento importado).
- */
-async function erpWorkMaterials(erp: ERPProvider, work: WorkDTO): Promise<{ items: ErpWorkMaterial[] | null; warning: string | null }> {
-  if (!erp.listWorkMaterials) return { items: null, warning: null }
-  if (!work.uau?.budget) return { items: null, warning: 'A obra não tem empresa, obra e orçamento da UAU: a lista vem do orçamento importado.' }
-  try {
-    return { items: await erp.listWorkMaterials({ company: work.uau.company, work: work.uau.work, budget: work.uau.budget }), warning: null }
-  } catch (err) {
-    return { items: null, warning: `Não foi possível consultar a UAU (${(err as Error).message}). A lista vem do orçamento importado.` }
-  }
-}
-
-async function loadWork(repos: Repositories, ctx: RequestContext, workId: string) {
-  requirePermission(ctx, 'budget.read', workId)
+async function loadWork(repos: Repositories, ctx: RequestContext, workId: string, permission: 'budget.read' | 'budget.import' = 'budget.read') {
+  requirePermission(ctx, permission, workId)
   const work = await repos.catalog.getWork(workId)
   if (!work) throw notFound('Obra')
   return work
 }
 
-/** Vínculos de planejamento (IPs) da obra: os insumos "IP…" do orçamento da obra na UAU. */
-export async function listPlanningCodes(repos: Repositories, erp: ERPProvider, ctx: RequestContext, workId: string): Promise<WorkListDTO<PlanningCodeDTO>> {
+/**
+ * Lista por obra vinda dos insumos do orçamento da obra na UAU (Orcamento/ConsultarInsumosPorChave).
+ * Sem chave da obra na UAU, sem provider ou com a UAU fora do ar, a lista sai das linhas do
+ * orçamento importado (um item por código) e o motivo vai em `warning`.
+ */
+async function workList<T extends { code: string }>(
+  repos: Repositories,
+  erp: ERPProvider,
+  ctx: RequestContext,
+  workId: string,
+  fromUau: (items: ErpWorkMaterial[]) => T[],
+  fromLine: (line: BudgetLineDTO) => T[],
+): Promise<WorkListDTO<T>> {
   const work = await loadWork(repos, ctx, workId)
-  const uau = await erpWorkMaterials(erp, work)
-  if (uau.items) {
-    return { source: 'uau', warning: null, items: uau.items.filter((m) => m.code.startsWith('IP')).map((m) => ({ code: m.code, description: m.description, unit: m.unit || null })) }
+  let warning: string | null = null
+  if (erp.listWorkMaterials) {
+    if (!work.uau?.budget) warning = 'A obra não tem empresa, obra e orçamento da UAU: a lista vem do orçamento importado.'
+    else {
+      try {
+        return { source: 'uau', warning: null, items: fromUau(await erp.listWorkMaterials({ company: work.uau.company, work: work.uau.work, budget: work.uau.budget })) }
+      } catch (err) {
+        warning = `Não foi possível consultar a UAU (${(err as Error).message}). A lista vem do orçamento importado.`
+      }
+    }
   }
   const lines = work.currentBudgetId ? await repos.catalog.listBudgetLines(work.currentBudgetId) : []
-  const byCode = new Map<string, PlanningCodeDTO>()
-  for (const l of lines) {
-    if (l.code.startsWith('IP') && !byCode.has(l.code)) byCode.set(l.code, { code: l.code, description: l.description, unit: l.unit })
-    if (l.packageCode?.startsWith('IP') && !byCode.has(l.packageCode)) byCode.set(l.packageCode, { code: l.packageCode, description: l.packageDescription ?? l.packageCode, unit: null })
-  }
-  return { source: 'budget', warning: uau.warning, items: [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code)) }
+  const byCode = new Map<string, T>()
+  for (const item of lines.flatMap(fromLine)) if (!byCode.has(item.code)) byCode.set(item.code, item)
+  return { source: 'budget', warning, items: [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code)) }
 }
 
-/** Insumos da obra para criar insumos no mapa: UAU, ou os insumos do orçamento importado. */
-export async function listWorkMaterials(repos: Repositories, erp: ERPProvider, ctx: RequestContext, workId: string): Promise<WorkListDTO<WorkMaterialDTO>> {
-  const work = await loadWork(repos, ctx, workId)
-  const uau = await erpWorkMaterials(erp, work)
-  if (uau.items) return { source: 'uau', warning: null, items: uau.items.map(({ groupDescription: _g, ...m }) => m) }
-  const lines = work.currentBudgetId ? await repos.catalog.listBudgetLines(work.currentBudgetId) : []
-  const byCode = new Map<string, WorkMaterialDTO>()
-  for (const l of lines) if (!byCode.has(l.code)) byCode.set(l.code, { code: l.code, description: l.description, unit: l.unit, category: null })
-  return { source: 'budget', warning: uau.warning, items: [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code)) }
+/** Vínculos de planejamento (IPs) da obra: os insumos "IP…" do orçamento da obra. */
+export function listPlanningCodes(repos: Repositories, erp: ERPProvider, ctx: RequestContext, workId: string): Promise<WorkListDTO<PlanningCodeDTO>> {
+  const isIp = (code: string | null): code is string => !!code?.startsWith('IP')
+  return workList(
+    repos, erp, ctx, workId,
+    (items) => items.filter((m) => isIp(m.code)).map((m) => ({ code: m.code, description: m.description })),
+    (l) => [
+      ...(isIp(l.code) ? [{ code: l.code, description: l.description }] : []),
+      ...(isIp(l.packageCode) ? [{ code: l.packageCode, description: l.packageDescription ?? l.packageCode }] : []),
+    ],
+  )
 }
 
-/** IP escolhido à mão para uma linha do orçamento (pela chave da linha). */
+/** Insumos da obra para criar insumos no mapa. */
+export function listWorkMaterials(repos: Repositories, erp: ERPProvider, ctx: RequestContext, workId: string): Promise<WorkListDTO<WorkMaterialDTO>> {
+  return workList(repos, erp, ctx, workId, (items) => items, (l) => [{ code: l.code, description: l.description, unit: l.unit }])
+}
+
+/** IP escolhido à mão para uma linha do orçamento (pela chave da linha); vale também nos QCs em rascunho. */
 export async function setLinePlanning(repos: Repositories, ctx: RequestContext, workId: string, input: SetLinePlanningInput) {
-  requirePermission(ctx, 'budget.import', workId)
-  const work = await repos.catalog.getWork(workId)
-  if (!work) throw notFound('Obra')
-  const changed = await repos.catalog.setLinePlanning(workId, input.lineKey, input.code ? { code: input.code, description: input.description ?? null } : null)
-  if (!changed) throw new AppError('LINE_NOT_FOUND', 'Linha do orçamento não encontrada.', 404)
-  return { changed }
+  await loadWork(repos, ctx, workId, 'budget.import')
+  const effective = await repos.catalog.setLinePlanning(workId, input.lineKey, input.code ? { code: input.code, description: input.description ?? null } : null)
+  if (!effective) throw new AppError('LINE_NOT_FOUND', 'Linha do orçamento não encontrada.', 404)
+  await repos.competitions.setDraftLinksPlanning(workId, input.lineKey, effective)
+  return effective
 }

@@ -6,7 +6,6 @@ import type {
   AuditLogDTO,
   BudgetPackageDTO,
   CompetitionDetailDTO,
-  CompetitionListItemDTO,
   CreateCompetitionInput,
   DecideApprovalInput,
   AddQcItemInput,
@@ -21,7 +20,6 @@ import type {
 import { api } from '@/lib/api'
 
 export const keys = {
-  list: (workId?: string) => ['competitions', workId ?? 'all'] as const,
   detail: (id: string, revisionId?: string) => ['competition', id, revisionId ?? 'current'] as const,
   audit: (id: string) => ['competition-audit', id] as const,
 }
@@ -35,9 +33,6 @@ export const useSuppliers = (search = '') =>
     queryFn: () => api<SupplierDTO[]>(`/suppliers${search ? `?search=${encodeURIComponent(search)}` : ''}`),
     placeholderData: (prev) => prev,
   })
-
-export const useCompetitions = (workId?: string) =>
-  useQuery({ queryKey: keys.list(workId), queryFn: () => api<CompetitionListItemDTO[]>(`/competitions${workId ? `?workId=${workId}` : ''}`) })
 
 export const useCompetition = (id: string, revisionId?: string) =>
   useQuery({
@@ -76,6 +71,13 @@ export function useQcMutations(competitionId: string, revisionId: string) {
   const invalidate = useInvalidate(competitionId)
   const base = `/revisions/${revisionId}`
   const opts = { onSuccess: invalidate }
+  /** Mudanças nas linhas puxadas também mudam o comprometido do orçamento */
+  const withBudget = {
+    onSuccess: () => {
+      invalidate()
+      qc.invalidateQueries({ queryKey: ['budget-lines'] })
+    },
+  }
 
   return {
     updateRevision: useMutation({ mutationFn: (b: UpdateRevisionInput) => api(base, { method: 'PATCH', body: b }), ...opts }),
@@ -120,11 +122,7 @@ export function useQcMutations(competitionId: string, revisionId: string) {
     setReferenceLines: useMutation({
       mutationFn: ({ referenceId, links }: { referenceId: string } & SetReferenceLinesInput) =>
         api(`${base}/references/${referenceId}/lines`, { method: 'PUT', body: { links } }),
-      ...opts,
-      onSuccess: () => {
-        opts.onSuccess?.()
-        qc.invalidateQueries({ queryKey: ['budget-lines'] })
-      },
+      ...withBudget,
     }),
     addLines: useMutation({
       mutationFn: ({ selection, fillMap }: { selection: Map<string, string>; fillMap: boolean }) =>
@@ -132,17 +130,11 @@ export function useQcMutations(competitionId: string, revisionId: string) {
           method: 'POST',
           body: { lineIds: [...selection.keys()], shares: Object.fromEntries(selection), fillMap },
         }),
-      onSuccess: () => {
-        invalidate()
-        qc.invalidateQueries({ queryKey: ['budget-lines'] })
-      },
+      ...withBudget,
     }),
     removeReference: useMutation({
       mutationFn: (referenceId: string) => api(`${base}/references/${referenceId}`, { method: 'DELETE' }),
-      onSuccess: () => {
-        invalidate()
-        qc.invalidateQueries({ queryKey: ['budget-lines'] })
-      },
+      ...withBudget,
     }),
     addItem: useMutation({ mutationFn: (b: AddQcItemInput) => api<{ id: string }>(`${base}/items`, { method: 'POST', body: b }), ...opts }),
     fillFromReferences: useMutation({ mutationFn: () => api<{ created: number }>(`${base}/items/fill-from-references`, { method: 'POST' }), ...opts }),

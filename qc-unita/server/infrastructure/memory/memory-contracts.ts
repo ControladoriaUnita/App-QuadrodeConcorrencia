@@ -22,7 +22,7 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
     return {
       id: s.id, legalName: s.legalName as string, tradeName: (s.tradeName as string) ?? null, taxId: s.taxId as string,
       contactName: (s.contactName as string) ?? null, phone: (s.phone as string) ?? null, email: (s.email as string) ?? null,
-      cndValidUntil: (s.cndValidUntil as string) ?? null, erpId: (s.erpId as string) ?? null,
+      cndValidUntil: (s.cndValidUntil as string) ?? null, erpId: (s.erpId as string) ?? null, isPlaceholder: s.isPlaceholder === true,
     }
   }
 

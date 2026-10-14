@@ -13,6 +13,7 @@ import * as qc from '../../application/use-cases/competitions'
 import { syncFromErp } from '../../application/use-cases/erp-sync'
 import * as works from '../../application/use-cases/works'
 import { parseBudgetSheet, type Cell } from '../../../shared/domain/budget/excel-import'
+import { buildQcMap } from '../../../shared/domain/competition/qc-map'
 import { MockERPProvider } from '../erp/mock-erp-provider'
 import { createServiceClient, createUserClient } from './client'
 import { createSupabaseRepositories } from './supabase-repositories'
@@ -78,11 +79,12 @@ describe.runIf(RUN)('Supabase repositories (integração)', () => {
 
     const data = (await repos.competitions.getData(competitionId))!
     expect(data.items.length).toBeGreaterThan(5)
-    expect(data.items[0]!.budgetQuantity).toMatch(/^\d+\.\d{4}$/) // numeric como texto
+    expect(data.items[0]!.quantity).toMatch(/^\d+\.\d{4}$/) // numeric como texto
+    const map = buildQcMap(data)
 
     await qc.upsertPrices(repos, ctx, revisionId, {
       prices: data.items.flatMap((i, ii) =>
-        data.suppliers.map((s, si) => ({ competitionSupplierId: s.id, itemId: i.id, unitPrice: (Number(i.budgetUnitCost) * (0.95 + 0.03 * si + 0.001 * ii)).toFixed(2) })),
+        data.suppliers.map((s, si) => ({ competitionSupplierId: s.id, itemId: i.id, unitPrice: (Number(map.bestByItem.get(i.id)!.budgetTotal.toFixed()) / Number(i.quantity) * (0.95 + 0.03 * si + 0.001 * ii)).toFixed(2) })),
       ),
     })
     const list = await repos.competitions.list({})
@@ -145,7 +147,7 @@ describe.runIf(RUN)('Supabase repositories (integração)', () => {
     const detail = await qc.getCompetition(s.repos, s.ctx, competitionId)
     const lines = await works.listBudgetLinesUsage(s.repos, s.ctx, detail.competition.workId, { packages: ['IP00157'] })
     expect(lines.length).toBeGreaterThan(2)
-    const r = await qc.addLines(s.repos, s.ctx, detail.revision.id, lines.slice(0, 2).map((l) => l.id))
+    const r = await qc.addLines(s.repos, s.ctx, detail.revision.id, { lineIds: lines.slice(0, 2).map((l) => l.id) })
     expect(r.createdReferences + r.mergedReferences).toBeGreaterThan(0)
     // % da linha: 50% puxa metade da verba e grava budget_share/budget_value
     const d2 = await qc.getCompetition(s.repos, s.ctx, competitionId)

@@ -198,7 +198,7 @@ export function CompetitionPage() {
               key: 'vinculos',
               label: 'Vínculos e insumos',
               icon: <Link2 className="size-4" />,
-              count: detail.references.filter((r) => !map.referenceUsage.get(r.id)?.length).length || undefined,
+              count: map.unusedReferenceIds.length || undefined,
             },
             { key: 'mapa', label: 'Mapa de cotação', icon: <Table2 className="size-4" />, count: detail.items.length || undefined },
             { key: 'fornecedores', label: 'Fornecedores e condições', icon: <Users className="size-4" />, count: detail.suppliers.length },
@@ -254,6 +254,7 @@ export function CompetitionPage() {
           detail={detail}
           map={map}
           today={today()}
+          adding={m.addSupplier.isPending}
           onAdd={(sid) => m.addSupplier.mutateAsync(sid)}
           onUpdate={(sid, patch) => m.updateSupplier.mutate({ id: sid, ...patch })}
           onRemove={(sid) => m.removeSupplier.mutateAsync(sid)}

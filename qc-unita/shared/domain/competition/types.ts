@@ -11,17 +11,13 @@ export interface QcItem {
   code: string
   description: string
   unit: string
-  budgetQuantity: Decimal
-  budgetUnitCost: Decimal
   /** Quantidade equalizada usada para comparar propostas */
   quantity: Decimal
   pctMaterial: Decimal
   pctEquipment: Decimal
   pctRetention: Decimal
-  /** Insumos referência ligados (comparação com o orçado) */
-  referenceIds?: string[]
-  /** Orçado do item vindo das referências (rateado); quando presente, substitui quantidade × unitário orçados */
-  referenceBudget?: Decimal
+  /** Orçado do item: verba das referências ligadas (rateada no grupo de comparação) */
+  budgetTotal: Decimal
 }
 
 export interface QcSupplier {

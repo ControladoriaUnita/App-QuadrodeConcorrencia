@@ -67,7 +67,7 @@ describe('vínculos de planejamento', () => {
   it('consolida orçado × outros QCs × este QC por vínculo e por insumo', () => {
     const c = consolidate(
       inputs,
-      [{ referenceId: 'r1', materialId: 'm1', packageCode: 'IP1', quantity: D(80), budgetUnitCost: D('0.75'), awardedTotal: D(56) }],
+      [{ referenceId: 'r1', materialId: 'm1', packageCode: 'IP1', quantity: D(80), budgetUnitCost: D('0.75'), share: D('0.8'), budgetValue: D(60), awardedTotal: D(56) }],
       [{ competitionId: 'x', category: 'contracted', packageCode: 'IP1', materialId: 'm2', lineKey: 'k-c', quantity: '10', share: '1', budgetValue: '600', amount: '580' }],
     )
     const ip1 = c.byPackage[0]!

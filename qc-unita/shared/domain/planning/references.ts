@@ -30,6 +30,17 @@ export interface ReferenceLink {
   budgetValue: Decimal
 }
 
+/** Linhas de cada referência (índice para não varrer todas as linhas por insumo) */
+export function linksByReference<L extends ReferenceLink>(links: L[]): Map<string, L[]> {
+  const out = new Map<string, L[]>()
+  for (const l of links) {
+    const own = out.get(l.referenceId)
+    if (own) own.push(l)
+    else out.set(l.referenceId, [l])
+  }
+  return out
+}
+
 export interface MapItemRef {
   id: string
   quantity: Decimal
@@ -55,7 +66,8 @@ export function referenceBudgets(referenceIds: string[], links: ReferenceLink[])
 
 /**
  * Grupos de comparação: componentes conexos do grafo insumo do mapa ↔ referência.
- * Referências sem nenhum insumo do mapa ficam fora dos grupos.
+ * Referências sem nenhum insumo do mapa ficam fora dos grupos. Os insumos devem trazer só
+ * referências existentes (ver buildQcMap).
  */
 export function comparisonGroups(items: MapItemRef[], budgets: Map<string, Decimal>): {
   groups: ComparisonGroup[]
@@ -72,10 +84,9 @@ export function comparisonGroups(items: MapItemRef[], budgets: Map<string, Decim
   const add = (x: string) => !parent.has(x) && parent.set(x, x)
   const join = (a: string, b: string) => parent.set(find(a), find(b))
 
-  const known = new Set(budgets.keys())
   for (const i of items) {
     add(`i:${i.id}`)
-    for (const r of i.referenceIds.filter((r) => known.has(r))) {
+    for (const r of i.referenceIds) {
       add(`r:${r}`)
       join(`i:${i.id}`, `r:${r}`)
     }
@@ -130,13 +141,12 @@ export interface PlanningAllocation {
 }
 
 /** IPs do insumo do mapa: manual, ou herdados das linhas das referências pela verba. */
-export function itemPlanningAllocations(item: MapItemRef, links: ReferenceLink[]): PlanningAllocation[] {
+export function itemPlanningAllocations(item: MapItemRef, byReference: Map<string, ReferenceLink[]>): PlanningAllocation[] {
   if (item.planningCode) {
     return [{ packageCode: item.planningCode, packageDescription: item.planningDescription ?? null, share: ONE, quantity: item.quantity }]
   }
-  const refs = new Set(item.referenceIds)
   const byPackage = new Map<string, { packageCode: string | null; packageDescription: string | null; weight: Decimal; count: number }>()
-  for (const l of links.filter((x) => refs.has(x.referenceId))) {
+  for (const l of item.referenceIds.flatMap((r) => byReference.get(r) ?? [])) {
     const k = l.packageCode ?? ''
     const e = byPackage.get(k) ?? { packageCode: l.packageCode, packageDescription: l.packageDescription ?? null, weight: ZERO, count: 0 }
     e.weight = e.weight.plus(Decimal.max(ZERO, l.budgetValue))
@@ -174,7 +184,9 @@ export function linkAwardedAmounts(
       if (l.id) out.set(l.id, null)
       continue
     }
-    byGroup.set(g, [...(byGroup.get(g) ?? []), l])
+    const own = byGroup.get(g)
+    if (own) own.push(l)
+    else byGroup.set(g, [l])
   }
   for (const [g, own] of byGroup) {
     const values = g.itemIds.map((id) => contracted.get(id) ?? null).filter((v): v is Decimal => v !== null)
