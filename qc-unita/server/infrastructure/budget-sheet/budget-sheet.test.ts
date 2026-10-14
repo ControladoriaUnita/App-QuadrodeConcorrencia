@@ -36,15 +36,15 @@ describe('MockBudgetSheetSource', () => {
 })
 
 describe('GraphBudgetSheetSource', () => {
-  it('lista pelo índice: só colunas de chave e total, em blocos, com cache', async () => {
+  it('lista pelo índice: só colunas de chave e de valor, em blocos, com cache', async () => {
     const { g, source } = graphSource()
     const list = await source.listBudgets()
     expect(list).toEqual(await new MockBudgetSheetSource().listBudgets())
-    // Cabeçalho inteiro + colunas A:H (Empresa…QtdPai) e M:N (PrecoItem, PrecoFinal); nunca a linha inteira
+    // Cabeçalho inteiro + colunas de chave e de valor (A…R); nunca as descrições (S…V)
     expect(g.calls[0]).toBe('usedRange')
     expect(g.calls[1]).toBe('A1:V1')
     const blocks = g.calls.slice(2)
-    expect(blocks.every((a) => /^A\d+:H\d+$|^M\d+:N\d+$/.test(a))).toBe(true)
+    expect(blocks.every((a) => /^[A-R]\d+:[A-R]\d+$/.test(a))).toBe(true)
     expect(blocks.length).toBeGreaterThan(2)
     // Cache: a segunda consulta não chama o Graph
     const before = g.calls.length

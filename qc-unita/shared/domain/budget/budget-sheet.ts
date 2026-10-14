@@ -17,7 +17,9 @@
  *
  * Regras
  *  - Quantidade da linha = QtdPai × ItemCoef (× SubItemCoef na auxiliar); unitário = ItemPreco
- *    (SubItemPreco na auxiliar); total = QtdPai × PrecoItem, como na planilha.
+ *    (SubItemPreco na auxiliar). Total = QtdPai × PrecoItem, como na planilha; quando PrecoItem vem
+ *    vazio ou zerado, PrecoFinal; sem nenhum dos dois, quantidade × unitário (ver lineValues).
+ *  - Linhas que ainda assim ficam com valor zero são avisadas com o nº da linha na aba.
  *  - A EAP vem do Item_pla: 02.06.01.03 é o serviço; 02, 02.06 e 02.06.01 viram grupos.
  *  - Tudo ordenado pelos códigos (itens numericamente; dentro do serviço, insumos e auxiliares por código).
  *  - Vínculo de planejamento: coluna "Vínculo PL"/"IP" quando existir; sem ela, o próprio item do
@@ -137,7 +139,7 @@ export function listSheetBudgets(rows: Cell[][]): BudgetSheetEntry[] {
     const e = map.get(id) ?? { ...key, services: 0, lines: 0, total: '0', items: new Set<string>(), sum: Decimal.ZERO }
     e.items.add(text(r[cols.item]))
     e.lines++
-    e.sum = e.sum.plus(lineTotal(r, cols) ?? Decimal.ZERO)
+    e.sum = e.sum.plus(lineValues(r, cols)?.total ?? Decimal.ZERO)
     map.set(id, e)
   }
   return [...map.values()]
@@ -164,13 +166,42 @@ export interface SheetBudget extends Omit<BudgetImportResult, 'lines' | 'layout'
   lines: SheetBudgetLine[]
 }
 
-/** Total da linha: QtdPai × PrecoItem (como a planilha); PrecoFinal só quando não der para calcular. */
-function lineTotal(r: Cell[], cols: SheetColumns): Decimal | null {
-  const qty = exact(r[cols.itemQuantity])
-  const unit = exact(r[cols.unitCost])
-  if (qty && unit) return qty.times(unit)
-  return cols.total >= 0 ? exact(r[cols.total]) : null
+/** Número positivo da célula, ou null (vazio, texto inválido, zero ou negativo) */
+const positive = (c: Cell) => {
+  const d = exact(c)
+  return d?.isPositive() ? d : null
 }
+
+interface LineValues {
+  quantity: Decimal
+  unitCost: Decimal
+  total: Decimal
+}
+
+/**
+ * Quantidade, unitário e total de uma linha da aba. O total segue a planilha (QtdPai × PrecoItem);
+ * se PrecoItem vier vazio ou zerado, usa PrecoFinal; sem os dois, quantidade × unitário. Assim uma
+ * coluna de preço em branco não zera uma linha que tem preço e coeficiente.
+ */
+export function lineValues(r: Cell[], cols: SheetColumns): LineValues | null {
+  const parentQty = exact(r[cols.itemQuantity])
+  const coef = exact(r[cols.coef])
+  const price = exact(r[cols.price])
+  if (!parentQty || !coef || !price) return null
+  const isAux = isAuxRow(r, cols)
+  const subCoef = isAux ? exact(r[cols.subCoef]) : null
+  const subPrice = isAux ? exact(r[cols.subPrice]) : null
+  if (isAux && (!subCoef || !subPrice)) return null
+
+  const quantity = parentQty.times(coef).times(subCoef ?? 1)
+  const unitCost = subPrice ?? price
+  const perServiceUnit = positive(r[cols.unitCost])
+  const sheetTotal = cols.total >= 0 ? positive(r[cols.total]) : null
+  const total = perServiceUnit ? parentQty.times(perServiceUnit) : (sheetTotal ?? quantity.times(unitCost))
+  return { quantity, unitCost, total }
+}
+
+const isAuxRow = (r: Cell[], cols: SheetColumns) => !!text(r[cols.auxCode]) || text(r[cols.auxFlag]) === '1'
 
 /** Grupos da EAP acima de um item: 02.06.01.03 → 02, 02.06, 02.06.01 */
 const parentsOf = (item: string) => {
@@ -192,29 +223,23 @@ export function buildSheetBudget(rows: Cell[][], key: BudgetSheetKey): SheetBudg
   const materials = new Map<string, ImportedMaterial>()
   const pending: (SheetBudgetLine & { sortKey: string })[] = []
   let skipped = 0
+  const zeroRows: number[] = []
 
   for (const { r, row } of mine) {
     const wbs = text(r[cols.item])
     const code = text(r[cols.material])
-    const parentQty = exact(r[cols.itemQuantity])
-    const coef = exact(r[cols.coef])
-    const price = exact(r[cols.price])
-    if (!wbs || !code || !parentQty || !coef || !price) {
-      skipped++
-      continue
-    }
     const auxCode = text(r[cols.auxCode])
-    const isAux = !!auxCode || text(r[cols.auxFlag]) === '1'
-    const subCoef = isAux ? exact(r[cols.subCoef]) : null
-    const subPrice = isAux ? exact(r[cols.subPrice]) : null
-    if (isAux && (!subCoef || !subPrice || !auxCode)) {
+    const isAux = isAuxRow(r, cols)
+    const values = lineValues(r, cols)
+    if (!wbs || !code || !values || (isAux && !auxCode)) {
       skipped++
       continue
     }
-
-    const quantity = parentQty.times(coef).times(subCoef ?? 1)
-    const unitCost = subPrice ?? price
-    const total = lineTotal(r, cols) ?? quantity.times(unitCost)
+    const { quantity, unitCost, total } = values
+    const parentQty = exact(r[cols.itemQuantity])!
+    const coef = exact(r[cols.coef])!
+    const price = exact(r[cols.price])!
+    if (!total.isPositive()) zeroRows.push(row)
 
     const act = activities.get(wbs) ?? {
       wbs,
@@ -259,6 +284,10 @@ export function buildSheetBudget(rows: Cell[][], key: BudgetSheetKey): SheetBudg
   }
   if (!pending.length) throw new Error('O orçamento não tem linhas de insumo válidas.')
   if (skipped) warnings.push(`${skipped} linha(s) sem item, insumo, quantidade, coeficiente ou preço foram ignoradas.`)
+  if (zeroRows.length) {
+    const list = zeroRows.slice(0, 20).join(', ') + (zeroRows.length > 20 ? ` e mais ${zeroRows.length - 20}` : '')
+    warnings.push(`${zeroRows.length} linha(s) vieram com valor zero na planilha (preço ou coeficiente zerado na UAU). Linhas da aba: ${list}.`)
+  }
   if (cols.package < 0) warnings.push('A planilha não tem coluna de Vínculo PL: cada linha fica vinculada ao próprio item do orçamento (Item_pla).')
 
   // Ordem pelos códigos e chave estável por linha (reimportar não perde vínculos com QCs)

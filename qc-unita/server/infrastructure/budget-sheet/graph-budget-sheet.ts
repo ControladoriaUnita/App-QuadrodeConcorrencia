@@ -2,9 +2,9 @@
  * Orçamentos da aba "BD_Orcamento" (Excel no SharePoint) lidos pelo Microsoft Graph.
  *
  * A aba tem os orçamentos de TODAS as obras (centenas de milhares de linhas), então:
- *  - Índice: lê em blocos só as colunas de chave e de total (Empresa_pla, Obra_pla, NumOrca_pla,
- *    Item_pla, QtdPai, PrecoItem, PrecoFinal) e guarda em memória por alguns minutos. A lista de
- *    orçamentos sai inteira dele.
+ *  - Índice: lê em blocos só as colunas de chave e as que formam o valor da linha (empresa, obra,
+ *    orçamento, item, quantidades, coeficientes, preços e auxiliar) e guarda em memória por alguns
+ *    minutos. A lista de orçamentos sai inteira dele.
  *  - Orçamento: lê a linha inteira só nas faixas onde o orçamento aparece (descobertas pelo índice)
  *    e confere a chave de cada linha lida; se a planilha mudou desde o índice, refaz o índice uma vez.
  */
@@ -102,7 +102,10 @@ export class GraphBudgetSheetSource implements BudgetSheetSource {
     const [first] = await this.client.readRows(this.ref, { columns: range(area.firstColumn, area.lastColumn), rows: [[area.firstRow, area.firstRow]] })
     const header: Cell[] = first ?? []
     const cols = readSheetColumns(header)
-    const keyColumns = [cols.company, cols.work, cols.budget, cols.item, cols.itemQuantity, cols.unitCost, cols.total].filter((c) => c >= 0)
+    const keyColumns = [
+      cols.company, cols.work, cols.budget, cols.item, cols.itemQuantity, cols.coef, cols.price, cols.subCoef, cols.subPrice,
+      cols.unitCost, cols.total, cols.auxCode, cols.auxFlag,
+    ].filter((c) => c >= 0)
     const rows =
       area.lastRow > area.firstRow
         ? await this.client.readRows(this.ref, {

@@ -70,6 +70,20 @@ describe('Orçamentos da aba BD_Orcamento', () => {
     expect(b.total).toBe('38830.0708')
   })
 
+  it('PrecoItem vazio ou zerado não zera a linha: usa PrecoFinal ou quantidade × unitário', () => {
+    const cols = readSheetColumns(HEADER)
+    const semPrecoItem = row('01.01', 'SERVIÇOS', 'dia', 20, 1650, 1, null, 0, 'IS00002', null, 'Topografia', 'dia')
+    semPrecoItem[cols.total] = null
+    const b = buildSheetBudget([HEADER, semPrecoItem], { company: '71', work: 'P071C', budget: '1' })
+    expect(b.lines[0]!.total).toBe('33000.0000') // 20 × 1 × 1.650
+    const comPrecoFinal = row('01.01', 'SERVIÇOS', 'dia', 20, 1650, 1, null, 0, 'IS00002', null, 'Topografia', 'dia')
+    comPrecoFinal[cols.total] = 32000
+    expect(buildSheetBudget([HEADER, comPrecoFinal], { company: '71', work: 'P071C', budget: '1' }).lines[0]!.total).toBe('32000.0000')
+    // Preço zerado na própria UAU: a linha fica com zero e o aviso diz qual é
+    const zerada = row('01.01', 'SERVIÇOS', 'dia', 20, 0, 1, null, 0, 'IS00002', null, 'Topografia', 'dia')
+    expect(buildSheetBudget([HEADER, zerada], { company: '71', work: 'P071C', budget: '1' }).warnings.join()).toMatch(/1 linha\(s\) vieram com valor zero.*Linhas da aba: 2/)
+  })
+
   it('avisa quando o orçamento não existe', () => {
     expect(() => buildSheetBudget(ROWS, { company: '1', work: 'P071C', budget: '1' })).toThrow(/não encontrado/)
   })
