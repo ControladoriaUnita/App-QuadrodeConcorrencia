@@ -1,6 +1,7 @@
 /**
  * Filtro por coluna como no Excel: botão ▾ no cabeçalho abre uma caixa com busca, "Selecionar tudo"
  * e a lista de valores da coluna (com contagem); colunas numéricas filtram por faixa (mín. / máx.).
+ * Lista em árvore (valores com `depth`, ex.: níveis da EAP): marcar/desmarcar leva os de baixo.
  * A caixa usa posição fixa para não ser cortada pela tabela com rolagem.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -11,23 +12,14 @@ import { Button, Input } from '@/components/ui'
 import { cn } from '@/utils/cn'
 import { formatDecimal } from '@/utils/format'
 import { fold, matchesTerms, searchTerms } from '@/utils/search'
+import type { ColumnFilterValue, FilterOption } from './budgetFilters'
 
-/** Valores escolhidos (lista) ou faixa numérica (já convertida ao aplicar) */
-export type ColumnFilterValue = { kind: 'values'; values: Set<string> } | { kind: 'range'; min: Decimal | null; max: Decimal | null }
-
-export const EMPTY_VALUE = '(vazio)'
-
-/** A linha passa no filtro da coluna? Colunas de lista recebem os valores da linha (um ou vários). */
-export function matchesFilter(f: ColumnFilterValue, value: string[] | Decimal): boolean {
-  if (f.kind === 'values') return Array.isArray(value) && value.some((v) => f.values.has(v))
-  if (Array.isArray(value)) return false
-  return (!f.min || !value.lt(f.min)) && (!f.max || !value.gt(f.max))
-}
+const BOX_WIDTH = 320
 
 interface Props {
   label: string
   /** Valores distintos da coluna com a contagem de linhas (colunas de lista) */
-  values?: { value: string; count: number }[]
+  values?: FilterOption[]
   numeric?: boolean
   filter: ColumnFilterValue | undefined
   onChange: (f: ColumnFilterValue | undefined) => void
@@ -45,7 +37,7 @@ export function ColumnFilter({ label, values = [], numeric, filter, onChange, al
     if (!open) return
     const r = btn.current?.getBoundingClientRect()
     if (!r) return
-    const width = 288
+    const width = BOX_WIDTH
     const left = align === 'right' ? Math.max(8, r.right - width) : Math.min(window.innerWidth - width - 8, r.left)
     setPos({ top: r.bottom + 4, left })
   }, [open, align])
@@ -85,7 +77,7 @@ export function ColumnFilter({ label, values = [], numeric, filter, onChange, al
           ref={box}
           role="dialog"
           aria-label={`Filtro de ${label}`}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, width: 288 }}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: BOX_WIDTH }}
           className="z-50 rounded-card border border-border bg-surface p-3 text-sm font-normal text-text shadow-overlay"
         >
           {numeric ? (
@@ -100,10 +92,19 @@ export function ColumnFilter({ label, values = [], numeric, filter, onChange, al
   )
 }
 
+/** Valores logo abaixo do i-ésimo numa lista em árvore (os seguintes com `depth` maior) */
+function below(values: FilterOption[], i: number): FilterOption[] {
+  const d = values[i]!.depth
+  if (d === undefined) return []
+  const out: FilterOption[] = []
+  for (let j = i + 1; j < values.length && (values[j]!.depth ?? 0) > d; j++) out.push(values[j]!)
+  return out
+}
+
 function ValuesEditor({ values, filter, onApply }: { values: NonNullable<Props['values']>; filter: { values: Set<string> } | null; onApply: (f: ColumnFilterValue | undefined) => void }) {
   const [q, setQ] = useState('')
   const [chosen, setChosen] = useState<Set<string>>(() => new Set(filter ? filter.values : values.map((v) => v.value)))
-  const folded = useMemo(() => values.map((v) => ({ ...v, text: fold(v.value) })), [values])
+  const folded = useMemo(() => values.map((v, i) => ({ ...v, i, text: fold(v.value) })), [values])
   const terms = searchTerms(q)
   const shown = useMemo(() => folded.filter((v) => matchesTerms(v.text, terms)), [folded, q]) // eslint-disable-line react-hooks/exhaustive-deps
   const allShown = shown.length > 0 && shown.every((v) => chosen.has(v.value))
@@ -115,7 +116,14 @@ function ValuesEditor({ values, filter, onApply }: { values: NonNullable<Props['
     })
   // Como no Excel: com pesquisa, vale só o que está marcado entre os resultados
   const effective = terms.length ? new Set(shown.filter((v) => chosen.has(v.value)).map((v) => v.value)) : chosen
-  const toggle = (v: string) => setChosen((s) => (s.has(v) ? (s.delete(v), new Set(s)) : new Set(s.add(v))))
+  /** Marca/desmarca o valor e, em lista em árvore, os que estão abaixo dele */
+  const toggle = (i: number) =>
+    setChosen((s) => {
+      const n = new Set(s)
+      const on = !n.has(values[i]!.value)
+      for (const v of [values[i]!, ...below(values, i)]) (on ? n.add(v.value) : n.delete(v.value))
+      return n
+    })
   return (
     <div className="grid gap-2">
       <Input autoFocus className="h-8" placeholder="Pesquisar" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Pesquisar valores" />
@@ -126,8 +134,8 @@ function ValuesEditor({ values, filter, onApply }: { values: NonNullable<Props['
       <ul className="max-h-60 overflow-auto">
         {shown.map((v) => (
           <li key={v.value}>
-            <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-ink-50">
-              <input type="checkbox" className="size-4 accent-primary" checked={chosen.has(v.value)} onChange={() => toggle(v.value)} />
+            <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-ink-50" style={v.depth ? { paddingLeft: `${0.25 + v.depth * 0.75}rem` } : undefined}>
+              <input type="checkbox" className="size-4 accent-primary" checked={chosen.has(v.value)} onChange={() => toggle(v.i)} />
               <span className="min-w-0 flex-1 truncate" title={v.value}>{v.value}</span>
               <span className="tabular text-xs text-text-muted">{v.count}</span>
             </label>

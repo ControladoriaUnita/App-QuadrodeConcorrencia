@@ -9,8 +9,8 @@
  * Cada insumo marcado recebe o "% a consumir" (verba puxada = custo total × %). Em Item e composição,
  * a caixa marca todos os insumos abaixo e o % digitado vale para todos eles (limitado ao livre de cada um).
  *
- * Filtros por coluna como no Excel (▾ no cabeçalho): lista de valores com busca ou faixa numérica;
- * a árvore mantém os ancestrais das linhas que passam. Com `planning`, a coluna Vínculo PL vira
+ * Filtros por coluna como no Excel (▾ no cabeçalho, regras em `budgetFilters.ts`): valem para todas
+ * as linhas (Item, composição, auxiliar e insumo) e a árvore mantém os ancestrais das que passam. Com `planning`, a coluna Vínculo PL vira
  * um seletor do IP (lista de IPs da obra), gravado na hora. Com `onRenameGroup`, o nome dos Itens
  * da EAP fica editável (a planilha não traz esses nomes).
  */
@@ -24,7 +24,8 @@ import { cn } from '@/utils/cn'
 import { EMPTY, formatBRL, formatCoefficient, formatDecimal, formatPercent, formatQuantity } from '@/utils/format'
 import { freeShare, pulledValue } from './BudgetLinesTable'
 import { withAuxCompositions, type AuxRow, type TreeRowWithAux } from './budgetAux'
-import { ColumnFilter, EMPTY_VALUE, matchesFilter, type ColumnFilterValue } from './ColumnFilter'
+import { BUDGET_COLUMNS, filterOptions, itemOfRows, passesFilters, type BudgetColumn, type BudgetFilters, type ColumnFilterValue } from './budgetFilters'
+import { ColumnFilter } from './ColumnFilter'
 import { planningOptions } from './planning'
 
 type Row = TreeRowWithAux<BudgetLineUsageDTO>
@@ -72,9 +73,6 @@ interface Props {
   onRenameGroup?: (wbs: string, description: string | null) => Promise<unknown>
 }
 
-type ColKey = 'item' | 'code' | 'description' | 'unit' | 'quantity' | 'unitCost' | 'total' | 'package' | 'classification' | 'usage' | 'free'
-const NUMERIC: ColKey[] = ['quantity', 'unitCost', 'total', 'free']
-const NO_USAGE = 'Sem compromisso'
 
 export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)', selection, initialOnlyBalance = false, planning, onRenameGroup }: Props) {
   const selectable = !!selection
@@ -83,9 +81,9 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
   const [onlyBalance, setOnlyBalance] = useState(initialOnlyBalance)
   const [onlySelected, setOnlySelected] = useState(false)
   const [bulk, setBulk] = useState<string | null>(null)
-  const [filters, setFilters] = useState<Partial<Record<ColKey, ColumnFilterValue>>>({})
+  const [filters, setFilters] = useState<BudgetFilters>({})
   const [editingLine, setEditingLine] = useState<BudgetLineUsageDTO | null>(null)
-  const setFilter = (k: ColKey) => (f: ColumnFilterValue | undefined) =>
+  const setFilter = (k: BudgetColumn) => (f: ColumnFilterValue | undefined) =>
     setFilters((s) => {
       const n = { ...s }
       if (f) n[k] = f
@@ -117,79 +115,47 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
     }
     return m
   }, [tree, byKey])
-  /** Item (grupo de 1º nível) de cada linha, para o filtro da coluna Item */
-  const rootOf = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const r of tree) {
-      if (r.kind !== 'line') continue
-      let p = r.parentKey ? byKey.get(r.parentKey) : undefined
-      while (p?.parentKey) p = byKey.get(p.parentKey)
-      m.set(r.key, p && p.kind === 'group' ? `${p.wbs} — ${p.description}` : EMPTY_VALUE)
-    }
-    return m
-  }, [tree, byKey])
-  /** Valor de cada coluna numa linha: número (colunas de valor) ou lista de textos (as demais) */
-  const valueOf = (r: LineRow, k: ColKey): string[] | Decimal => {
-    const l = r.line
-    const text = (v: string | null) => [v || EMPTY_VALUE]
-    switch (k) {
-      case 'item': return text(rootOf.get(r.key) ?? null)
-      case 'code': return text(l.code)
-      case 'description': return text(l.description)
-      case 'unit': return text(l.unit)
-      case 'package': return text(l.packageCode)
-      case 'classification': return text(l.packageDescription)
-      case 'usage': return l.usage.length ? l.usage.map((u) => u.competitionCode) : [NO_USAGE]
-      case 'quantity': return Decimal.from(l.quantity)
-      case 'unitCost': return Decimal.from(l.unitCost)
-      case 'total': return Decimal.from(l.total)
-      case 'free': return Decimal.from(l.total).minus(l.committedValue)
-    }
-  }
-  const activeFilters = Object.entries(filters) as [ColKey, ColumnFilterValue][]
-  const passes = (r: LineRow) => activeFilters.every(([k, f]) => matchesFilter(f, valueOf(r, k)))
-  /** Valores distintos de cada coluna de lista (com contagem) */
-  const distinct = useMemo(() => {
-    const out = {} as Record<ColKey, { value: string; count: number }[]>
-    for (const k of ['item', 'code', 'description', 'unit', 'package', 'classification', 'usage'] as ColKey[]) {
-      const m = new Map<string, number>()
-      for (const r of tree) {
-        if (r.kind !== 'line') continue
-        for (const v of valueOf(r, k) as string[]) m.set(v, (m.get(v) ?? 0) + 1)
-      }
-      out[k] = [...m.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value, 'pt-BR', { numeric: true }))
-    }
-    return out
-  }, [tree, rootOf]) // eslint-disable-line react-hooks/exhaustive-deps
+  /** Nível da EAP de cada linha (coluna Item) e os valores de cada filtro de lista */
+  const itemOf = useMemo(() => itemOfRows(tree), [tree])
+  const options = useMemo(() => filterOptions(tree, itemOf), [tree, itemOf])
   const columnFilters = Object.keys(filters).length
   const filtering = !!(search.trim() || pkg || onlyBalance || onlySelected || columnFilters)
 
-  /** Linhas visíveis: filtro mantém os ancestrais; sem filtro, respeita os níveis recolhidos. */
-  const visible = useMemo(() => {
+  /**
+   * Linhas visíveis: filtro mantém os ancestrais; sem filtro, respeita os níveis recolhidos.
+   * `matched` = linhas que passaram no filtro (null sem filtro), para os totais do rodapé.
+   */
+  const { visible, matched } = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (filtering) {
       const keep = new Set<string>()
+      const hits = new Set<string>()
       const text = (r: Row) =>
         r.kind === 'line'
           ? `${r.line.code} ${r.line.description} ${r.line.packageCode ?? ''} ${r.line.packageDescription ?? ''}`
           : r.kind === 'aux'
             ? `${r.code} ${r.description}`
             : `${r.wbs} ${r.kind === 'activity' ? (r.code ?? '') : ''} ${r.description}`
+      // Toda linha da árvore é candidata; os filtros só de insumo (IP, saldo, marcados) deixam os
+      // níveis acima aparecerem apenas como ancestrais
+      const lineOnly = !!(pkg || onlyBalance || onlySelected)
       for (const r of tree) {
-        if (r.kind !== 'line') continue
-        const l = r.line
-        if (pkg && l.packageCode !== pkg) continue
-        if (onlyBalance && !Decimal.from(l.balanceShare).isPositive()) continue
-        if (onlySelected && !selection?.value.has(l.id)) continue
-        if (columnFilters && !passes(r)) continue
-        // busca casa no insumo ou em qualquer ancestral (auxiliar/composição/Item)
+        if (r.kind === 'line') {
+          const l = r.line
+          if (pkg && l.packageCode !== pkg) continue
+          if (onlyBalance && !Decimal.from(l.balanceShare).isPositive()) continue
+          if (onlySelected && !selection?.value.has(l.id)) continue
+        } else if (lineOnly) continue
+        if (columnFilters && !passesFilters(r, filters, itemOf)) continue
+        // busca casa na própria linha ou em qualquer ancestral (auxiliar/composição/Item)
         let hit = !q || text(r).toLowerCase().includes(q)
         for (let p = r.parentKey; !hit && p; p = byKey.get(p)!.parentKey) hit = text(byKey.get(p)!).toLowerCase().includes(q)
         if (!hit) continue
+        hits.add(r.key)
         keep.add(r.key)
         for (let p = r.parentKey; p && !keep.has(p); p = byKey.get(p)!.parentKey) keep.add(p)
       }
-      return tree.filter((r) => keep.has(r.key))
+      return { visible: tree.filter((r) => keep.has(r.key)), matched: hits }
     }
     const out: Row[] = []
     const shown = new Set<string>()
@@ -198,17 +164,29 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
       shown.add(r.key)
       out.push(r)
     }
-    return out
-  }, [tree, byKey, search, pkg, onlyBalance, onlySelected, filtering, collapsed, expanded, depth, filters, onlySelected && selection?.value]) // eslint-disable-line react-hooks/exhaustive-deps
+    return { visible: out, matched: null }
+  }, [tree, byKey, itemOf, search, pkg, onlyBalance, onlySelected, filtering, collapsed, expanded, depth, filters, onlySelected && selection?.value]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shownLines = visible.filter((r): r is LineRow => r.kind === 'line')
   const allLines = tree.filter((r): r is LineRow => r.kind === 'line')
-  const footerLines = filtering ? shownLines : allLines
-  const footer = {
-    total: Decimal.sum(footerLines.map((r) => r.total)),
-    committed: Decimal.sum(footerLines.map((r) => r.committed)),
-    count: filtering ? shownLines.length : lines.length,
-  }
+  /**
+   * Rodapé: soma das linhas de cima do que está em tela (sem filtro, os Itens de 1º nível; com filtro,
+   * as que passaram sem um ancestral que também passou), para não contar o mesmo valor duas vezes
+   * e incluir composições sem insumos (custo da planilha).
+   */
+  const footer = useMemo(() => {
+    const isTop = (r: Row) => {
+      if (!matched) return !r.parentKey
+      if (!matched.has(r.key)) return false
+      for (let p = r.parentKey; p; p = byKey.get(p)!.parentKey) if (matched.has(p)) return false
+      return true
+    }
+    const tops = tree.filter(isTop)
+    return {
+      total: Decimal.sum(tops.map((r) => r.total)),
+      committed: Decimal.sum(tops.map((r) => r.committed)),
+      count: matched ? visible.filter((r) => r.kind === 'line').length : lines.length,
+    }
+  }, [tree, byKey, matched, visible, lines.length])
 
   // ------------------------------------------------------------------ seleção
   const canPick = (l: BudgetLineUsageDTO) => !selection?.disabledIds?.has(l.id) && freeShare(l).isPositive()
@@ -343,19 +321,12 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
         <div className="tabular min-w-max text-sm" role="table" aria-label="Orçamento da obra" aria-rowcount={visible.length}>
           <div role="row" className={cn('sticky top-0 z-10 grid border-b border-border bg-ink-50', cols)}>
             {selectable && <span role="columnheader" className={hd} aria-label="Marcar" />}
-            {([
-              ['item', 'Item'], ['code', 'Código'], ['description', 'Descrição'], ['unit', 'Unid'], ['quantity', 'Quantidade'],
-              ['unitCost', 'Custo Unit.'], ['total', 'Custo Total'], ['package', 'Vínculo PL'], ['classification', 'Classificação'],
-              ['usage', 'Comprometido'], ['free', 'Livre'],
-            ] as [ColKey, string][]).map(([k, label]) => {
-              const numeric = NUMERIC.includes(k)
-              return (
-                <span key={k} role="columnheader" className={cn(hd, 'flex items-center', numeric && 'justify-end')}>
-                  <span className="truncate">{label}</span>
-                  <ColumnFilter label={label} numeric={numeric} values={numeric ? undefined : distinct[k]} filter={filters[k]} onChange={setFilter(k)} align={numeric ? 'right' : 'left'} />
-                </span>
-              )
-            })}
+            {BUDGET_COLUMNS.map(({ key: k, label, numeric }) => (
+              <span key={k} role="columnheader" className={cn(hd, 'flex items-center', numeric && 'justify-end')}>
+                <span className="truncate">{label}</span>
+                <ColumnFilter label={label} numeric={numeric} values={numeric ? undefined : options[k]} filter={filters[k]} onChange={setFilter(k)} align={numeric ? 'right' : 'left'} />
+              </span>
+            ))}
             {selectable && <span role="columnheader" className={cn(hd, PIN_SHARE, 'text-right text-primary')}>% a consumir</span>}
             {selectable && <span role="columnheader" className={cn(hd, PIN_VALUE, 'text-right text-primary')}>Verba puxada</span>}
           </div>
