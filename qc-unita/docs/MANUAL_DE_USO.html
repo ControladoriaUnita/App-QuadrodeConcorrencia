@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual do QC Unità</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: graphite brand bar on top; manual = sticky table of contents on the left + reading column
+   (~68ch) on the right; stacks to one column on phones. Tokens follow docs/DESIGN_SYSTEM.md. */
+:root {
+  --orange: #fe5000;          /* acento da marca: ação, destaque, numeração de passos */
+  --orange-text: #d94400;     /* laranja para texto pequeno (contraste AA sobre claro) */
+  --orange-soft: #fff1ea;
+  --graphite: #231f20;        /* barra superior (cor secundária da marca) */
+  --on-graphite: #ffffff;
+  --bg: #f8f7f6;              /* ink-50 */
+  --surface: #ffffff;
+  --sunken: #f0eeec;          /* ink-100 */
+  --border: #e2dfdc;          /* ink-200 */
+  --text: #1a1817;            /* ink-900 */
+  --text-2: #3d3937;          /* ink-700 */
+  --muted: #77716d;           /* ink-500 */
+  --success: #1e8a4c; --success-soft: #e7f5ec;
+  --warning: #b7791f; --warning-soft: #fdf4e3;
+  --error: #c62828;   --error-soft: #fdecec;
+  --info: #2563a8;    --info-soft: #e8f0fa;
+  --cell-manual: #fff4d6; --cell-issued: #e7f5ec; --cell-current: #fff1ea;
+  --shadow: 0 1px 2px rgb(26 24 23 / .06), 0 1px 3px rgb(26 24 23 / .08);
+  --font-display: 'Sora', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --r-control: .5rem; --r-card: .875rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --orange: #ff6a26; --orange-text: #ff8a52; --orange-soft: #3a2117;
+    --graphite: #0f0d0d; --on-graphite: #ffffff;
+    --bg: #161413; --surface: #201d1c; --sunken: #2a2625; --border: #3a3532;
+    --text: #efecea; --text-2: #d5d0cc; --muted: #a8a19c;
+    --success: #4cc27e; --success-soft: #16301f;
+    --warning: #e0a648; --warning-soft: #33280f;
+    --error: #ef6b6b; --error-soft: #3a1818;
+    --info: #6fa6e6; --info-soft: #152539;
+    --cell-manual: #3a3115; --cell-issued: #16301f; --cell-current: #3a2117;
+    --shadow: 0 1px 2px rgb(0 0 0 / .4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --orange: #ff6a26; --orange-text: #ff8a52; --orange-soft: #3a2117;
+  --graphite: #0f0d0d; --on-graphite: #ffffff;
+  --bg: #161413; --surface: #201d1c; --sunken: #2a2625; --border: #3a3532;
+  --text: #efecea; --text-2: #d5d0cc; --muted: #a8a19c;
+  --success: #4cc27e; --success-soft: #16301f;
+  --warning: #e0a648; --warning-soft: #33280f;
+  --error: #ef6b6b; --error-soft: #3a1818;
+  --info: #6fa6e6; --info-soft: #152539;
+  --cell-manual: #3a3115; --cell-issued: #16301f; --cell-current: #3a2117;
+  --shadow: 0 1px 2px rgb(0 0 0 / .4);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 15px/1.6 var(--font-sans); }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.2; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.5rem; font-weight: 600; }
+h3 { font-size: 1.0625rem; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--orange-text); }
+:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+code, .k { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: .86em; background: var(--sunken); border-radius: 4px; padding: .05em .35em; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Brand bar */
+.bar { background: var(--graphite); border-bottom: 2px solid var(--orange); color: var(--on-graphite); }
+.bar-in { max-width: 72rem; margin: 0 auto; padding: .75rem 16px; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.bar img { height: 28px; width: auto; display: block; }
+.bar span { font-size: .8125rem; opacity: .75; }
+
+/* Hero */
+.hero { max-width: 72rem; margin: 0 auto; padding: 2.5rem 16px 2rem; display: grid; gap: 1rem; }
+.eyebrow { font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--orange-text); }
+.hero h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 700; max-width: 22ch; }
+.hero p { max-width: 64ch; color: var(--text-2); font-size: 1.0625rem; }
+.formula { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .5rem; font-size: .9375rem; }
+.formula b { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-control); padding: .35rem .7rem; font-weight: 600; }
+.formula i { font-style: normal; color: var(--muted); font-weight: 600; }
+
+/* Shell */
+.shell { max-width: 72rem; margin: 0 auto; padding: 0 16px 4rem; display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: 2.5rem; align-items: start; }
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 1rem); font-size: .875rem; }
+.toc p { font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: .5rem; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: .125rem; }
+.toc a { display: block; color: var(--text-2); text-decoration: none; padding: .3rem .6rem; border-radius: var(--r-control); border-left: 2px solid transparent; }
+.toc a:hover { background: var(--sunken); }
+.toc a.on { background: var(--orange-soft); color: var(--orange-text); border-left-color: var(--orange); font-weight: 600; }
+main { display: grid; gap: 3.5rem; min-width: 0; }
+section { display: grid; gap: 1.25rem; scroll-margin-top: 1rem; min-width: 0; }
+section > p, .prose { max-width: 68ch; color: var(--text-2); }
+.prose { display: grid; gap: .75rem; }
+.lede { display: grid; gap: .35rem; }
+.lede .eyebrow { color: var(--muted); }
+
+/* Cards & tables */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow); padding: 1.1rem 1.25rem; display: grid; gap: .6rem; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .75rem; }
+.tbl { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .875rem; }
+th { text-align: left; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--sunken); padding: .6rem .8rem; white-space: nowrap; }
+td { padding: .6rem .8rem; border-top: 1px solid var(--border); vertical-align: top; color: var(--text-2); }
+td:first-child { color: var(--text); font-weight: 500; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Steps (real sequences only) */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; counter-reset: s; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 1rem 1.1rem; }
+.steps > li::before { content: counter(s); width: 2rem; height: 2rem; border-radius: 999px; background: var(--orange); color: #fff; font: 600 .875rem/2rem var(--font-display); text-align: center; }
+.steps h3 { margin-bottom: .2rem; }
+.steps p { color: var(--text-2); }
+.path { display: inline-flex; flex-wrap: wrap; gap: .25rem; align-items: center; font-size: .8125rem; color: var(--muted); margin-top: .35rem; }
+.path b { color: var(--text); font-weight: 600; background: var(--sunken); border-radius: 4px; padding: .05rem .4rem; }
+
+/* Badges & callouts */
+.badge { display: inline-block; border-radius: 999px; padding: .1rem .55rem; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.b-ok { background: var(--success-soft); color: var(--success); }
+.b-warn { background: var(--warning-soft); color: var(--warning); }
+.b-err { background: var(--error-soft); color: var(--error); }
+.b-info { background: var(--info-soft); color: var(--info); }
+.b-pri { background: var(--orange-soft); color: var(--orange-text); }
+.note { border: 1px solid color-mix(in srgb, var(--info) 30%, transparent); background: var(--info-soft); border-radius: var(--r-control); padding: .75rem 1rem; font-size: .9rem; color: var(--text); max-width: 68ch; }
+.note.warn { border-color: color-mix(in srgb, var(--warning) 35%, transparent); background: var(--warning-soft); }
+
+/* Mini grid (legend + examples) */
+.mini { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); }
+.mini table { min-width: 36rem; }
+.mini td { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mini td:first-child { text-align: left; }
+.c-man { background: var(--cell-manual); }
+.c-iss { background: var(--cell-issued); }
+.c-cur { background: var(--cell-current); }
+.c-trend { font-style: italic; color: var(--info); }
+.c-real { color: var(--success); }
+.legend { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; font-size: .875rem; color: var(--text-2); }
+.legend span { display: inline-flex; align-items: center; gap: .45rem; }
+.sw { width: 1.1rem; height: 1.1rem; border-radius: 4px; border: 1px solid var(--border); display: inline-block; }
+
+.formula-box { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: var(--r-control); padding: .8rem 1rem; max-width: 68ch; }
+.formula-box small { display: block; font: 400 .85rem/1.5 var(--font-sans); color: var(--muted); margin-top: .25rem; }
+
+dl.gloss { display: grid; grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr); gap: .6rem 1.25rem; margin: 0; }
+dl.gloss dt { font-weight: 600; }
+dl.gloss dd { margin: 0; color: var(--text-2); }
+
+footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var(--muted); font-size: .8125rem; border-top: 1px solid var(--border); }
+
+.logo-light { display: block; }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+  .toc { position: static; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: .9rem; }
+  .toc ol { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
+  dl.gloss { grid-template-columns: minmax(0, 1fr); gap: .15rem; }
+  dl.gloss dd { margin-bottom: .6rem; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<header class="bar">
+  <div class="bar-in">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA5YAAAFjCAYAAABGy5T9AAAWfmNhQlgAABZ+anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAFlhqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjVlNWIzNTgwLWU2NjItNDA4Yi1iNmFmLTJhNTQ3NGIyODgxMQAAAAOTanVtYgAAAClqdW1kYzJhcwARABCAAACqADibcQNjMnBhLmFzc2VydGlvbnMAAAAAuGp1bWIAAABEanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5pbmdyZWRpZW50LnYzAAAAABhjMnNoHSDou4p2dA/3XjGP1+hzMAAAAGxjYm9yo2lkYzpmb3JtYXRpaW1hZ2UvcG5namluc3RhbmNlSUR4LHhtcDppaWQ6NWVlOTgwNzQtZTEzZC00ZmVhLThlNGUtZGUyMzJmNDZhNzFibHJlbGF0aW9uc2hpcGhwYXJlbnRPZgAAAeJqdW1iAAAAQWp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuYWN0aW9ucy52MgAAAAAYYzJzaLx8k2QDJzytUl3lj7v2bsMAAAGZY2JvcqJnYWN0aW9uc4KiZmFjdGlvbmtjMnBhLm9wZW5lZGpwYXJhbWV0ZXJzoWtpbmdyZWRpZW50c4GiY3VybHgtc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5pbmdyZWRpZW50LnYzZGhhc2hYICDsUlz6wC3gxiuocPAtBqkhWgCC3/k15vn1jLg2UfQ6pGZhY3Rpb254HWNvbS5hbnRocm9waWMuY2xhdWRlLnByb3ZpZGVkanBhcmFtZXRlcnOheB9jb20uYW50aHJvcGljLm9yaWdpbi1jb25maWRlbmNlZ3Vua25vd25rZGVzY3JpcHRpb254ZkNsYXVkZSBwcm92aWRlZCB0aGlzIGZpbGUgYXQgdGhlIHJlcXVlc3Qgb2YgYSB1c2VyIGFuZCBtYXkgaGF2ZSBjcmVhdGVkIG9yIG1vZGlmaWVkIHRoZSBmaWxlIGNvbnRlbnRzLm1zb2Z0d2FyZUFnZW50oWRuYW1lZkNsYXVkZXJhbGxBY3Rpb25zSW5jbHVkZWT1AAAAyGp1bWIAAABAanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5oYXNoLmRhdGEAAAAAGGMyc2hi7/IL9sjLt7k2jfHFVb6CAAAAgGNib3KlY2FsZ2ZzaGEyNTZjcGFkTQAAAAAAAAAAAAAAAABkaGFzaFgg1NCfkeZ6cFLXPkYsk493El9//P0lDqtXiEgVTOMEvFlkbmFtZW5qdW1iZiBtYW5pZmVzdGpleGNsdXNpb25zgaJlc3RhcnQYIWZsZW5ndGgZFooAAAI+anVtYgAAACdqdW1kYzJjbAARABCAAACqADibcQNjMnBhLmNsYWltLnYyAAAAAg9jYm9ypWNhbGdmc2hhMjU2aXNpZ25hdHVyZXhNc2VsZiNqdW1iZj0vYzJwYS91cm46YzJwYTo1ZTViMzU4MC1lNjYyLTQwOGItYjZhZi0yYTU0NzRiMjg4MTEvYzJwYS5zaWduYXR1cmVqaW5zdGFuY2VJRHgseG1wOmlpZDowMDlmODg3YS04MGVmLTQ4Y2EtOGFjOS0xODE1N2QxMGE5NjhyY3JlYXRlZF9hc3NlcnRpb25zg6JjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggIOxSXPrALeDGK6hw8C0GqSFaAILf+TXm+fWMuDZR9DqiY3VybHgqc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5hY3Rpb25zLnYyZGhhc2hYIJ+fTKUHiMMFFV4CO3CZZMuKBXx9mAzl/XctClDvRAjTomN1cmx4KXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaGFzaC5kYXRhZGhhc2hYIOwpuY01tXtNydw1c/mhCj5bLE9Tu3MNuYCnvpMN8UN/dGNsYWltX2dlbmVyYXRvcl9pbmZvo2RuYW1lb0FudGhyb3BpYyBGaWxlc2d2ZXJzaW9uZTEuMC4wa3NwZWNWZXJzaW9uZTIuNC4wAAAQOGp1bWIAAAAoanVtZGMyY3MAEQAQgAAAqgA4m3EDYzJwYS5zaWduYXR1cmUAAAAQCGNib3LShFkCEqIBJhghWQIKMIICBjCCAY2gAwIBAgIUQOWgCu7COdC+uIP6BkIFPWdVEwAwCgYIKoZIzj0EAwMwSTEXMBUGA1UEChMOQW50aHJvcGljLCBQQkMxLjAsBgNVBAMTJUFudGhyb3BpYyBDb250ZW50IENyZWRlbnRpYWxzIFJvb3QgQ0EwHhcNMjYwODA3MTg0MzU2WhcNMjgwODA2MTk0MzU2WjBEMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEpMCcGA1UEAxMgQW50aHJvcGljIENsYXVkZSBDb250ZW50IFNpZ25pbmcwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASYegpry1AYBRTVNL1CpTlbROnY3dey+UrsF9C3phYrATN3ZHf93Mo8RQN0KOUuOn19P4oWNFWe5n2/She9N7eTo1gwVjAOBgNVHQ8BAf8EBAMCB4AwFQYDVR0lBA4wDAYKKwYBBAGD6F4CATAMBgNVHRMBAf8EAjAAMB8GA1UdIwQYMBaAFM5R4gSBTmRbI/jjxM+aPpzB11zCMAoGCCqGSM49BAMDA2cAMGQCMDFzHRSeAXrSy1WOzkbhPZ6Km2wGTmZ/2gK18k8BQGXyqz88Rdrz6CTX9flAnYNVxgIwcF9c3fVhqmJKpi+UhasNUMko69cyX6STPfta3Q8EjyzDjzoyrol46FP6VFHhvUcJoWNwYWRZDZ4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA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LHty9+2A2cQb+g5ECctcItGcmS6yinmVWBO5iOjg+hTwClk7ZTN7OV1oIiIizSkb+G6hcU4gS2k3s0YZKKsp7j6OOJedRMyGTySSzXFEM6CZRDI6Ibu+1rbQ6SB2F+ggJjjWEInia0SjyCXEDgRriORyOVlZupm9UeoOpT40VGLZk7vPIF6Yc4iEs5h4Ts6+Vg+toDuIF+GLRDnAG8TIzmIisXyVeIG+kpXyiIiIiEiDySowphEJ5zgioRxBnOta9vWJxEzSaGIN5zBigMOJGfbx2X1sbeYsT8wWLqL0GtBVRDXcBqLJVXHmsZ2YpX8juxSICY/12W1WEusgVWnRoBo6sewpK2PZnkgsZxMvuPFE6cGE7DKeeKHmiRGhUcQLZRzl/X2tzj6uJ0Z1Nnb7fA0xqrOOSBpXEy/ul4lygEVljENEREREGoC7j6crsZxClG4XG8d0Tyy3ZmuJpdGVWG4kZuZX13DTHKmipkost8bdhxEvwCl0jfbsQCSZm4hRoBmUbj1uRJI6PPv/auIFWWpthRMJ4srs/2uIUZ71xELkV4BVZvb6EB+SiIiIiIhIVSixLBN3n05XWa1qxEVEREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREaomlDkBERESkv9w9BwwHxgIt3a7qAFYD682skCI2EZFmpsRSRESagruPBXat0N2vAxaa2bpK3Lm7twAzgClArsfVC8xs2RDvPwdMA6YD+W5XdQCLzez1odz/UGSxTQUmEL+D7YFJwA7ASLrOZdYBC4HXgZeAV4FVwGozW17dqMHd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" alt="Unità Engenharia">
+    <span>QC Unità · Manual de uso · outubro/2026</span>
+  </div>
+</header>
+
+<div class="hero">
+  <p class="eyebrow">Quadro de Concorrência</p>
+  <h1>QC Unità: como usar e como ele compara as propostas</h1>
+  <p>O QC Unità substitui a planilha de Quadro de Concorrência. Ele parte do orçamento da obra, monta a concorrência com os insumos que serão contratados, compara as propostas dos fornecedores com o orçado, passa pela aprovação por alçada e gera a solicitação de contrato com os vínculos de planejamento (IP) de cada insumo. Este manual mostra o uso de cada tela e explica as regras por trás dos números.</p>
+  <div class="formula" aria-label="Resultado do QC">
+    <b>Resultado do QC</b><i>=</i><b>Verba disponível</b><i>−</i><b>Total contratado</b>
+  </div>
+</div>
+
+<div class="shell">
+  <nav class="toc" aria-label="Sumário">
+    <p>Sumário</p>
+    <ol>
+      <li><a href="#acesso">Acesso e perfis</a></li>
+      <li><a href="#telas">Mapa das telas</a></li>
+      <li><a href="#fluxo">Fluxo de uma contratação</a></li>
+      <li><a href="#obra">Obra e orçamento</a></li>
+      <li><a href="#nova">Nova concorrência</a></li>
+      <li><a href="#vinculos">Vínculos e insumos</a></li>
+      <li><a href="#mapa">Mapa de cotação</a></li>
+      <li><a href="#fornecedores">Fornecedores e condições</a></li>
+      <li><a href="#dados">Dados do QC e envio</a></li>
+      <li><a href="#aprovacao">Aprovação e revisões</a></li>
+      <li><a href="#contrato">Solicitação de contrato</a></li>
+      <li><a href="#aditivos">Aditivos e distratos</a></li>
+      <li><a href="#calculo">Como o sistema calcula</a></li>
+      <li><a href="#cores">Cores e marcas</a></li>
+      <li><a href="#avisos">Avisos e o que fazer</a></li>
+      <li><a href="#integracao">Integrações</a></li>
+      <li><a href="#glossario">Glossário</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <!-- ───────────────────────────── ACESSO -->
+    <section id="acesso">
+      <div class="lede"><p class="eyebrow">Começo</p><h2>Acesso e perfis</h2></div>
+      <p>Entre com o e-mail corporativo e a senha. No primeiro acesso chega um convite para definir a senha. Se esquecer a senha, use <b>Esqueci minha senha</b> na tela de login: o link de redefinição chega por e-mail. O administrador dá o acesso por obra e por papel.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Papel</th><th>O que faz no QC</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge b-pri">Suprimentos</span></td><td>Cria a concorrência, monta o mapa, convida fornecedores, lança propostas, envia para aprovação e gera a solicitação de contrato e os aditivos. Também importa o orçamento e escolhe o IP das linhas.</td></tr>
+            <tr><td><span class="badge b-info">Engenharia</span></td><td>Ajusta itens, quantidades, distribuição e escopo; valida tecnicamente e aprova a etapa de Engenharia. Também importa o orçamento.</td></tr>
+            <tr><td><span class="badge b-ok">Gerente / Coordenador</span></td><td>Aprova o QC da obra. Consulta tudo, inclusive o histórico.</td></tr>
+            <tr><td><span class="badge b-warn">Diretoria</span></td><td>Aprova os QCs acima da alçada (R$ 500 mil no fluxo padrão).</td></tr>
+            <tr><td><span class="badge">Visualizador</span></td><td>Somente leitura: obras, orçamento e concorrências.</td></tr>
+            <tr><td><span class="badge b-err">Administrador</span></td><td>Tudo, inclusive a sincronização com o ERP e os logs de integração.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── TELAS -->
+    <section id="telas">
+      <div class="lede"><p class="eyebrow">Navegação</p><h2>Mapa das telas</h2></div>
+      <p>No topo, escolha a obra; o menu segue a ordem do fluxo de trabalho.</p>
+      <div class="grid2">
+        <div class="card"><h3>1 · Orçamento</h3><p>Tela inicial da obra: o orçamento na estrutura da planilha (Item → composição → insumos), com o que cada concorrência já comprometeu e o saldo livre.</p></div>
+        <div class="card"><h3>2 · Concorrências</h3><p>Quadro (kanban) com os QCs da obra por situação: em cotação, em aprovação, aprovados e contratados. Daqui se cria uma concorrência nova.</p></div>
+        <div class="card"><h3>3 · Fornecedores</h3><p>Cadastro de fornecedores (vindos da UAU) com busca por nome ou CNPJ, contato e validade da CND.</p></div>
+        <div class="card"><h3>4 · Contratos e aditivos</h3><p>Solicitações de contrato geradas dos QCs aprovados, com aditivos e distratos.</p></div>
+        <div class="card"><h3>5 · Integração ERP</h3><p>Sincronização com a UAU e o registro de cada execução (só administrador).</p></div>
+      </div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Aba do QC</th><th>Para que serve</th></tr></thead>
+          <tbody>
+            <tr><td>Vínculos e insumos</td><td>Os insumos referência (linhas do orçamento puxadas, com o % de cada uma) e o consolidado por IP de planejamento.</td></tr>
+            <tr><td>Mapa de cotação</td><td>Os insumos que os fornecedores cotam, os preços, a melhor condição e a comparação com o orçado.</td></tr>
+            <tr><td>Fornecedores e condições</td><td>Quem participa e as condições de cada proposta: prazo, pagamento, reajuste, pontos positivos e negativos.</td></tr>
+            <tr><td>Dados do QC</td><td>Datas do serviço, responsáveis, tipo de contrato, verba já utilizada, ajustes, vencedora e justificativa.</td></tr>
+            <tr><td>Anexos</td><td>Propostas, memoriais, projetos e documentos dos fornecedores.</td></tr>
+            <tr><td>Aprovações</td><td>As etapas da alçada e a decisão de cada uma.</td></tr>
+            <tr><td>Histórico</td><td>Tudo o que mudou no QC: quem, quando, valor anterior e novo.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── FLUXO -->
+    <section id="fluxo">
+      <div class="lede"><p class="eyebrow">Passo a passo</p><h2>Fluxo de uma contratação</h2></div>
+      <p>A sequência abaixo leva uma contratação do orçamento até o contrato. Cada passo tem uma seção própria mais adiante.</p>
+      <ol class="steps">
+        <li><div>
+          <h3>Conferir o orçamento da obra</h3>
+          <p>Atualize o orçamento pela planilha do SharePoint quando houver versão nova e, se preciso, escolha o IP de alguma linha.</p>
+          <span class="path"><b>Orçamento</b> › Atualizar da planilha</span>
+        </div></li>
+        <li><div>
+          <h3>Criar a concorrência</h3>
+          <p>Dê o objeto, marque no orçamento os insumos desta contratação e o % de cada linha a consumir.</p>
+          <span class="path"><b>Orçamento</b> › Nova concorrência</span>
+        </div></li>
+        <li><div>
+          <h3>Revisar vínculos e insumos referência</h3>
+          <p>Confira as linhas puxadas, ajuste percentuais e inclua linhas de outros IPs, se for o caso.</p>
+          <span class="path"><b>QC</b> › Vínculos e insumos</span>
+        </div></li>
+        <li><div>
+          <h3>Montar o mapa de cotação</h3>
+          <p>Ajuste os insumos que serão contratados (crie, troque ou junte), as quantidades, a distribuição e a especificação.</p>
+          <span class="path"><b>QC</b> › Mapa de cotação</span>
+        </div></li>
+        <li><div>
+          <h3>Convidar fornecedores e lançar propostas</h3>
+          <p>Convide os fornecedores, registre as condições e digite os preços unitários no mapa.</p>
+          <span class="path"><b>QC</b> › Fornecedores e condições · Mapa de cotação</span>
+        </div></li>
+        <li><div>
+          <h3>Preencher os dados e enviar para aprovação</h3>
+          <p>Complete datas, responsáveis, tipo de contrato, vencedora e justificativa. Resolva as pendências e envie.</p>
+          <span class="path"><b>QC</b> › Dados do QC › Enviar para aprovação</span>
+        </div></li>
+        <li><div>
+          <h3>Aprovar</h3>
+          <p>Cada etapa da alçada aprova ou reprova. Aprovada a última, a revisão congela.</p>
+          <span class="path"><b>QC</b> › Aprovações</span>
+        </div></li>
+        <li><div>
+          <h3>Gerar a solicitação de contrato</h3>
+          <p>Gere a solicitação, complete as seções e envie a Contratos.</p>
+          <span class="path"><b>QC</b> › Gerar solicitação de contrato</span>
+        </div></li>
+      </ol>
+    </section>
+
+    <!-- ───────────────────────────── OBRA E ORÇAMENTO -->
+    <section id="obra">
+      <div class="lede"><p class="eyebrow">Ponto de partida</p><h2>Obra e orçamento</h2></div>
+      <div class="prose">
+        <p><b>Nova obra.</b> Em <b>Selecione a obra › Nova obra</b>, escolha a empresa, a obra e o orçamento na lista vinda da planilha de orçamentos do SharePoint (aba <code>BD_Orcamento</code>). A obra já abre com o orçamento completo. Os códigos de empresa e obra são os da UAU, que só completa os nomes. Também dá para cadastrar a obra sem a planilha e importar o orçamento por Excel.</p>
+        <p><b>Atualizar o orçamento.</b> <b>Atualizar da planilha</b> traz uma versão nova do mesmo orçamento; <b>Importar nova versão (Excel)</b> usa um arquivo. A versão nova passa a ser a vigente; os QCs já criados continuam ligados às linhas pela chave de cada linha.</p>
+        <p><b>Ler o orçamento.</b> A árvore segue a planilha: Item → composição → composições auxiliares → insumos. Os botões <b>Itens / Composições / Insumos</b> recolhem ou abrem os níveis. À direita, <b>Comprometido em</b> mostra o % de cada QC na linha e <b>Livre</b>, o que sobra.</p>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Filtros como no Excel</h3>
+          <p>Cada cabeçalho tem um botão de filtro. Nas colunas de texto, abre a lista de valores com busca e <b>Selecionar tudo</b>; ao pesquisar e aplicar, ficam só os resultados da pesquisa. Nas colunas de valor (Quantidade, Custo Unit., Custo Total, Livre), filtre por faixa. A árvore mantém os níveis acima das linhas que passam no filtro. <b>Limpar filtros</b> desfaz tudo.</p>
+        </div>
+        <div class="card">
+          <h3>IP manual da linha</h3>
+          <p>Clique no <b>Vínculo PL</b> de uma linha para escolher o IP na lista de IPs da obra (vinda da UAU). A linha fica marcada com <span class="badge b-pri">M</span>. A escolha vale para as próximas versões do orçamento e para os QCs em rascunho; <b>Voltar ao IP da planilha</b> desfaz.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── NOVA CONCORRÊNCIA -->
+    <section id="nova">
+      <div class="lede"><p class="eyebrow">Criação</p><h2>Nova concorrência</h2></div>
+      <ol class="steps">
+        <li><div>
+          <h3>Informar o objeto e a data</h3>
+          <p>Ex.: “Fornecimento e instalação de esquadrias de alumínio”.</p>
+        </div></li>
+        <li><div>
+          <h3>Marcar os insumos no orçamento</h3>
+          <p>Na mesma árvore do orçamento, marque os insumos desta contratação. Marcar um Item ou uma composição marca tudo abaixo.</p>
+        </div></li>
+        <li><div>
+          <h3>Definir o % a consumir de cada linha</h3>
+          <p>O padrão é o que ainda está livre. O % define a <b>verba puxada</b> (custo total da linha × %). <b>Aplicar aos marcados</b> usa o mesmo % em todas as linhas marcadas.</p>
+        </div></li>
+        <li><div>
+          <h3>Criar</h3>
+          <p>Cada insumo do orçamento vira um insumo referência, e o mapa já nasce com um insumo para cada referência. Os IPs do QC saem das linhas marcadas.</p>
+        </div></li>
+      </ol>
+      <p class="note warn">Uma linha não pode passar de 100% somando todos os QCs da obra. Se o % pedido for maior que o livre, o sistema avisa e não deixa salvar.</p>
+    </section>
+
+    <!-- ───────────────────────────── VÍNCULOS -->
+    <section id="vinculos">
+      <div class="lede"><p class="eyebrow">QC · 1ª aba</p><h2>Vínculos e insumos</h2></div>
+      <p>Nem sempre o insumo orçado é o que se contrata: um insumo orçado pode virar vários de contrato, dois orçados podem virar um só, ou o orçado pode servir só de régua para medir economia. Por isso o QC separa os <b>insumos referência</b> (do orçamento) dos <b>insumos do mapa</b> (os que os fornecedores cotam).</p>
+      <div class="grid2">
+        <div class="card">
+          <h3>Insumos referência</h3>
+          <p>Para cada referência: as linhas do orçamento, o IP de cada uma, o % comprometido (editável), a quantidade e a verba puxada, o que outros QCs já comprometeram e o R$ contratado. No cabeçalho, o consolidado do insumo na obra e em quais insumos do mapa ele é usado.</p>
+          <p><b>Adicionar linhas do orçamento</b> inclui linhas de qualquer IP; com <b>Criar também os insumos no mapa</b>, cada referência nova já ganha seu insumo no mapa.</p>
+        </div>
+        <div class="card">
+          <h3>Vínculos de planejamento</h3>
+          <p>Consolidado por IP: orçado do vínculo inteiro, verba puxada, outros QCs, este QC, saldo e consumo. Abra um IP para ver as referências e os insumos do mapa que caem nele.</p>
+        </div>
+      </div>
+      <p class="note">Uma referência marcada <span class="badge b-warn">Sem uso no mapa</span> fica fora da comparação com o orçado e é pendência para o envio. Ligue-a a um insumo do mapa ou use <b>Preencher com insumos referência</b>.</p>
+    </section>
+
+    <!-- ───────────────────────────── MAPA -->
+    <section id="mapa">
+      <div class="lede"><p class="eyebrow">QC · 2ª aba</p><h2>Mapa de cotação</h2></div>
+      <p>Grade estilo planilha: os insumos do mapa nas linhas e os fornecedores nas colunas (R$ unitário e R$ total), com a melhor condição e a comparação com o orçado à direita. Digite o preço unitário na célula do fornecedor: a melhor condição e os totais recalculam na hora.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Ação</th><th>Como funciona</th></tr></thead>
+          <tbody>
+            <tr><td>Adicionar insumo</td><td>Escolha um insumo da lista da obra (UAU) ou crie um <b>insumo livre</b> (código, descrição, unidade). Informe a quantidade, marque os insumos referência que servem de comparação e, se quiser, um IP manual. O preço vem do fornecedor.</td></tr>
+            <tr><td>Preencher com insumos referência</td><td>Cria um insumo no mapa para cada referência ainda sem uso (mesmo código, descrição e quantidade).</td></tr>
+            <tr><td>Editar (lápis ou chips de referência)</td><td>Troca as referências ligadas e o IP manual. Em insumos criados no mapa, também código, descrição e unidade.</td></tr>
+            <tr><td>Remover (lixeira)</td><td>Tira o insumo e os preços dele nesta revisão. As referências continuam no QC.</td></tr>
+            <tr><td>Distribuição e escopo</td><td>% material, % equipamento, % retenção, especificação e observações de cada insumo, que vão para a solicitação de contrato. <b>Recolher distribuição</b> esconde essas colunas.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A coluna <b>IP</b> mostra o IP herdado das referências (passe o mouse para ver a divisão) ou o IP manual, marcado como <span class="badge">manual</span>. A coluna <b>Orçado (referências)</b> mostra a verba que cabe a cada insumo; com <span class="badge b-info">rateio · N insumos</span>, a verba da referência foi dividida entre vários insumos (ver <a href="#calculo">Como o sistema calcula</a>).</p>
+      <div class="legend">
+        <span><span class="sw c-iss"></span>Melhor preço do insumo</span>
+        <span><span class="sw" style="background:var(--error-soft)"></span>Preço acima do orçado (texto vermelho)</span>
+        <span><span class="sw c-cur"></span>1º menor preço entre as propostas completas</span>
+      </div>
+      <p>No rodapé: <b>Total equalizado</b> de cada fornecedor (e quantos insumos cotou) e o <b>Resultado QC / Orçamento</b> (verba disponível − total), em valor e em % do orçado.</p>
+    </section>
+
+    <!-- ───────────────────────────── FORNECEDORES -->
+    <section id="fornecedores">
+      <div class="lede"><p class="eyebrow">QC · 3ª aba</p><h2>Fornecedores e condições</h2></div>
+      <div class="prose">
+        <p><b>Convidar.</b> Digite parte do nome ou do CNPJ no campo <b>Convidar fornecedor</b>: a lista abre logo abaixo, com a busca feita no cadastro inteiro. Clique para adicionar.</p>
+        <p><b>Sem mínimo de participantes.</b> Basta um fornecedor. Para quadros internos, sem fornecedor externo, use o <b>Sem Fornecedor</b>, que aparece no topo da lista, pode ser indicado como vencedor e não exige CNPJ nem CND.</p>
+        <p><b>Condições.</b> Em cada cartão: situação (convidado, proposta recebida, declinou, desclassificado), nº e datas da proposta, prazo, pagamento, reajuste, observações e pontos positivos e negativos. Fornecedores que declinaram ou foram desclassificados saem da comparação.</p>
+      </div>
+      <p class="note warn">CND vencida aparece em amarelo no cartão e no cabeçalho do mapa; com a vencedora nessa situação, o envio para aprovação fica bloqueado.</p>
+    </section>
+
+    <!-- ───────────────────────────── DADOS -->
+    <section id="dados">
+      <div class="lede"><p class="eyebrow">QC · 4ª aba</p><h2>Dados do QC e envio</h2></div>
+      <p>Preencha as datas do serviço, o engenheiro responsável, o responsável de suprimentos, o tipo de contrato, a <b>verba já utilizada</b> e os <b>acréscimos/reduções</b> (que mudam a verba disponível), a empresa vencedora e a justificativa da escolha. Depois clique em <b>Enviar para aprovação</b>.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Pendência para o envio</th><th>Como resolver</th></tr></thead>
+          <tbody>
+            <tr><td>Datas, responsáveis, tipo de contrato</td><td>Preencha em Dados do QC.</td></tr>
+            <tr><td>Vencedora e justificativa</td><td>Indique a empresa e explique a escolha.</td></tr>
+            <tr><td>Nenhum fornecedor participante</td><td>Convide ao menos um, ou o Sem Fornecedor.</td></tr>
+            <tr><td>Item sem nenhuma cotação</td><td>Lance o preço de algum fornecedor ou remova o insumo.</td></tr>
+            <tr><td>Insumo do mapa sem insumo referência (nem IP manual)</td><td>Ligue-o a uma referência ou escolha um IP manual.</td></tr>
+            <tr><td>Insumo referência não usado no mapa</td><td>Ligue-o a um insumo, use Preencher com insumos referência ou remova a referência.</td></tr>
+            <tr><td>% material + % equipamento acima de 100%</td><td>Corrija a distribuição do insumo no mapa.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>As pendências aparecem numa faixa amarela no topo do QC; <b>Ver todas</b> abre a lista. Enquanto houver pendência, o envio é recusado.</p>
+    </section>
+
+    <!-- ───────────────────────────── APROVAÇÃO -->
+    <section id="aprovacao">
+      <div class="lede"><p class="eyebrow">Alçada</p><h2>Aprovação e revisões</h2></div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Etapa</th><th>Papel</th><th class="r">Entra a partir de</th></tr></thead>
+          <tbody>
+            <tr><td>1 · Suprimentos</td><td>Suprimentos</td><td class="r">qualquer valor</td></tr>
+            <tr><td>2 · Engenharia</td><td>Engenharia</td><td class="r">qualquer valor</td></tr>
+            <tr><td>3 · Gerente / Coordenador de Obra</td><td>Gerente</td><td class="r">qualquer valor</td></tr>
+            <tr><td>4 · Diretoria</td><td>Diretoria</td><td class="r">R$ 500.000,00</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prose">
+        <p>O valor que define a alçada é o total da vencedora indicada (ou da melhor condição, sem vencedora). As etapas decidem em ordem; cada decisão leva comentário e fica no histórico. Durante a aprovação a revisão não pode ser editada.</p>
+        <p><b>Revisão congelada.</b> Aprovada a última etapa, a revisão congela: um retrato com código de integridade (hash) guarda itens, preços, referências e IPs daquele momento. Nada a altera depois, nem o ERP.</p>
+        <p><b>Nova revisão.</b> Para mudar um QC aprovado ou reprovado, use <b>Nova revisão</b> e informe o motivo. A rev01, rev02… nasce como cópia da última aprovada ou reprovada, com itens, referências, fornecedores e preços. A anterior continua consultável no seletor de revisão.</p>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── CONTRATO -->
+    <section id="contrato">
+      <div class="lede"><p class="eyebrow">Depois da aprovação</p><h2>Solicitação de contrato</h2></div>
+      <p>No QC aprovado, <b>Gerar solicitação de contrato</b> monta o formulário da aba “Solic. Contrato” da planilha.</p>
+      <div class="grid2">
+        <div class="card"><h3>O que entra</h3><p>Os insumos com quantidade que a vencedora cotou, ao preço dela. Insumos que ela não cotou ficam de fora e são listados (exigiriam outro contrato).</p></div>
+        <div class="card"><h3>Vínculos por insumo</h3><p>Cada insumo leva os vínculos <b>IP · Qtd · Valor</b>: herdados das referências (pela verba das linhas) ou o IP manual. Abaixo de cada insumo aparecem as referências usadas, com IP e verba.</p></div>
+        <div class="card"><h3>Distribuição</h3><p>% material, % equipamento e % MDO/serviço do contrato, ponderados pelo valor de cada insumo.</p></div>
+        <div class="card"><h3>Envio</h3><p>Complete tipo, vigência, critérios de medição e, com faturamento direto, os materiais faturados à contratante. <b>Enviar a Contratos</b>; depois, registre a assinatura.</p></div>
+      </div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Situação</th><th>Significado</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge">Rascunho</span></td><td>Em preenchimento.</td></tr>
+            <tr><td><span class="badge b-warn">Enviada a Contratos</span></td><td>Dados e itens bloqueados; mudanças de quantidade, preço ou prazo seguem por aditivo.</td></tr>
+            <tr><td><span class="badge b-info">No ERP</span></td><td>Contrato criado no ERP.</td></tr>
+            <tr><td><span class="badge b-ok">Assinado</span></td><td>Contrato assinado.</td></tr>
+            <tr><td><span class="badge">Cancelada</span></td><td>Solicitação cancelada, com motivo.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── ADITIVOS -->
+    <section id="aditivos">
+      <div class="lede"><p class="eyebrow">Contrato em andamento</p><h2>Aditivos e distratos</h2></div>
+      <div class="prose">
+        <p>Na solicitação de contrato, aba <b>Aditivos e distratos</b>. O <b>aditivo</b> soma quantidades (ou inclui itens novos) e pode mudar o término; o <b>distrato</b> subtrai quantidades de itens existentes. Cada item leva o motivo e os vínculos de IP com a quantidade de cada um.</p>
+        <p>Depois de aprovado, o aditivo entra no “Contratado” da obra: <b>novo total = contrato inicial + aditivos aprovados − distratos</b>.</p>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── CÁLCULO -->
+    <section id="calculo">
+      <div class="lede"><p class="eyebrow">Regras</p><h2>Como o sistema calcula</h2></div>
+      <div class="formula-box">Verba puxada da linha = Custo total da linha × % comprometido<small>100% devolve exatamente o custo total da linha. A quantidade puxada segue o mesmo %.</small></div>
+      <div class="formula-box">Verba da referência = Σ verba puxada das suas linhas</div>
+      <div class="formula-box">Melhor condição do insumo = menor preço unitário entre os fornecedores participantes<small>Empate: vale o fornecedor mais à esquerda. Preço vazio ou zero = não cotado. Total = unitário × quantidade, com 4 casas.</small></div>
+      <div class="prose">
+        <p><b>Grupos de comparação.</b> Insumos do mapa e referências ligados entre si formam um grupo. No grupo, o orçado é a soma da verba das referências e o contratado é a soma do valor dos insumos (preço da vencedora, se cotou; senão, a melhor condição).</p>
+        <p><b>Orçado de cada insumo.</b> Se o grupo tem um só insumo (uma referência para um insumo, ou várias para um), ele leva a verba inteira. Se uma referência atende vários insumos, a verba é rateada pelo valor contratado de cada um; sem preços ainda, em partes iguais.</p>
+      </div>
+      <div class="mini">
+        <table>
+          <thead><tr><th>Exemplo</th><th class="r">Verba</th><th class="r">Contratado</th><th class="r">Orçado do insumo</th><th class="r">Resultado</th></tr></thead>
+          <tbody>
+            <tr><td>Ref. A (R$ 600) + Ref. B (R$ 400) → Insumo 1</td><td class="r">1.000,00</td><td class="r">900,00</td><td class="r">1.000,00</td><td class="r c-real">+100,00</td></tr>
+            <tr><td>Ref. C (R$ 1.000) → Insumo 2</td><td class="r" rowspan="2">1.000,00</td><td class="r">600,00</td><td class="r">600,00</td><td class="r" rowspan="2">0,00</td></tr>
+            <tr><td>Ref. C (R$ 1.000) → Insumo 3</td><td class="r">400,00</td><td class="r">400,00</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prose">
+        <p><b>IP do insumo e vínculos do contrato.</b> A quantidade do insumo é dividida pelos IPs das linhas das suas referências, na proporção da verba de cada linha (ex.: linhas de R$ 600 no IP1 e R$ 400 no IP2 → 60% e 40%). Com IP manual, vai 100% para ele.</p>
+        <p><b>Consumo do orçamento por IP.</b> O valor contratado de cada grupo é distribuído pelas linhas do grupo, pela verba de cada uma. É isso que soma em “Este QC” no consolidado e no comprometido da obra.</p>
+      </div>
+      <div class="formula-box">Verba disponível = Total orçado − Verba já utilizada ± Acréscimos/Reduções<small>Resultado do QC = Verba disponível − Total. Atenção (amarelo) a partir de 95% de consumo da verba disponível; vermelho quando passa da verba.</small></div>
+    </section>
+
+    <!-- ───────────────────────────── CORES -->
+    <section id="cores">
+      <div class="lede"><p class="eyebrow">Leitura rápida</p><h2>Cores e marcas</h2></div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Marca</th><th>Onde</th><th>Significado</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge b-ok">verde</span></td><td>Mapa, resultado</td><td>Melhor preço do insumo; economia (resultado positivo).</td></tr>
+            <tr><td><span class="badge b-err">vermelho</span></td><td>Mapa, saldo, consumo</td><td>Preço acima do orçado; estouro; % acima do livre.</td></tr>
+            <tr><td><span class="badge b-warn">amarelo</span></td><td>Topo do QC, cartões</td><td>Pendências para o envio; CND vencida; referência sem uso.</td></tr>
+            <tr><td><span class="badge b-pri">M</span></td><td>Orçamento</td><td>IP da linha escolhido à mão.</td></tr>
+            <tr><td><span class="badge">manual</span></td><td>Mapa, coluna IP</td><td>IP do insumo escolhido à mão (em vez do herdado).</td></tr>
+            <tr><td><span class="badge b-info">criado no mapa</span></td><td>Mapa</td><td>Insumo criado no mapa (não veio de uma referência).</td></tr>
+            <tr><td><span class="badge b-info">rateio · N insumos</span></td><td>Mapa, orçado</td><td>Verba da referência dividida entre vários insumos.</td></tr>
+            <tr><td>Coroa</td><td>Cabeçalho do fornecedor</td><td>Vencedora indicada.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── AVISOS -->
+    <section id="avisos">
+      <div class="lede"><p class="eyebrow">Problemas comuns</p><h2>Avisos e o que fazer</h2></div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Aviso</th><th>O que fazer</th></tr></thead>
+          <tbody>
+            <tr><td>O percentual informado excede o saldo livre da linha</td><td>Outro QC já comprometeu parte da linha. Use no máximo o % livre mostrado.</td></tr>
+            <tr><td>As linhas selecionadas já estão neste QC</td><td>Elas já são linhas de uma referência; ajuste o % na aba Vínculos e insumos.</td></tr>
+            <tr><td>Código, descrição e unidade só podem ser alterados em insumos criados no mapa</td><td>Insumos vindos de uma referência seguem o orçamento. Para outro nome, crie um insumo no mapa.</td></tr>
+            <tr><td>A revisão está aprovada e não pode ser alterada</td><td>Crie uma nova revisão com o motivo.</td></tr>
+            <tr><td>Não foi possível ler a planilha de orçamentos</td><td>Credencial da Microsoft ou nome da aba. A mensagem diz se o arquivo não foi achado ou quais abas existem; avise o administrador.</td></tr>
+            <tr><td>A lista vem do orçamento importado</td><td>A obra não tem a chave da UAU ou a UAU não respondeu; os IPs e insumos saem do orçamento importado.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── INTEGRAÇÃO -->
+    <section id="integracao">
+      <div class="lede"><p class="eyebrow">Fontes de dados</p><h2>Integrações</h2></div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Fonte</th><th>O que traz</th></tr></thead>
+          <tbody>
+            <tr><td>Planilha de orçamentos (SharePoint)</td><td>Lista de empresas, obras e orçamentos e o orçamento completo de cada obra (aba BD_Orcamento).</td></tr>
+            <tr><td>UAU · Empresas e Obras</td><td>Nomes das empresas e obras.</td></tr>
+            <tr><td>UAU · Insumos do orçamento da obra</td><td>Lista de IPs (vínculos de planejamento) e de insumos da obra.</td></tr>
+            <tr><td>UAU · Pessoas</td><td>Cadastro de fornecedores (pessoas jurídicas ativas), pela sincronização em Integração ERP.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Cada sincronização fica registrada em <b>Integração ERP</b> com data, origem, situação e mensagens. O app não grava contratos na UAU: a API dela não oferece essa operação.</p>
+    </section>
+
+    <!-- ───────────────────────────── GLOSSÁRIO -->
+    <section id="glossario">
+      <div class="lede"><p class="eyebrow">Termos</p><h2>Glossário</h2></div>
+      <dl class="gloss">
+        <dt>QC</dt><dd>Quadro de Concorrência: a comparação de propostas de uma contratação.</dd>
+        <dt>Insumo referência</dt><dd>Insumo do orçamento puxado pelo QC, com suas linhas e o % de cada uma. Dá a verba.</dd>
+        <dt>Insumo do mapa</dt><dd>Insumo real, de contrato, que os fornecedores cotam.</dd>
+        <dt>Verba puxada</dt><dd>Parte do custo de uma linha do orçamento comprometida pelo QC (custo total × %).</dd>
+        <dt>Vínculo de planejamento (IP)</dt><dd>Item de planejamento da UAU (código IP…) ao qual a linha do orçamento e o contrato ficam ligados.</dd>
+        <dt>Grupo de comparação</dt><dd>Insumos do mapa e referências ligados entre si; a comparação com o orçado é exata no grupo.</dd>
+        <dt>Melhor condição</dt><dd>Menor preço unitário do insumo entre os fornecedores participantes.</dd>
+        <dt>Mix</dt><dd>Soma das melhores condições item a item, como se cada insumo fosse com o fornecedor mais barato.</dd>
+        <dt>Verba disponível</dt><dd>Total orçado − verba já utilizada ± acréscimos/reduções.</dd>
+        <dt>Revisão</dt><dd>Versão do QC (rev00, rev01…). Aprovada, congela.</dd>
+        <dt>Alçada</dt><dd>Etapas de aprovação; a Diretoria entra a partir de R$ 500 mil.</dd>
+        <dt>Sem Fornecedor</dt><dd>Participante para quadros internos, sem fornecedor externo.</dd>
+        <dt>Aditivo / distrato</dt><dd>Aumento / redução de quantidades de um contrato já solicitado.</dd>
+      </dl>
+    </section>
+  </main>
+</div>
+
+<footer>
+  Unità Engenharia · QC Unità — Quadro de Concorrência. Manual de uso · outubro/2026.
+</footer>
+
+<script>
+// Destaca no sumário a seção que está sendo lida.
+(() => {
+  const links = [...document.querySelectorAll('.toc a')];
+  const byId = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
+  if (!('IntersectionObserver' in window)) return;
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      links.forEach((a) => a.classList.remove('on'));
+      byId.get(e.target.id)?.classList.add('on');
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  document.querySelectorAll('main section[id]').forEach((s) => io.observe(s));
+})();
+</script>
+
+</html>
