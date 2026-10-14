@@ -34,6 +34,8 @@ export interface WorkDTO {
   city: string | null
   state: string | null
   status: 'draft' | 'not_started' | 'active' | 'completed' | 'archived'
+  /** Arquivada pelo administrador: fora das listas, nada apagado (desarquivar devolve como estava) */
+  archivedAt: string | null
   erpId: string | null
   erpSyncedAt: string | null
   /** Chave da obra na UAU e orçamento escolhido (obras criadas pela planilha de orçamentos) */
@@ -500,6 +502,9 @@ export const addLinesSchema = z.object({
   fillMap: z.boolean().optional(),
 })
 export type AddLinesInput = z.infer<typeof addLinesSchema>
+
+/** Arquivar (true) ou desarquivar (false) uma obra */
+export const archiveWorkSchema = z.object({ archived: z.boolean() })
 
 /** Nome de um Item da EAP do orçamento (null volta ao nome da planilha) */
 export const setBudgetGroupNameSchema = z.object({

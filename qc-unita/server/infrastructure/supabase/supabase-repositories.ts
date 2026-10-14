@@ -41,7 +41,7 @@ function must<T = any>(res: { data: unknown; error: { message: string; code?: st
 }
 
 const WORK_COLS =
-  `id, code, name, clientName:client_name, city, state, status, erpId:erp_id, erpSyncedAt:erp_synced_at,
+  `id, code, name, clientName:client_name, city, state, status, archivedAt:archived_at, erpId:erp_id, erpSyncedAt:erp_synced_at,
    uau_company_code, uau_work_code, uau_budget_number,
    budgets(id, version, source, totalAmount:total_amount::text, isCurrent:is_current, importFileName:import_file_name,
            importedAt:imported_at, erpSyncedAt:erp_synced_at, linesCount:lines_count)`
@@ -397,6 +397,9 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           const m = manual.get(`${workOf(r)}|${line.lineKey}`)
           return m ? { ...line, packageCode: m.code, packageDescription: m.description, packageManual: true } : line
         })
+      },
+      async setWorkArchived(id, archived, actorId) {
+        must(await db.from('works').update(archived ? { archived_at: new Date().toISOString(), archived_by: actorId } : { archived_at: null, archived_by: null }).eq('id', id))
       },
       async findMaterialIdByCode(code) {
         const r = must(await db.from('materials').select('id').eq('code', code).maybeSingle()) as { id: string } | null

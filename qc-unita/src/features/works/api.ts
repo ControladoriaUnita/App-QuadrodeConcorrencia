@@ -9,6 +9,7 @@ import type {
   RefreshSheetBudgetInput,
   SetBudgetGroupNameInput,
   SetLinePlanningInput,
+  WorkDTO,
   WorkListDTO,
   WorkMaterialDTO,
   WorkOverviewDTO,
@@ -137,6 +138,22 @@ export function useRefreshSheetBudget(workId: string) {
     mutationFn: (body: RefreshSheetBudgetInput) => api<SheetBudgetImportResult>(`/works/${workId}/budget-sheet/refresh`, { method: 'POST', body }),
     onSuccess: () => {
       for (const k of BUDGET_KEYS) qc.invalidateQueries({ queryKey: [k] })
+    },
+  })
+}
+
+/** Obras arquivadas (só quem gerencia obras) */
+export const useArchivedWorks = (enabled = true) =>
+  useQuery({ queryKey: ['works', 'arquivadas'], queryFn: () => api<WorkDTO[]>('/works?arquivadas=1'), enabled })
+
+/** Arquiva (true) ou desarquiva (false) a obra: sai das listas, nada é apagado */
+export function useSetWorkArchived(workId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (archived: boolean) => api<{ archived: boolean }>(`/works/${workId}/archive`, { method: 'PUT', body: { archived } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['works'] })
+      qc.invalidateQueries({ queryKey: ['work-overview', workId] })
     },
   })
 }

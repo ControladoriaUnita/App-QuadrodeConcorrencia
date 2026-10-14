@@ -9,6 +9,7 @@ import { FileSpreadsheet, Plus, RefreshCw, X } from 'lucide-react'
 import { Alert, Button, Card, CardHeader, EmptyState, Skeleton } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
 import { useBudgetLines, useBudgetStructure, usePlanningCodes, useSetBudgetGroupName, useSetLinePlanning, type SheetBudgetImportResult } from './api'
+import { ArchiveWorkButton } from './ArchiveWorkButton'
 import { BudgetImportDialog } from './BudgetImportDialog'
 import { BudgetTree } from './BudgetTree'
 import { workPath } from './currentWork'
@@ -77,6 +78,7 @@ export function BudgetPage() {
         strip={hasBudget}
         actions={
           <>
+            {can('work.manage') && <ArchiveWorkButton work={data.work} />}
             {refreshButton}
             {importButton}
             {can('competition.create') && hasBudget && (

@@ -49,11 +49,14 @@ export function WorkHeader({ section, data, ov, actions, strip = true }: { secti
           </>
         }
         meta={
-          b && (
-            <Badge tone={SOURCE[b.source].tone} icon={<FileSpreadsheet className="size-3" />}>
-              Orçamento v{b.version} · {SOURCE[b.source].badge}
-            </Badge>
-          )
+          <>
+            {work.archivedAt && <Badge tone="warning">Arquivada em {formatDateTime(work.archivedAt)}</Badge>}
+            {b && (
+              <Badge tone={SOURCE[b.source].tone} icon={<FileSpreadsheet className="size-3" />}>
+                Orçamento v{b.version} · {SOURCE[b.source].badge}
+              </Badge>
+            )}
+          </>
         }
         actions={actions}
       />

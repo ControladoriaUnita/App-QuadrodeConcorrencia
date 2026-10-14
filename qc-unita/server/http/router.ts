@@ -20,6 +20,7 @@ import {
   setItemReferencesSchema,
   setLinePlanningSchema,
   setBudgetGroupNameSchema,
+  archiveWorkSchema,
   materialQuerySchema,
   updateItemSchema,
   updateRevisionSchema,
@@ -76,7 +77,9 @@ const uuidParam = z.string().uuid()
 
 // ----------------------------------------------------------------------------- rotas
 route('GET', '/me', async ({ ctx }) => ({ user: catalog.me(ctx), dataSource: dataSource() }))
-route('GET', '/works', async ({ repos, ctx }) => works.listWorksWithSummary(repos, ctx))
+route('GET', '/works', async ({ repos, ctx, url }) => works.listWorksWithSummary(repos, ctx, { archived: url.searchParams.get('arquivadas') === '1' }))
+route('PUT', '/works/:id/archive', async ({ repos, ctx, params, body }) =>
+  works.setWorkArchived(repos, ctx, parse(uuidParam, params.id), parse(archiveWorkSchema, await body()).archived))
 route('GET', '/works/:id/budget-lines', async ({ repos, ctx, params, url }) =>
   works.listBudgetLinesUsage(repos, ctx, parse(uuidParam, params.id), {
     packages: url.searchParams.get('packages')?.split(',').filter(Boolean),

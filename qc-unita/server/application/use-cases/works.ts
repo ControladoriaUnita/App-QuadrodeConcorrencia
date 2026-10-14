@@ -32,9 +32,13 @@ async function competitionsOf(repos: Repositories, ctx: RequestContext, workId: 
     })
 }
 
-/** Lista de obras com o resumo de consumo do orçamento (tela inicial). */
-export async function listWorksWithSummary(repos: Repositories, ctx: RequestContext): Promise<WorkDTO[]> {
-  const works = (await repos.catalog.listWorks()).filter((w) => can(ctx.actor, 'work.read', w.id))
+/**
+ * Lista de obras com o resumo de consumo do orçamento (tela inicial). As arquivadas ficam fora;
+ * `archived: true` lista só elas (quem gerencia obras).
+ */
+export async function listWorksWithSummary(repos: Repositories, ctx: RequestContext, opts: { archived?: boolean } = {}): Promise<WorkDTO[]> {
+  if (opts.archived) requirePermission(ctx, 'work.manage')
+  const works = (await repos.catalog.listWorks()).filter((w) => can(ctx.actor, 'work.read', w.id) && !!w.archivedAt === !!opts.archived)
   return Promise.all(
     works.map(async (w) => ({
       ...w,
@@ -185,7 +189,7 @@ export async function saveBudgetVersion(
 }
 
 // ----------------------------------------------------------------------------- IPs e insumos da obra
-async function loadWork(repos: Repositories, ctx: RequestContext, workId: string, permission: 'budget.read' | 'budget.import' = 'budget.read') {
+async function loadWork(repos: Repositories, ctx: RequestContext, workId: string, permission: 'budget.read' | 'budget.import' | 'work.manage' = 'budget.read') {
   requirePermission(ctx, permission, workId)
   const work = await repos.catalog.getWork(workId)
   if (!work) throw notFound('Obra')
@@ -271,4 +275,11 @@ export async function setBudgetGroupName(repos: Repositories, ctx: RequestContex
     throw new AppError('GROUP_NOT_FOUND', `Item ${input.wbs} não encontrado no orçamento vigente.`, 404)
   }
   return { ok: true }
+}
+
+/** Arquiva (ou desarquiva) a obra: sai das listas, nada é apagado. Só quem gerencia obras. */
+export async function setWorkArchived(repos: Repositories, ctx: RequestContext, workId: string, archived: boolean) {
+  await loadWork(repos, ctx, workId, 'work.manage')
+  await repos.catalog.setWorkArchived(workId, archived, ctx.actor.id)
+  return { archived }
 }

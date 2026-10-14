@@ -74,6 +74,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       city: (w.city as string) ?? null,
       state: (w.state as string) ?? null,
       status: w.status as WorkDTO['status'],
+      archivedAt: (w.archivedAt as string) ?? null,
       erpId: (w.erpId as string) ?? null,
       erpSyncedAt: (w.erpSyncedAt as string) ?? null,
       uau: w.uauCompanyCode && w.uauWorkCode
@@ -323,6 +324,9 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       },
       async getBudgetLines(ids) {
         return ids.map((id) => db.get('activity_items', id)).filter((x): x is Row => !!x).map(toLine)
+      },
+      async setWorkArchived(id, archived, actorId) {
+        db.update('works', id, archived ? { archivedAt: new Date().toISOString(), archivedBy: actorId } : { archivedAt: null, archivedBy: null }, audit, { workId: id })
       },
       async findMaterialIdByCode(code) {
         return db.find('materials', (m) => m.code === code)[0]?.id ?? null

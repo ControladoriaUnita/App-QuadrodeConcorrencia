@@ -149,6 +149,8 @@ export interface CatalogRepository {
   /** Cadastro de obra (manual, ou escolhida na lista da UAU com `origin`); retorna o id */
   createWork(input: CreateWorkInput, actorId: string, origin?: NewWorkOrigin): Promise<string>
   getWork(id: string): Promise<WorkDTO | null>
+  /** Arquiva (ou desarquiva) a obra; não apaga nada */
+  setWorkArchived(id: string, archived: boolean, actorId: string): Promise<void>
   listSuppliers(search?: string): Promise<SupplierDTO[]>
   getSupplier(id: string): Promise<SupplierDTO | null>
   listContractTypes(): Promise<ContractTypeDTO[]>

@@ -295,6 +295,27 @@ describe('obra e vínculos de planejamento', () => {
     expect((await call('PUT', `/works/${alpha.id}/budget-groups`, { wbs: '99.99', description: 'X' })).status).toBe(404)
   })
 
+  it('administrador arquiva e desarquiva a obra; nada é apagado', async () => {
+    const works = (await call<{ id: string; code: string; status: string }[]>('GET', '/works', undefined, ADMIN)).data
+    const vila = works.find((w) => w.code === '2055')!
+    // Só quem gerencia obras
+    expect((await call('PUT', `/works/${vila.id}/archive`, { archived: true })).status).toBe(403)
+    expect((await call('GET', '/works?arquivadas=1')).status).toBe(403)
+
+    expect((await call('PUT', `/works/${vila.id}/archive`, { archived: true }, ADMIN)).status).toBe(200)
+    const active = (await call<{ id: string }[]>('GET', '/works', undefined, ADMIN)).data
+    expect(active.some((w) => w.id === vila.id)).toBe(false)
+    const archived = (await call<{ id: string; archivedAt: string | null; status: string }[]>('GET', '/works?arquivadas=1', undefined, ADMIN)).data
+    expect(archived.map((w) => w.id)).toEqual([vila.id])
+    expect(archived[0]!.archivedAt).not.toBeNull()
+    // A obra continua acessível pelo endereço, com orçamento e situação intactos
+    expect((await call('GET', `/works/${vila.id}/overview`, undefined, ADMIN)).status).toBe(200)
+
+    expect((await call('PUT', `/works/${vila.id}/archive`, { archived: false }, ADMIN)).status).toBe(200)
+    const back = (await call<{ id: string; status: string; archivedAt: string | null }[]>('GET', '/works', undefined, ADMIN)).data.find((w) => w.id === vila.id)!
+    expect([back.status, back.archivedAt]).toEqual([vila.status, null])
+  })
+
   it('inclui linha com % escolhido e respeita o saldo livre entre QCs', async () => {
     const works = (await call<{ id: string; code: string }[]>('GET', '/works')).data
     const alpha = works.find((w) => w.code === '2041')!

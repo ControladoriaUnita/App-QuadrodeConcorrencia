@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Quadro de Concorrência · Unità Engenharia — schema completo
--- GERADO por scripts/build-db-setup.mjs a partir de 20 migrations
--- (001_initial_schema.sql … 020_budget_group_names.sql). Não edite à mão: altere a migration e rode npm run db:bundle.
+-- GERADO por scripts/build-db-setup.mjs a partir de 21 migrations
+-- (001_initial_schema.sql … 021_work_archive.sql). Não edite à mão: altere a migration e rode npm run db:bundle.
 --
 -- Como usar: Supabase → SQL Editor → New query → cole tudo → Run.
 -- Roda numa única transação: se algo falhar, nada fica pela metade.
@@ -3073,6 +3073,20 @@ create policy budget_group_names_write on public.budget_group_names for all to a
   using (public.auth_has_permission('budget.import', work_id))
   with check (public.auth_has_permission('budget.import', work_id));
 
+-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 021_work_archive.sql
+-- =============================================================================
+-- 021_work_archive.sql
+-- Arquivar obra (administrador): a obra sai das listas, mas nada é apagado.
+--
+-- Separado da situação da obra (ativa, concluída...) para que desarquivar a devolva como estava.
+-- =============================================================================
+
+alter table public.works
+  add column if not exists archived_at timestamptz,
+  add column if not exists archived_by uuid references auth.users (id);
+
+create index if not exists works_archived_idx on public.works (archived_at) where archived_at is not null;
+
 -- Registro das migrations aplicadas (para o Supabase CLI não reaplicar com db push)
 create schema if not exists supabase_migrations;
 create table if not exists supabase_migrations.schema_migrations (version text primary key, statements text[], name text);
@@ -3096,7 +3110,8 @@ insert into supabase_migrations.schema_migrations (version, name) values
   ('017', 'budget_sheet'),
   ('018', 'qc_reference_items'),
   ('019', 'line_planning_on_read'),
-  ('020', 'budget_group_names')
+  ('020', 'budget_group_names'),
+  ('021', 'work_archive')
 on conflict (version) do nothing;
 
 commit;

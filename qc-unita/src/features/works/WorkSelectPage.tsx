@@ -8,10 +8,12 @@ import { Building2, ChevronRight, MapPin, Plus } from 'lucide-react'
 import type { WorkDTO } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { Alert, Badge, Button, Card, ConsumptionMeter, EmptyState, Skeleton, type Tone } from '@/components/ui'
+import { Alert, Badge, Button, Card, ConsumptionMeter, EmptyState, SegmentedControl, Skeleton, type Tone } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
 import { formatBRL, formatPercent } from '@/utils/format'
 import { useWorks } from '@/features/competitions/api'
+import { useArchivedWorks } from './api'
+import { ArchiveWorkButton } from './ArchiveWorkButton'
 import { workPath } from './currentWork'
 import { NewWorkDialog } from './NewWorkDialog'
 import { NewWorkFromUauDialog } from './NewWorkFromUauDialog'
@@ -25,13 +27,21 @@ const status: Record<WorkDTO['status'], { label: string; tone: Tone }> = {
   archived: { label: 'Arquivada', tone: 'warning' },
 }
 
+type ListView = 'ativas' | 'arquivadas'
+
 export function WorkSelectPage() {
-  const works = useWorks()
   const navigate = useNavigate()
   const { can } = useAuth()
+  const canManage = can('work.manage')
+  /** O administrador alterna entre as obras ativas e as arquivadas (para desarquivar) */
+  const [view, setView] = useState<ListView>('ativas')
+  const archived = view === 'arquivadas'
+  const active = useWorks()
+  const archivedWorks = useArchivedWorks(canManage && archived)
+  const works = archived ? archivedWorks : active
   /** Fluxo principal: obra da UAU; o cadastro manual é a alternativa */
   const [creating, setCreating] = useState<'uau' | 'manual' | null>(null)
-  const newButton = can('work.manage') && (
+  const newButton = canManage && (
     <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating('uau')}>
       Nova obra
     </Button>
@@ -42,7 +52,19 @@ export function WorkSelectPage() {
         eyebrow="Quadro de Concorrência"
         title="Selecione a obra"
         description="Cada obra tem um orçamento geral; as concorrências consomem esse orçamento por tipo de serviço."
-        actions={newButton}
+        actions={
+          canManage && (
+            <>
+              <SegmentedControl<ListView>
+                label="Obras exibidas"
+                items={[{ key: 'ativas', label: 'Obras ativas' }, { key: 'arquivadas', label: 'Arquivadas' }]}
+                value={view}
+                onChange={setView}
+              />
+              {newButton}
+            </>
+          )
+        }
       />
       <NewWorkFromUauDialog
         open={creating === 'uau'}
@@ -66,6 +88,10 @@ export function WorkSelectPage() {
         <Alert tone="error">{(works.error as Error).message}</Alert>
       ) : works.isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-52" />)}</div>
+      ) : archived && !works.data?.length ? (
+        <Card>
+          <EmptyState title="Nenhuma obra arquivada" description="Obras arquivadas saem das listas sem perder nada e voltam com Desarquivar." />
+        </Card>
       ) : !works.data?.length ? (
         <Card>
           <EmptyState title="Nenhuma obra disponível" description="Crie uma obra a partir da UAU (com o orçamento da planilha) ou peça ao administrador acesso a uma obra." action={newButton} />
@@ -73,7 +99,14 @@ export function WorkSelectPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {works.data.map((w) => (
-            <WorkCard key={w.id} w={w} />
+            archived ? (
+              <div key={w.id} className="flex flex-col gap-2">
+                <WorkCard w={w} />
+                <ArchiveWorkButton work={w} />
+              </div>
+            ) : (
+              <WorkCard key={w.id} w={w} />
+            )
           ))}
         </div>
       )}
