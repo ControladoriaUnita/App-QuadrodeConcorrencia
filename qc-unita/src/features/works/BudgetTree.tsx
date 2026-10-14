@@ -463,7 +463,8 @@ function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning, onRenam
     )
   }
   if (r.kind === 'activity') {
-    const diverges = r.quantity && !r.total.minus(r.linesTotal).abs().lte('0.05')
+    // Total = soma dos dependentes; em amarelo quando difere do custo da composição na planilha
+    const diverges = !!r.sheetTotal && !r.sheetTotal.minus(r.total).abs().lte('0.05')
     return (
       <div role="row" style={style} className={cn(base, 'bg-surface font-medium text-text')}>
         {lead}
@@ -473,11 +474,11 @@ function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning, onRenam
         <span className={cn(cell, 'text-xs')}>{r.unit ?? ''}</span>
         <span className={cn(cell, 'text-right')}>{r.quantity ? formatQuantity(r.quantity) : ''}</span>
         <span className={cn(cell, 'text-right')}>{r.unitCost ? formatDecimal(r.unitCost, 2) : ''}</span>
-        <span className={cn(cell, 'text-right', diverges && 'text-warning')} title={diverges ? `Σ insumos ${formatBRL(r.linesTotal)}` : undefined}>{formatBRL(r.total)}</span>
+        <span className={cn(cell, 'text-right', diverges && 'text-warning')} title={diverges ? `Na planilha (quant. × custo unit.): ${formatBRL(r.sheetTotal)}` : undefined}>{formatBRL(r.total)}</span>
         <span />
         <span />
-        <Aggregate total={r.linesTotal} committed={r.committed} />
-        <Free total={r.linesTotal} committed={r.committed} />
+        <Aggregate total={r.total} committed={r.committed} />
+        <Free total={r.total} committed={r.committed} />
         {tail}
       </div>
     )

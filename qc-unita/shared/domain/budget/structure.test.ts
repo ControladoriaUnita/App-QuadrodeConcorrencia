@@ -31,8 +31,33 @@ describe('estrutura do orçamento', () => {
     expect(g02.total.toDb()).toBe('310.0001') // Σ insumos
     expect(g02.committed.toDb()).toBe('50.0000')
     const comp = tree.find((r) => r.key === 'a:02.02.01')!
-    expect(comp.kind === 'activity' && [comp.total.toDb(), comp.linesTotal.toDb(), comp.lines]).toEqual(['300.0000', '300.0001', 2])
+    // Composição com insumos vale a soma deles; o custo da planilha fica para conferência
+    expect(comp.kind === 'activity' && [comp.total.toDb(), comp.sheetTotal?.toDb(), comp.lines]).toEqual(['300.0001', '300.0000', 2])
     // composição ausente da estrutura é criada a partir das linhas, na raiz
     expect(tree.find((r) => r.key === 'a:03.01')!.parentKey).toBeNull()
+  })
+
+  it('todo nível com dependentes totaliza os de baixo, inclusive composição dentro de composição', () => {
+    // 01 → 01.01 (composição sem insumos, zerada na planilha) → 01.01.01 e 01.01.02; 01.02 folha sem insumos
+    const tree = buildBudgetTree(
+      {
+        groups: [{ wbs: '01', description: 'SERVIÇOS INICIAIS' }],
+        activities: [
+          { wbs: '01.01', code: null, description: 'Instalações', unit: null, quantity: '0', unitCost: '0', total: '0.0000' },
+          { wbs: '01.01.01', code: 'CPU1', description: 'Tapume', unit: 'm', quantity: '10', unitCost: '50', total: '500.0000' },
+          { wbs: '01.01.02', code: 'CPU2', description: 'Barracão', unit: 'vb', quantity: '1', unitCost: '1000', total: '1000.0000' },
+          { wbs: '01.02', code: 'CPU3', description: 'Placa da obra', unit: 'un', quantity: '1', unitCost: '80', total: '80.0000' },
+        ],
+      },
+      [line('a', '01.01.01', '500', '100'), line('b', '01.01.02', '600'), line('c', '01.01.02', '400')],
+    )
+    expect(tree.map((r) => `${'  '.repeat(r.level)}${r.kind === 'line' ? r.line.id : r.wbs}`)).toEqual([
+      '01', '  01.01', '    01.01.01', '      a', '    01.01.02', '      b', '      c', '  01.02',
+    ])
+    const total = (key: string) => tree.find((r) => r.key === key)!.total.toDb()
+    expect(total('a:01.01')).toBe('1500.0000') // Σ 01.01.01 + 01.01.02 (a planilha trazia zero)
+    expect(total('a:01.02')).toBe('80.0000') // sem nada abaixo: custo da planilha
+    expect(total('g:01')).toBe('1580.0000')
+    expect(tree.find((r) => r.key === 'a:01.01')!.committed.toDb()).toBe('100.0000')
   })
 })

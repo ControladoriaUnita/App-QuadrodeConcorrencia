@@ -4,6 +4,8 @@
  *
  * Função pura: recebe grupos/composições e as linhas (insumos) e devolve as linhas da tabela na ordem
  * da EAP, com nível, pai e subtotais (custo total e verba já comprometida em concorrências).
+ * O pai de um nível é o código mais longo que é prefixo dele (01 → 01.01 → 01.01.01), seja grupo
+ * ou composição, e todo nível com dependentes totaliza os que estão abaixo dele.
  */
 import type { BudgetStructureDTO } from '../../contracts'
 import { Decimal } from '../decimal'
@@ -23,7 +25,7 @@ interface Base {
   /** 0 = item de 1º nível */
   level: number
   parentKey: string | null
-  /** Custo total (grupo: Σ insumos; composição: quant. × custo unit.; insumo: custo total da linha) */
+  /** Custo total: Σ dos dependentes (insumos e subníveis); composição sem nada abaixo: custo da planilha */
   total: Decimal
   /** Σ verba comprometida dos insumos abaixo */
   committed: Decimal
@@ -37,7 +39,9 @@ export interface ActivityRow extends Base {
   unit: string | null
   quantity: Decimal | null
   unitCost: Decimal | null
-  /** Σ custo total dos insumos (para conferir com quant. × unit.) */
+  /** Custo da composição na planilha (quant. × unit.), para conferir com o total dos dependentes */
+  sheetTotal: Decimal | null
+  /** Σ custo total dos insumos da própria composição */
   linesTotal: Decimal
   lines: number
 }
@@ -59,23 +63,32 @@ export function compareWbs(a: string, b: string): number {
   return 0
 }
 
-/** Pai = grupo cujo código é o maior prefixo próprio (por segmentos) do código informado. */
-function parentGroup(wbs: string, groups: Set<string>): string | null {
+/** Pai = nó (grupo ou composição) cujo código é o maior prefixo próprio (por segmentos) do código informado. */
+function parentOf(wbs: string, codes: Set<string>): string | null {
   const parts = wbs.split('.')
   for (let n = parts.length - 1; n > 0; n--) {
     const p = parts.slice(0, n).join('.')
-    if (groups.has(p)) return p
+    if (codes.has(p)) return p
   }
   return null
 }
 
+/**
+ * Regra dos totais: todo nó com algo abaixo (insumos ou subníveis) vale a soma dos dependentes, em
+ * qualquer profundidade. Só a composição sem nada abaixo usa o custo da planilha (quant. × unit.).
+ */
 export function buildBudgetTree<L extends TreeLineInput>(structure: Pick<BudgetStructureDTO, 'groups' | 'activities'>, lines: L[]): BudgetTreeRow<L>[] {
   const ZERO = Decimal.ZERO
-  const groupCodes = new Set(structure.groups.map((g) => g.wbs))
   const linesBy = new Map<string, L[]>()
-  for (const l of lines) linesBy.set(l.activityWbs, [...(linesBy.get(l.activityWbs) ?? []), l])
+  for (const l of lines) {
+    const own = linesBy.get(l.activityWbs)
+    if (own) own.push(l)
+    else linesBy.set(l.activityWbs, [l])
+  }
 
   // Composições da estrutura + as que só aparecem nas linhas (orçamento sem cabeçalho de composição)
+  const groupCodes = new Set(structure.groups.map((g) => g.wbs))
+  const groupName = new Map(structure.groups.map((g) => [g.wbs, g.description]))
   const activities = new Map(structure.activities.map((a) => [a.wbs, a]))
   for (const [wbs, ls] of linesBy) {
     if (!activities.has(wbs) && !groupCodes.has(wbs)) {
@@ -83,51 +96,62 @@ export function buildBudgetTree<L extends TreeLineInput>(structure: Pick<BudgetS
     }
   }
 
+  // Um nó por código (grupo tem prioridade se o mesmo código vier como grupo e composição)
   type Node = { wbs: string; kind: 'group' | 'activity'; children: Node[] }
   const nodes = new Map<string, Node>()
-  for (const g of structure.groups) nodes.set(`g:${g.wbs}`, { wbs: g.wbs, kind: 'group', children: [] })
-  for (const a of activities.values()) nodes.set(`a:${a.wbs}`, { wbs: a.wbs, kind: 'activity', children: [] })
+  for (const a of activities.values()) nodes.set(a.wbs, { wbs: a.wbs, kind: 'activity', children: [] })
+  for (const g of structure.groups) nodes.set(g.wbs, { wbs: g.wbs, kind: 'group', children: [] })
+  const codes = new Set(nodes.keys())
   const roots: Node[] = []
   for (const n of nodes.values()) {
-    const p = parentGroup(n.wbs, groupCodes)
-    ;(p ? nodes.get(`g:${p}`)!.children : roots).push(n)
+    const p = parentOf(n.wbs, codes)
+    ;(p ? nodes.get(p)!.children : roots).push(n)
   }
   const sortNodes = (ns: Node[]) => {
-    ns.sort((a, b) => compareWbs(a.wbs, b.wbs) || (a.kind === 'group' ? -1 : 1))
+    ns.sort((a, b) => compareWbs(a.wbs, b.wbs))
     ns.forEach((n) => sortNodes(n.children))
   }
   sortNodes(roots)
 
   const out: BudgetTreeRow<L>[] = []
-  const walk = (n: Node, level: number, parentKey: string | null): { total: Decimal; committed: Decimal; lines: number } => {
-    if (n.kind === 'activity') {
+  type Sums = { total: Decimal; committed: Decimal; lines: number }
+  const walk = (n: Node, level: number, parentKey: string | null): Sums => {
+    const key = `${n.kind === 'group' ? 'g' : 'a'}:${n.wbs}`
+    const own = n.kind === 'activity' ? (linesBy.get(n.wbs) ?? []) : []
+    const linesTotal = Decimal.sum(own.map((l) => l.total))
+    let row: GroupRow | ActivityRow
+    if (n.kind === 'group') {
+      row = { kind: 'group', key, level, parentKey, wbs: n.wbs, description: groupName.get(n.wbs)!, total: ZERO, committed: ZERO, lines: 0 }
+    } else {
       const a = activities.get(n.wbs)!
-      const key = `a:${n.wbs}`
-      const own = linesBy.get(n.wbs) ?? []
-      const row: ActivityRow = {
+      row = {
         kind: 'activity', key, level, parentKey, wbs: n.wbs, code: a.code, description: a.description, unit: a.unit,
         quantity: a.quantity ? Decimal.from(a.quantity) : null,
         unitCost: a.unitCost ? Decimal.from(a.unitCost) : null,
-        linesTotal: Decimal.sum(own.map((l) => l.total)),
-        total: ZERO, committed: Decimal.sum(own.map((l) => l.committedValue ?? '0')), lines: own.length,
+        sheetTotal: a.total ? Decimal.from(a.total) : null,
+        linesTotal,
+        total: ZERO, committed: ZERO, lines: 0,
       }
-      row.total = a.total ? Decimal.from(a.total) : row.linesTotal
-      out.push(row)
-      for (const l of own) {
-        out.push({ kind: 'line', key: `l:${l.id}`, level: level + 1, parentKey: key, line: l, total: Decimal.from(l.total), committed: Decimal.from(l.committedValue ?? '0') })
-      }
-      return { total: row.linesTotal, committed: row.committed, lines: own.length }
     }
-    const key = `g:${n.wbs}`
-    const row: GroupRow = { kind: 'group', key, level, parentKey, wbs: n.wbs, description: structure.groups.find((g) => g.wbs === n.wbs)!.description, total: ZERO, committed: ZERO, lines: 0 }
     out.push(row)
+    // Insumos da composição
+    for (const l of own) {
+      out.push({ kind: 'line', key: `l:${l.id}`, level: level + 1, parentKey: key, line: l, total: Decimal.from(l.total), committed: Decimal.from(l.committedValue ?? '0') })
+    }
+    const sums: Sums = { total: linesTotal, committed: Decimal.sum(own.map((l) => l.committedValue ?? '0')), lines: own.length }
+    // Subníveis (grupos ou composições com código mais longo)
     for (const c of n.children) {
       const r = walk(c, level + 1, key)
-      row.total = row.total.plus(r.total)
-      row.committed = row.committed.plus(r.committed)
-      row.lines += r.lines
+      sums.total = sums.total.plus(r.total)
+      sums.committed = sums.committed.plus(r.committed)
+      sums.lines += r.lines
     }
-    return { total: row.total, committed: row.committed, lines: row.lines }
+    // Sem nada abaixo: o custo da planilha (composição); com dependentes: a soma deles
+    const leaf = !own.length && !n.children.length
+    row.total = leaf && row.kind === 'activity' && row.sheetTotal ? row.sheetTotal : sums.total
+    row.committed = sums.committed
+    row.lines = sums.lines
+    return { ...sums, total: row.total }
   }
   for (const r of roots) walk(r, 0, null)
   return out
