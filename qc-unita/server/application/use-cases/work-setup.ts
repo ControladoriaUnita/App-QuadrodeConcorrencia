@@ -1,5 +1,5 @@
 /**
- * Nova obra a partir da planilha de orçamentos "BD_Orcamentos" (SharePoint).
+ * Nova obra a partir da planilha de orçamentos "BD_Orcamento" (SharePoint).
  *
  *  - A planilha é a fonte da verdade do que pode ser criado: Empresa_pla · Obra_pla · NumOrca_pla.
  *    Empresa e obra são os próprios códigos da UAU (o mesmo código de obra pode existir em mais de

@@ -1,5 +1,5 @@
 /**
- * Escolhe a fonte de orçamentos (aba BD_Orcamentos) pelo ambiente:
+ * Escolhe a fonte de orçamentos (aba BD_Orcamento) pelo ambiente:
  *  - credenciais do Microsoft Graph (tenant + client + segredo ou credencial federada da Vercel) → SharePoint;
  *  - sem credenciais no modo demonstração (DATA_SOURCE=memory) → exemplo em memória;
  *  - sem credenciais com DATA_SOURCE=supabase → erro claro com as variáveis que faltam (nunca os valores).
@@ -18,7 +18,7 @@ export { MockBudgetSheetSource } from './mock-budget-sheet'
 export const BUDGET_SHEET_DEFAULTS: SheetRef = {
   driveId: 'b!S3La9JidLE6c3ZTf28lb-loVt7u-9xdEoIsaVk0BY_mFzM2JIEI7SoDCfFHuzgqQ',
   itemId: '01UQIHIUQQC7IHA3D5WFHKTF6TMWDHIWVI',
-  sheet: 'BD_Orcamentos',
+  sheet: 'BD_Orcamento',
 }
 
 export function budgetSheetRef(env: NodeJS.ProcessEnv = process.env): SheetRef {

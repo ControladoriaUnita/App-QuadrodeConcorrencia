@@ -79,7 +79,7 @@ Na obra, **Importar orçamento (Excel)** lê a planilha no navegador — formato
 
 ### Nova obra pela UAU + orçamento do SharePoint
 
-**Nova obra** escolhe Empresa → Obra → Orçamento a partir da aba **BD_Orcamentos** do Excel no SharePoint (lida pelo Microsoft Graph, `server/infrastructure/budget-sheet`): `Empresa_pla` e `Obra_pla` são os códigos da empresa e da obra na UAU, e `NumOrca_pla` o nº do orçamento. A chave da obra é sempre empresa + obra (o mesmo código de obra pode existir em mais de uma empresa da UAU). A UAU (`Empresa/ObterEmpresasAtivas`, `Obras/ObterObrasAtivas`) só completa os nomes; se ela não responder, as listas aparecem pelos códigos.
+**Nova obra** escolhe Empresa → Obra → Orçamento a partir da aba **BD_Orcamento** do Excel no SharePoint (lida pelo Microsoft Graph, `server/infrastructure/budget-sheet`): `Empresa_pla` e `Obra_pla` são os códigos da empresa e da obra na UAU, e `NumOrca_pla` o nº do orçamento. A chave da obra é sempre empresa + obra (o mesmo código de obra pode existir em mais de uma empresa da UAU). A UAU (`Empresa/ObterEmpresasAtivas`, `Obras/ObterObrasAtivas`) só completa os nomes; se ela não responder, as listas aparecem pelos códigos.
 
 - O orçamento é lido e conferido **antes** de criar a obra; entra como versão vigente (origem `sharepoint`), ordenado pelos códigos, com as **composições auxiliares abertas** (cada insumo da auxiliar é uma linha e guarda de qual auxiliar veio). Se a gravação falhar depois de criada a obra, o erro avisa e indica "Atualizar orçamento".
 - **Atualizar orçamento** (`POST /works/:id/budget-sheet/refresh`) reimporta o mesmo nº (ou outro) como nova versão; QCs e versões anteriores ficam intactos.

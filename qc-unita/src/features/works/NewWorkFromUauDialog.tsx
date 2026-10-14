@@ -1,6 +1,6 @@
 /**
  * Nova obra pela planilha de orçamentos: Empresa → Obra → Orçamento.
- * As três listas vêm da aba BD_Orcamentos (Empresa_pla · Obra_pla · NumOrca_pla), que usa os códigos
+ * As três listas vêm da aba BD_Orcamento (Empresa_pla · Obra_pla · NumOrca_pla), que usa os códigos
  * da UAU; os nomes vêm da UAU. A obra é criada já com o orçamento completo importado.
  * O cadastro manual continua disponível como alternativa ("Cadastrar sem a planilha").
  */

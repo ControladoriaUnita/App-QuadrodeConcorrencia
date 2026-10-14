@@ -1,5 +1,5 @@
 /**
- * Fonte de orçamentos do modo demonstração: linhas no formato da aba "BD_Orcamentos" para as
+ * Fonte de orçamentos do modo demonstração: linhas no formato da aba "BD_Orcamento" para as
  * obras do MockERPProvider (2041, 2055, 1980) e para a obra 2070, que ainda não está no QC e pode
  * ser criada pela tela. Empresa_pla e Obra_pla são os códigos da "UAU" de exemplo. Passa pelo mesmo parser da planilha real (shared/domain/budget/budget-sheet).
  */
@@ -89,7 +89,7 @@ export function mockSheetRows(): Cell[][] {
 
 export class MockBudgetSheetSource implements BudgetSheetSource {
   readonly name = 'mock' as const
-  readonly sheetName = 'BD_Orcamentos'
+  readonly sheetName = 'BD_Orcamento'
   private readonly rows = mockSheetRows()
 
   async listBudgets(): Promise<BudgetSheetEntry[]> {

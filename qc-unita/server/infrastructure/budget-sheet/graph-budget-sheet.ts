@@ -1,5 +1,5 @@
 /**
- * Orçamentos da aba "BD_Orcamentos" (Excel no SharePoint) lidos pelo Microsoft Graph.
+ * Orçamentos da aba "BD_Orcamento" (Excel no SharePoint) lidos pelo Microsoft Graph.
  *
  * A aba tem os orçamentos de TODAS as obras (centenas de milhares de linhas), então:
  *  - Índice: lê em blocos só as colunas de chave e de total (Empresa_pla, Obra_pla, NumOrca_pla,

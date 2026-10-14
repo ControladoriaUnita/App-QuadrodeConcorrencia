@@ -461,7 +461,7 @@ export type CreateWorkInput = z.infer<typeof createWorkSchema>
 
 // ----------------------------------------------------------------------------- nova obra pela planilha de orçamentos
 /*
- * A aba "BD_Orcamentos" (SharePoint) diz quais orçamentos existem: Empresa_pla · Obra_pla · NumOrca_pla.
+ * A aba "BD_Orcamento" (SharePoint) diz quais orçamentos existem: Empresa_pla · Obra_pla · NumOrca_pla.
  * A empresa e a obra são os códigos da UAU (o mesmo código de obra pode existir em mais de uma
  * empresa); a UAU só completa os nomes.
  */

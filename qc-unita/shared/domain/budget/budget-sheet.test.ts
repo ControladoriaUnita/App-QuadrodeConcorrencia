@@ -22,7 +22,7 @@ const ROWS: Cell[][] = [
   row('01.01', 'OUTRA OBRA', 'dia', 1, 1, 1, null, 1, 'IS00002', null, 'x', 'dia', 'P099A', 2),
 ]
 
-describe('Orçamentos da aba BD_Orcamentos', () => {
+describe('Orçamentos da aba BD_Orcamento', () => {
   it('exige as colunas do orçamento da UAU', () => {
     expect(() => readSheetColumns(['Empresa_pla', 'Obra_pla'])).toThrow(/NumOrca_pla.*item_pla/i)
   })

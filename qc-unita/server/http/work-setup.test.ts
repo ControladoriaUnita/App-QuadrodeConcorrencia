@@ -1,5 +1,5 @@
 /**
- * Nova obra pela planilha BD_Orcamentos + nomes da UAU (modo memória: MockERPProvider e
+ * Nova obra pela planilha BD_Orcamento + nomes da UAU (modo memória: MockERPProvider e
  * MockBudgetSheetSource).
  */
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -63,7 +63,7 @@ describe('criar obra pela planilha', () => {
     const w = (await works()).find((x) => x.id === r.data.id)!
     expect([w.code, w.name, w.clientName, w.status, w.erpId]).toEqual(['2070', 'Residencial Beta', 'SPE Beta', 'active', '2:2070'])
     expect(w.uau).toEqual({ company: '2', work: '2070', budget: '3' })
-    expect(w.currentBudget).toMatchObject({ source: 'sharepoint', fileName: 'SharePoint · BD_Orcamentos · empresa 2 · obra 2070 · orçamento 3', lines: 14 })
+    expect(w.currentBudget).toMatchObject({ source: 'sharepoint', fileName: 'SharePoint · BD_Orcamento · empresa 2 · obra 2070 · orçamento 3', lines: 14 })
 
     const lines = (await call<BudgetLineUsageDTO[]>('GET', `/works/${w.id}/budget-lines`)).data
     expect(lines.map((l) => l.activityWbs)).toEqual([...lines.map((l) => l.activityWbs)].sort())

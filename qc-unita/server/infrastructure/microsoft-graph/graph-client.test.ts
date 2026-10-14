@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { fakeGraph, json } from './fake-graph'
 import { columnIndex, columnName, columnRuns, GraphClient, parseArea, rowSpans, type CellValue, type SheetRef } from './graph-client'
 
-const ref: SheetRef = { driveId: 'b!drive', itemId: 'ITEM', sheet: 'BD_Orcamentos' }
+const ref: SheetRef = { driveId: 'b!drive', itemId: 'ITEM', sheet: 'BD_Orcamento' }
 const credentials = { tenantId: 'tenant', clientId: 'client', clientSecret: 'secret' }
 
 describe('endereços de planilha', () => {
@@ -58,9 +58,17 @@ describe('GraphClient', () => {
     await expect(new GraphClient(credentials, { fetch: g.fetch }).rangeValues(ref, 'A1:A2')).rejects.toThrow(/Sites\.Read\.All/)
   })
 
-  it('arquivo ou aba inexistente → aponta as variáveis da planilha', async () => {
+  it('arquivo inacessível → aponta tenant, consentimento e as variáveis da planilha', async () => {
     const g = fakeGraph(sheet, { onRange: () => json(404, { error: { message: 'ItemNotFound' } }) })
-    await expect(new GraphClient(credentials, { fetch: g.fetch }).rangeValues(ref, 'A1:A2')).rejects.toThrow(/BUDGET_SHEET_ITEM_ID.*ItemNotFound/)
+    await expect(new GraphClient(credentials, { fetch: g.fetch }).rangeValues(ref, 'A1:A2')).rejects.toThrow(/ItemNotFound.*MS_GRAPH_TENANT_ID.*BUDGET_SHEET_ITEM_ID/)
+  })
+
+  it('arquivo existe mas sem a aba → lista as abas existentes', async () => {
+    const file = { name: 'Orçamentos.xlsx', sheets: ['BD_Físico por atividade', 'BD_Orçamentos'] }
+    const g = fakeGraph(sheet, { file, onRange: () => json(404, { error: { message: 'ItemNotFound' } }) })
+    const err = (await new GraphClient(credentials, { fetch: g.fetch }).rangeValues(ref, 'A1:A2').catch((e: unknown) => e)) as Error
+    expect(err.message).toContain('"Orçamentos.xlsx" foi encontrado, mas não tem a aba "BD_Orcamento"')
+    expect(err.message).toContain('Abas existentes: BD_Físico por atividade, BD_Orçamentos.')
   })
 
   it('login recusado → mensagem do Entra sem o segredo', async () => {
@@ -82,7 +90,7 @@ describe('GraphClient', () => {
         proofs.push('secret')
         return json(200, { access_token: 't', expires_in: 3600 })
       }
-      return json(200, { address: 'BD_Orcamentos!A1:B2' })
+      return json(200, { address: 'BD_Orcamento!A1:B2' })
     }) as unknown as typeof globalThis.fetch
     const client = new GraphClient({ ...credentials, federatedAssertion: () => 'oidc' }, { fetch })
     await client.usedRange(ref)

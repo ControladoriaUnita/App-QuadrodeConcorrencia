@@ -216,7 +216,7 @@ export interface BudgetWriter {
   ): Promise<{ budgetId: string; version: number; lines: number }>
 }
 
-/** Orçamentos da aba BD_Orcamentos (Excel no SharePoint, ou exemplo no modo demonstração) */
+/** Orçamentos da aba BD_Orcamento (Excel no SharePoint, ou exemplo no modo demonstração) */
 export interface BudgetSheetSource {
   readonly name: 'sharepoint' | 'mock'
   /** Nome da aba (para o nome do "arquivo" da versão importada) */

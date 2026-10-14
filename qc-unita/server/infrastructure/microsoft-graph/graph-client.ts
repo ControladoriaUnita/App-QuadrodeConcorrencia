@@ -156,11 +156,33 @@ export class GraphClient {
         )
       }
       const detail = ((await res.json().catch(() => ({}))) as { error?: { message?: string } }).error?.message ?? res.statusText
-      if (res.status === 404) {
-        throw new GraphError(`Planilha ou aba "${ref.sheet}" não encontrada no SharePoint (Graph 404). Confira BUDGET_SHEET_DRIVE_ID, BUDGET_SHEET_ITEM_ID e BUDGET_SHEET_NAME. ${detail}`.trim(), 404)
-      }
+      if (res.status === 404) throw new GraphError(await this.describeNotFound(ref, detail), 404)
       throw new GraphError(`O Microsoft Graph respondeu ${res.status} ao ler a aba "${ref.sheet}": ${detail}`, res.status)
     }
+  }
+
+  /** 404 na aba: separa "arquivo inacessível" de "aba com outro nome" (e lista as abas que existem). */
+  private async describeNotFound(ref: SheetRef, detail: string): Promise<string> {
+    const auth = { headers: { authorization: `Bearer ${await this.accessToken()}` } }
+    const item = await this.send(`${itemUrl(ref)}?$select=name`, auth).catch(() => null)
+    if (item?.ok) {
+      const { name } = (await item.json().catch(() => ({}))) as { name?: string }
+      const sheets = await this.send(`${itemUrl(ref)}/workbook/worksheets?$select=name`, auth).catch(() => null)
+      const list = sheets?.ok ? (((await sheets.json().catch(() => ({}))) as { value?: { name?: string }[] }).value ?? []).map((s) => s.name) : []
+      return (
+        `O arquivo "${name ?? ref.itemId}" foi encontrado, mas não tem a aba "${ref.sheet}". ` +
+        (list.length ? `Abas existentes: ${list.join(', ')}. ` : '') +
+        'Renomeie a aba ou ajuste BUDGET_SHEET_NAME.'
+      )
+    }
+    if (item?.status === 401 || item?.status === 403) {
+      return 'O login na Microsoft funcionou, mas o aplicativo não tem permissão para abrir o arquivo da planilha de orçamentos. Confira o consentimento do administrador para Sites.Read.All.'
+    }
+    return (
+      `O aplicativo não encontrou o arquivo da planilha de orçamentos no SharePoint (Graph 404: ${detail}). ` +
+      'Confira se o app foi registrado no Entra ID do mesmo tenant do SharePoint (MS_GRAPH_TENANT_ID), ' +
+      'se o consentimento para Sites.Read.All foi concedido e se BUDGET_SHEET_DRIVE_ID / BUDGET_SHEET_ITEM_ID apontam para o arquivo certo.'
+    )
   }
 
   private async send(url: string, init: RequestInit): Promise<Response> {
@@ -216,9 +238,9 @@ export class GraphClient {
 }
 
 // ----------------------------------------------------------------------------- endereços
-const sheetUrl = (ref: SheetRef) =>
-  `${GRAPH}/drives/${encodeURIComponent(ref.driveId)}/items/${encodeURIComponent(ref.itemId)}` +
-  `/workbook/worksheets('${encodeURIComponent(ref.sheet.replace(/'/g, "''"))}')`
+const itemUrl = (ref: SheetRef) => `${GRAPH}/drives/${encodeURIComponent(ref.driveId)}/items/${encodeURIComponent(ref.itemId)}`
+
+const sheetUrl = (ref: SheetRef) => `${itemUrl(ref)}/workbook/worksheets('${encodeURIComponent(ref.sheet.replace(/'/g, "''"))}')`
 
 /** 0 → A, 25 → Z, 26 → AA */
 export function columnName(index: number): string {
@@ -232,7 +254,7 @@ export function columnIndex(name: string): number {
   return [...name.toUpperCase()].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1
 }
 
-/** "BD_Orcamentos!A1:V250000" (ou "'Aba X'!B3") → área */
+/** "BD_Orcamento!A1:V250000" (ou "'Aba X'!B3") → área */
 export function parseArea(address: string): SheetArea {
   const ref = address.slice(address.lastIndexOf('!') + 1)
   const m = /^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/i.exec(ref)

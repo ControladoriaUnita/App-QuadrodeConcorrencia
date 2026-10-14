@@ -1,5 +1,5 @@
 /**
- * Orçamentos da UAU publicados no SharePoint (aba "BD_Orcamentos" do Excel online).
+ * Orçamentos da UAU publicados no SharePoint (aba "BD_Orcamento" do Excel online).
  *
  * Função pura: recebe as linhas da aba (1ª linha = cabeçalho, valores como o Microsoft Graph
  * devolve em `usedRange(valuesOnly=true)`) e devolve o orçamento de uma obra no mesmo formato da

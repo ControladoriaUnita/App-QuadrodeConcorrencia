@@ -5,7 +5,7 @@ import { GraphClient, type CellValue } from '../microsoft-graph/graph-client'
 import { createBudgetSheetSource, GraphBudgetSheetSource, MockBudgetSheetSource } from '.'
 import { mockSheetRows } from './mock-budget-sheet'
 
-const ref = { driveId: 'b!drive', itemId: 'ITEM', sheet: 'BD_Orcamentos' }
+const ref = { driveId: 'b!drive', itemId: 'ITEM', sheet: 'BD_Orcamento' }
 const credentials = { tenantId: 'tenant', clientId: 'client', clientSecret: 'secret' }
 
 function graphSource(values = mockSheetRows() as CellValue[][]) {
@@ -92,7 +92,7 @@ describe('createBudgetSheetSource', () => {
     expect(createBudgetSheetSource({ DATA_SOURCE: 'memory' })).toBeInstanceOf(MockBudgetSheetSource)
     expect(createBudgetSheetSource({ MS_GRAPH_TENANT_ID: 't', MS_GRAPH_CLIENT_ID: 'c', MS_GRAPH_CLIENT_SECRET: 's' })).toBeInstanceOf(GraphBudgetSheetSource)
     // Na Vercel basta tenant + client (credencial federada)
-    expect(createBudgetSheetSource({ DATA_SOURCE: 'supabase', VERCEL: '1', MS_GRAPH_TENANT_ID: 't', MS_GRAPH_CLIENT_ID: 'c' }).sheetName).toBe('BD_Orcamentos')
+    expect(createBudgetSheetSource({ DATA_SOURCE: 'supabase', VERCEL: '1', MS_GRAPH_TENANT_ID: 't', MS_GRAPH_CLIENT_ID: 'c' }).sheetName).toBe('BD_Orcamento')
   })
 
   it('produção sem credenciais → lista as variáveis que faltam, sem valores', () => {
