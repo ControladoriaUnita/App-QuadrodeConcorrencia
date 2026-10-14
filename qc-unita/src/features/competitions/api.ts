@@ -9,7 +9,8 @@ import type {
   CompetitionListItemDTO,
   CreateCompetitionInput,
   DecideApprovalInput,
-  SetItemLinksInput,
+  AddQcItemInput,
+  SetReferenceLinesInput,
   SupplierDTO,
   UpdateItemInput,
   UpdateRevisionInput,
@@ -29,7 +30,11 @@ export const useWorks = () => useQuery({ queryKey: ['works'], queryFn: () => api
 export const usePackages = (workId: string | undefined) =>
   useQuery({ queryKey: ['packages', workId], queryFn: () => api<BudgetPackageDTO[]>(`/works/${workId}/packages`), enabled: !!workId })
 export const useSuppliers = (search = '') =>
-  useQuery({ queryKey: ['suppliers', search], queryFn: () => api<SupplierDTO[]>(`/suppliers${search ? `?search=${encodeURIComponent(search)}` : ''}`) })
+  useQuery({
+    queryKey: ['suppliers', search],
+    queryFn: () => api<SupplierDTO[]>(`/suppliers${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+    placeholderData: (prev) => prev,
+  })
 
 export const useCompetitions = (workId?: string) =>
   useQuery({ queryKey: keys.list(workId), queryFn: () => api<CompetitionListItemDTO[]>(`/competitions${workId ? `?workId=${workId}` : ''}`) })
@@ -112,8 +117,9 @@ export function useQcMutations(competitionId: string, revisionId: string) {
       ...opts,
     }),
     submit: useMutation({ mutationFn: () => api<{ steps: number }>(`${base}/submit`, { method: 'POST' }), ...opts }),
-    setLinks: useMutation({
-      mutationFn: ({ itemId, links }: { itemId: string } & SetItemLinksInput) => api(`${base}/items/${itemId}/links`, { method: 'PUT', body: { links } }),
+    setReferenceLines: useMutation({
+      mutationFn: ({ referenceId, links }: { referenceId: string } & SetReferenceLinesInput) =>
+        api(`${base}/references/${referenceId}/lines`, { method: 'PUT', body: { links } }),
       ...opts,
       onSuccess: () => {
         opts.onSuccess?.()
@@ -121,15 +127,28 @@ export function useQcMutations(competitionId: string, revisionId: string) {
       },
     }),
     addLines: useMutation({
-      mutationFn: (selection: Map<string, string>) =>
-        api<{ createdItems: number; mergedItems: number }>(`${base}/lines`, {
+      mutationFn: ({ selection, fillMap }: { selection: Map<string, string>; fillMap: boolean }) =>
+        api<{ createdReferences: number; mergedReferences: number }>(`${base}/lines`, {
           method: 'POST',
-          body: { lineIds: [...selection.keys()], shares: Object.fromEntries(selection) },
+          body: { lineIds: [...selection.keys()], shares: Object.fromEntries(selection), fillMap },
         }),
       onSuccess: () => {
         invalidate()
         qc.invalidateQueries({ queryKey: ['budget-lines'] })
       },
+    }),
+    removeReference: useMutation({
+      mutationFn: (referenceId: string) => api(`${base}/references/${referenceId}`, { method: 'DELETE' }),
+      onSuccess: () => {
+        invalidate()
+        qc.invalidateQueries({ queryKey: ['budget-lines'] })
+      },
+    }),
+    addItem: useMutation({ mutationFn: (b: AddQcItemInput) => api<{ id: string }>(`${base}/items`, { method: 'POST', body: b }), ...opts }),
+    fillFromReferences: useMutation({ mutationFn: () => api<{ created: number }>(`${base}/items/fill-from-references`, { method: 'POST' }), ...opts }),
+    setItemReferences: useMutation({
+      mutationFn: ({ itemId, referenceIds }: { itemId: string; referenceIds: string[] }) => api(`${base}/items/${itemId}/references`, { method: 'PUT', body: { referenceIds } }),
+      ...opts,
     }),
     removeItem: useMutation({ mutationFn: (itemId: string) => api(`${base}/items/${itemId}`, { method: 'DELETE' }), ...opts }),
     decide: useMutation({ mutationFn: (b: DecideApprovalInput) => api<{ outcome: string }>(`${base}/approvals`, { method: 'POST', body: b }), ...opts }),

@@ -32,6 +32,8 @@ export interface ComboboxProps {
   emptyText?: string
   /** Máximo de opções desenhadas de uma vez (a busca refina o restante) */
   maxResults?: number
+  /** Busca no servidor: recebe o texto digitado (as opções chegam já filtradas) */
+  onQueryChange?: (query: string) => void
   className?: string
   id?: string
   required?: boolean
@@ -61,6 +63,7 @@ export function Combobox({
   loadingText = 'Carregando…',
   emptyText = 'Nenhuma opção encontrada',
   maxResults = 100,
+  onQueryChange,
   className,
   id: idProp,
   required,
@@ -80,12 +83,17 @@ export function Combobox({
   const selected = options.find((o) => o.value === value) ?? null
   const matches = useMemo(() => {
     const terms = fold(query).split(/\s+/).filter(Boolean)
-    if (!terms.length) return options
+    if (!terms.length || onQueryChange) return options
     return options.filter((o) => {
       const text = fold(`${o.label} ${o.keywords ?? ''}`)
       return terms.every((t) => text.includes(t))
     })
-  }, [options, query])
+  }, [options, query, onQueryChange])
+  useEffect(() => {
+    if (!onQueryChange) return
+    const t = setTimeout(() => onQueryChange(query.trim()), 250)
+    return () => clearTimeout(t)
+  }, [query, onQueryChange])
   const shown = matches.slice(0, maxResults)
 
   const firstEnabled = (from: number, step: 1 | -1) => {

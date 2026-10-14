@@ -9,6 +9,7 @@ function source(): QcMapSource {
   const item = (id: string, code: string, quantity: string, pctMaterial = '0') => ({
     id, sortOrder: 1, materialId: `m-${id}`, code, description: `Insumo ${code}`, unit: 'm³', budgetQuantity: quantity,
     budgetUnitCost: '10.0000', quantity, scopeDescription: `Escopo ${code}`, contractNotes: null, pctMaterial, pctEquipment: '0', pctRetention: '0.05',
+    origin: 'reference' as const, planningCode: null, planningDescription: null, referenceIds: id === 'i1' ? ['r1'] : [],
   })
   const sup = (id: string, supplierId: string) => ({
     id, supplierId, sortOrder: 1, status: 'responded' as const, legalName: supplierId, tradeName: null, taxId: '1', contactName: null, phone: null,
@@ -27,6 +28,7 @@ function source(): QcMapSource {
     },
     revisions: [],
     items: [item('i1', 'IM1', '100.0000', '1'), item('i2', 'IS2', '50.0000'), item('i3', 'IS3', '0.0000'), item('i4', 'IM4', '10.0000')],
+    references: [{ id: 'r1', sortOrder: 1, materialId: 'm-i1', code: 'IM1', description: 'Insumo IM1', unit: 'm³' }],
     suppliers: [sup('cs1', 'S1'), sup('cs2', 'S2')],
     prices: [
       { competitionSupplierId: 'cs1', itemId: 'i1', unitPrice: '9.5000', notes: null },
@@ -36,9 +38,9 @@ function source(): QcMapSource {
     overrides: [],
     approvals: [],
     links: [
-      { id: 'l1', itemId: 'i1', activityItemId: 'a1', lineKey: 'k1', materialId: 'm-i1', packageCode: 'IP02', packageDescription: null, quantity: '60.0000', share: '1', budgetValue: '600', budgetUnitCost: '10', awardedUnitPrice: null, awardedTotal: null },
-      { id: 'l2', itemId: 'i1', activityItemId: 'a2', lineKey: 'k2', materialId: 'm-i1', packageCode: 'IP01', packageDescription: null, quantity: '40.0000', share: '1', budgetValue: '400', budgetUnitCost: '10', awardedUnitPrice: null, awardedTotal: null },
-      { id: 'l3', itemId: 'i1', activityItemId: 'a3', lineKey: 'k3', materialId: 'm-i1', packageCode: 'IP02', packageDescription: null, quantity: '0.0000', share: '0', budgetValue: '0', budgetUnitCost: '10', awardedUnitPrice: null, awardedTotal: null },
+      { id: 'l1', referenceId: 'r1', activityItemId: 'a1', lineKey: 'k1', materialId: 'm-i1', packageCode: 'IP02', packageDescription: null, quantity: '60.0000', share: '1', budgetValue: '600', budgetUnitCost: '10', awardedUnitPrice: null, awardedTotal: null },
+      { id: 'l2', referenceId: 'r1', activityItemId: 'a2', lineKey: 'k2', materialId: 'm-i1', packageCode: 'IP01', packageDescription: null, quantity: '40.0000', share: '1', budgetValue: '400', budgetUnitCost: '10', awardedUnitPrice: null, awardedTotal: null },
+      { id: 'l3', referenceId: 'r1', activityItemId: 'a3', lineKey: 'k3', materialId: 'm-i1', packageCode: 'IP02', packageDescription: null, quantity: '0.0000', share: '0', budgetValue: '0', budgetUnitCost: '10', awardedUnitPrice: null, awardedTotal: null },
     ],
     contractTypes: [],
     people: [],
@@ -55,6 +57,9 @@ describe('Solicitação de contrato', () => {
     const im1 = draft.items[0]!
     expect(im1.specification).toBe('Escopo IM1')
     expect(im1.allocations.map((a) => [a.packageCode, a.quantity.toDb()])).toEqual([['IP01', '40.0000'], ['IP02', '60.0000']])
+    expect(im1.references.map((r) => [r.code, r.packageCodes, r.budget.toDb()])).toEqual([['IM1', ['IP01', 'IP02'], '1000.0000']])
+    // Sem referência e sem IP manual: vínculo sem IP
+    expect(draft.items[1]!.allocations.map((a) => [a.packageCode, a.quantity.toDb()])).toEqual([[null, '50.0000']])
     // Distribuição ponderada pelo valor contratado: 950 de material em 1.550
     expect(draft.distribution.pctMaterial.toFixed(6)).toBe('0.612903')
     expect(draft.distribution.pctService.toFixed(6)).toBe('0.387097')

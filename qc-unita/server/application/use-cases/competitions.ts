@@ -3,11 +3,12 @@
  * Orquestram domínio puro (shared/domain) + repositórios. Sem acoplamento a HTTP ou UI.
  */
 import type {
+  AddQcItemInput,
   BudgetLineDTO,
   CompetitionDetailDTO,
   CreateCompetitionInput,
   DecideApprovalInput,
-  SetItemLinksInput,
+  SetReferenceLinesInput,
   UpdateItemInput,
   UpdateRevisionInput,
   UpdateSupplierTermsInput,
@@ -25,9 +26,9 @@ import {
   isEditable,
 } from '../../../shared/domain/competition/revision'
 import { buildSnapshot } from '../../../shared/domain/competition/snapshot'
-import { groupBudgetLines, itemBudgetFromLines, lineBalances, lineBudgetValue, linkFromQuantity, linkFromShare, type GroupedItem } from '../../../shared/domain/planning/links'
+import { groupBudgetLines, lineBalances, linkFromQuantity, linkFromShare, type GroupedItem } from '../../../shared/domain/planning/links'
 import { AppError, can, notFound, requirePermission, roleIdsFor, type RequestContext } from '../context'
-import type { AggregatedInput, CompetitionData, ComputedPersistence, Repositories } from '../ports'
+import type { AggregatedInput, CompetitionData, ComputedPersistence, NewQcItem, Repositories } from '../ports'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 
@@ -107,16 +108,16 @@ export async function createCompetition(repos: Repositories, ctx: RequestContext
   const shares = parseShares(input.lineShares)
   assertSharesWithinBalance(selected, shares, balances)
   const available = new Map([...balances].map(([k, v]) => [k, v.balanceShare]))
-  const items = toAggregated(groupBudgetLines(selected, { available, shares }))
-  if (!items.length) {
+  const references = toAggregated(groupBudgetLines(selected, { available, shares }))
+  if (!references.length) {
     throw new AppError('NO_ITEMS', 'Nenhuma linha do orçamento com saldo disponível para os IPs/linhas selecionados.', 422)
   }
   const principal =
     input.packageCodes?.[0] ??
-    [...items.flatMap((i) => i.links)].sort((a, b) => Decimal.from(b.budgetValue).compare(a.budgetValue))[0]?.packageCode ??
+    [...references.flatMap((i) => i.links)].sort((a, b) => Decimal.from(b.budgetValue).compare(a.budgetValue))[0]?.packageCode ??
     null
 
-  const budgetAmount = Decimal.sum(items.map((i) => i.total)).round(4)
+  const budgetAmount = Decimal.sum(references.map((i) => i.total)).round(4)
   const code = await repos.competitions.nextCode(input.workId)
 
   const ids = await repos.competitions.create(
@@ -130,12 +131,22 @@ export async function createCompetition(repos: Repositories, ctx: RequestContext
       requestedOn: input.requestedOn ?? today(ctx),
       procurementOwnerId: ctx.actor.id,
       budgetAmount: budgetAmount.toDb(),
-      items,
+      references,
     },
     ctx.actor.id,
   )
+  // O mapa já nasce preenchido com as referências (um insumo do mapa por referência)
+  await repos.competitions.addItems(ids.revisionId, references.map((r, k) => itemFromReference(r, ids.referenceIds[k]!)))
   await recompute(repos, ids.competitionId, ids.revisionId)
-  return ids
+  return { competitionId: ids.competitionId, revisionId: ids.revisionId }
+}
+
+/** Insumo do mapa igual à referência (mesmo insumo e quantidade), ligado a ela */
+function itemFromReference(r: Pick<AggregatedInput, 'materialId' | 'code' | 'description' | 'unit' | 'quantity'> & { unitCost?: string }, referenceId: string): NewQcItem {
+  return {
+    materialId: r.materialId, code: r.code, description: r.description, unit: r.unit, quantity: r.quantity, budgetUnitCost: r.unitCost,
+    origin: 'reference', planningCode: null, planningDescription: null, referenceIds: [referenceId],
+  }
 }
 
 // ----------------------------------------------------------------------------- edição do rascunho
@@ -202,6 +213,12 @@ export async function updateItem(repos: Repositories, ctx: RequestContext, revis
   if (input.pctMaterial !== undefined && input.pctEquipment !== undefined) {
     if (Decimal.from(input.pctMaterial).plus(input.pctEquipment).gt(1)) {
       throw new DomainError('PCT_INVALID', '% material + % equipamento não pode exceder 100%.')
+    }
+  }
+  if (input.code !== undefined || input.description !== undefined || input.unit !== undefined) {
+    const data = (await repos.competitions.getData(ref.competitionId, revisionId))!
+    if (data.items.find((i) => i.id === itemId)?.origin !== 'manual') {
+      throw new DomainError('ITEM_FROM_REFERENCE', 'Código, descrição e unidade só podem ser alterados em insumos criados no mapa.')
     }
   }
   await repos.competitions.updateItem(itemId, input)
@@ -327,38 +344,23 @@ function buildLink(line: BudgetLineDTO, spec: { share?: Decimal; quantity?: Deci
   }
 }
 
-/** Orçado de cada item = linhas vinculadas; total orçado da revisão acompanha. */
-async function syncBudgetFromLinks(repos: Repositories, competitionId: string, revisionId: string, itemIds?: string[]) {
+/** Total orçado da revisão = Σ verba dos insumos referência (linhas puxadas do orçamento). */
+async function syncRevisionBudget(repos: Repositories, competitionId: string, revisionId: string) {
   const data = (await repos.competitions.getData(competitionId, revisionId))!
-  const lines = await repos.catalog.getBudgetLines([...new Set(data.links.map((l) => l.activityItemId).filter((x): x is string => !!x))])
-  const byId = new Map(lines.map((l) => [l.id, l]))
-  for (const item of data.items.filter((i) => !itemIds || itemIds.includes(i.id))) {
-    const parts = data.links
-      .filter((l) => l.itemId === item.id)
-      .map((l) => {
-        const q = Decimal.from(l.quantity)
-        const line = l.activityItemId ? byId.get(l.activityItemId) : undefined
-        const budget = l.budgetValue != null ? Decimal.from(l.budgetValue) : line ? lineBudgetValue(line, q) : q.times(l.budgetUnitCost).round(4)
-        return { quantity: q, budget }
-      })
-    if (!parts.length) continue
-    const b = itemBudgetFromLines(parts)
-    if (!b.quantity.eq(item.budgetQuantity) || !b.unitCost.eq(item.budgetUnitCost)) {
-      await repos.competitions.updateItem(item.id, { budgetQuantity: b.quantity.toDb(), budgetUnitCost: b.unitCost.toDb() })
-    }
-  }
-  const after = (await repos.competitions.getData(competitionId, revisionId))!
-  const budgetAmount = Decimal.sum(after.items.map((i) => Decimal.from(i.budgetQuantity).times(i.budgetUnitCost).round(4)))
-  if (!budgetAmount.eq(after.revision.budgetAmount)) await repos.competitions.updateRevision(revisionId, { budgetAmount: budgetAmount.toDb() })
+  const budgetAmount = Decimal.sum(data.links.map((l) => Decimal.from(l.budgetValue))).round(4)
+  if (!budgetAmount.eq(data.revision.budgetAmount)) await repos.competitions.updateRevision(revisionId, { budgetAmount: budgetAmount.toDb() })
 }
 
-/**
- * Define os vínculos de um item: linhas do orçamento (de qualquer IP) e a quantidade de cada uma.
- */
-export async function setItemLinks(repos: Repositories, ctx: RequestContext, revisionId: string, itemId: string, input: SetItemLinksInput) {
+async function loadDraft(repos: Repositories, ctx: RequestContext, revisionId: string) {
   const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
   const data = (await repos.competitions.getData(ref.competitionId, revisionId))!
-  if (!data.items.some((i) => i.id === itemId)) throw notFound('Item')
+  return { ref, data }
+}
+
+/** Linhas do orçamento de um insumo referência e o % de cada uma (verba puxada). */
+export async function setReferenceLines(repos: Repositories, ctx: RequestContext, revisionId: string, referenceId: string, input: SetReferenceLinesInput) {
+  const { ref, data } = await loadDraft(repos, ctx, revisionId)
+  if (!data.references.some((r) => r.id === referenceId)) throw notFound('Insumo referência')
   const ids = [...new Set(input.links.map((l) => l.activityItemId))]
   if (ids.length !== input.links.length) throw new AppError('LINK_DUPLICATED', 'A mesma linha do orçamento foi informada duas vezes.', 422)
   const lines = await repos.catalog.getBudgetLines(ids)
@@ -373,28 +375,26 @@ export async function setItemLinks(repos: Repositories, ctx: RequestContext, rev
   // Teto: o % de cada linha não pode passar do que os outros QCs da obra deixaram livre
   const commitments = await repos.competitions.workCommitments(ref.workId)
   const others = commitments.links.filter((c) => c.competitionId !== ref.competitionId)
-  const balances = lineBalances(lines, others)
-  assertSharesWithinBalance(lines, new Map(links.map((l) => [l.activityItemId, Decimal.from(l.share)])), balances)
+  assertSharesWithinBalance(lines, new Map(links.map((l) => [l.activityItemId, Decimal.from(l.share)])), lineBalances(lines, others))
 
-  // Se a quantidade do item acompanhava os vínculos, continua acompanhando
-  const item = data.items.find((i) => i.id === itemId)!
-  const oldLinked = Decimal.sum(data.links.filter((l) => l.itemId === itemId).map((l) => l.quantity))
-  const newLinked = Decimal.sum(links.map((l) => l.quantity))
-  if (oldLinked.eq(item.quantity) && !newLinked.eq(item.quantity)) {
-    await repos.competitions.updateItem(itemId, { quantity: newLinked.round(4).toDb() })
+  // Insumo do mapa preenchido por esta referência (1:1) acompanha a quantidade dela
+  const oldQty = Decimal.sum(data.links.filter((l) => l.referenceId === referenceId).map((l) => Decimal.from(l.quantity)))
+  const newQty = Decimal.sum(links.map((l) => Decimal.from(l.quantity))).round(4)
+  for (const item of data.items.filter((i) => i.origin === 'reference' && i.referenceIds.length === 1 && i.referenceIds[0] === referenceId)) {
+    if (oldQty.eq(item.quantity) && !newQty.eq(item.quantity)) await repos.competitions.updateItem(item.id, { quantity: newQty.toDb() })
   }
-  await repos.competitions.setItemLinks(revisionId, itemId, links)
-  await syncBudgetFromLinks(repos, ref.competitionId, revisionId, [itemId])
+  await repos.competitions.setReferenceLinks(revisionId, referenceId, links)
+  await syncRevisionBudget(repos, ref.competitionId, revisionId)
   await recompute(repos, ref.competitionId, revisionId)
 }
 
 /**
- * Inclui linhas do orçamento no QC (de quaisquer IPs). Linhas de um insumo já presente viram
- * vínculo do item existente (e somam na quantidade); as demais criam itens novos.
+ * Inclui linhas do orçamento no QC (de quaisquer IPs) como insumos referência. Linhas de um insumo
+ * que já é referência viram linhas dela; as demais criam referências novas.
+ * `fillMap`: cada referência nova já ganha seu insumo no mapa (1:1).
  */
-export async function addLines(repos: Repositories, ctx: RequestContext, revisionId: string, lineIds: string[], rawShares?: Record<string, string>) {
-  const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
-  const data = (await repos.competitions.getData(ref.competitionId, revisionId))!
+export async function addLines(repos: Repositories, ctx: RequestContext, revisionId: string, lineIds: string[], rawShares?: Record<string, string>, fillMap = false) {
+  const { ref, data } = await loadDraft(repos, ctx, revisionId)
   const lines = await repos.catalog.getBudgetLines([...new Set(lineIds)])
   const already = new Set(data.links.map((l) => l.lineKey))
   const fresh = lines.filter((l) => !already.has(l.lineKey))
@@ -409,44 +409,95 @@ export async function addLines(repos: Repositories, ctx: RequestContext, revisio
   const groups = groupBudgetLines(fresh, { available, shares })
   if (!groups.length) throw new AppError('NO_BALANCE', 'As linhas selecionadas já estão totalmente comprometidas em outras concorrências.', 422)
 
-  const touched: string[] = []
-  const newItems: GroupedItem[] = []
+  let merged = 0
+  const newRefs: GroupedItem[] = []
   for (const g of groups) {
-    const item = data.items.find((i) => i.materialId === g.materialId)
-    if (!item) {
-      newItems.push(g)
+    const existing = data.references.find((r) => r.materialId === g.materialId)
+    if (!existing) {
+      newRefs.push(g)
       continue
     }
-    const current = data.links.filter((l) => l.itemId === item.id && !!l.activityItemId)
-    const currentLines = await repos.catalog.getBudgetLines(current.map((c) => c.activityItemId!))
-    const byId = new Map(currentLines.map((l) => [l.id, l]))
-    const kept = current
-      .filter((c) => byId.has(c.activityItemId!))
-      .map((c) => {
-        const line = byId.get(c.activityItemId!)!
-        return c.share != null
-          ? buildLink(line, { share: Decimal.from(c.share) })
-          : buildLink(line, { quantity: Decimal.from(c.quantity) })
-      })
-    const extra = g.links.map((l) => ({
-      activityItemId: l.activityItemId, lineKey: l.lineKey, materialId: l.materialId, packageCode: l.packageCode,
-      packageDescription: l.packageDescription, quantity: l.quantity.toDb(), share: l.share.toFixed(6),
-      budgetValue: l.budget.toDb(), budgetUnitCost: l.budgetUnitCost.toDb(),
-    }))
-    await repos.competitions.setItemLinks(revisionId, item.id, [...kept, ...extra])
-    await repos.competitions.updateItem(item.id, { quantity: Decimal.from(item.quantity).plus(g.quantity).toDb() })
-    touched.push(item.id)
+    const current = data.links.filter((l) => l.referenceId === existing.id)
+    const extra = toAggregated([g])[0]!.links
+    await repos.competitions.setReferenceLinks(revisionId, existing.id, [...current.map(keepLink), ...extra])
+    merged++
   }
-  const created = newItems.length ? await repos.competitions.addItems(revisionId, toAggregated(newItems)) : []
-  await syncBudgetFromLinks(repos, ref.competitionId, revisionId, touched)
+  const aggregated = toAggregated(newRefs)
+  const created = aggregated.length ? await repos.competitions.addReferences(revisionId, aggregated) : []
+  if (fillMap && created.length) await repos.competitions.addItems(revisionId, aggregated.map((r, k) => itemFromReference(r, created[k]!)))
+  await syncRevisionBudget(repos, ref.competitionId, revisionId)
   await recompute(repos, ref.competitionId, revisionId)
-  return { createdItems: created.length, mergedItems: touched.length }
+  return { createdReferences: created.length, mergedReferences: merged }
+}
+
+/** Vínculo já gravado reaproveitado como está (mesmo % e verba). */
+function keepLink(l: CompetitionData['links'][number]) {
+  return {
+    activityItemId: l.activityItemId!, lineKey: l.lineKey!, materialId: l.materialId, packageCode: l.packageCode,
+    packageDescription: l.packageDescription, quantity: l.quantity, share: l.share, budgetValue: l.budgetValue, budgetUnitCost: l.budgetUnitCost,
+  }
+}
+
+export async function removeReference(repos: Repositories, ctx: RequestContext, revisionId: string, referenceId: string) {
+  const { ref, data } = await loadDraft(repos, ctx, revisionId)
+  if (!data.references.some((r) => r.id === referenceId)) throw notFound('Insumo referência')
+  await repos.competitions.removeReference(referenceId)
+  await syncRevisionBudget(repos, ref.competitionId, revisionId)
+  await recompute(repos, ref.competitionId, revisionId)
+}
+
+/** Insumo novo no mapa (da lista da obra ou livre), ligado às referências escolhidas. */
+export async function addQcItem(repos: Repositories, ctx: RequestContext, revisionId: string, input: AddQcItemInput) {
+  const { ref, data } = await loadDraft(repos, ctx, revisionId)
+  assertReferences(data, input.referenceIds)
+  const materialId = input.materialCode ? await repos.catalog.findMaterialIdByCode(input.materialCode) : null
+  const [id] = await repos.competitions.addItems(revisionId, [{
+    materialId,
+    code: input.code,
+    description: input.description,
+    unit: input.unit,
+    quantity: Decimal.from(input.quantity).round(4).toDb(),
+    origin: 'manual',
+    planningCode: input.planningCode ?? null,
+    planningDescription: input.planningDescription ?? null,
+    referenceIds: input.referenceIds,
+  }])
+  await recompute(repos, ref.competitionId, revisionId)
+  return { id: id! }
+}
+
+/** Preenche o mapa com um insumo para cada referência ainda sem uso. */
+export async function fillFromReferences(repos: Repositories, ctx: RequestContext, revisionId: string) {
+  const { ref, data } = await loadDraft(repos, ctx, revisionId)
+  const used = new Set(data.items.flatMap((i) => i.referenceIds))
+  const free = data.references.filter((r) => !used.has(r.id))
+  const sums = (rid: string) => {
+    const own = data.links.filter((l) => l.referenceId === rid)
+    const q = Decimal.sum(own.map((l) => Decimal.from(l.quantity))).round(4)
+    const v = Decimal.sum(own.map((l) => Decimal.from(l.budgetValue))).round(4)
+    return { quantity: q.toDb(), unitCost: q.isZero() ? '0.0000' : v.div(q, 4).toDb() }
+  }
+  if (free.length) await repos.competitions.addItems(revisionId, free.map((r) => itemFromReference({ ...r, ...sums(r.id) }, r.id)))
+  await recompute(repos, ref.competitionId, revisionId)
+  return { created: free.length }
+}
+
+export async function setItemReferences(repos: Repositories, ctx: RequestContext, revisionId: string, itemId: string, referenceIds: string[]) {
+  const { ref, data } = await loadDraft(repos, ctx, revisionId)
+  if (!data.items.some((i) => i.id === itemId)) throw notFound('Item')
+  assertReferences(data, referenceIds)
+  await repos.competitions.setItemReferences(revisionId, itemId, referenceIds)
+  await recompute(repos, ref.competitionId, revisionId)
+}
+
+function assertReferences(data: CompetitionData, referenceIds: string[]) {
+  const known = new Set(data.references.map((r) => r.id))
+  if (referenceIds.some((r) => !known.has(r))) throw new AppError('REFERENCE_UNKNOWN', 'Insumo referência não pertence a esta revisão.', 422)
 }
 
 export async function removeItem(repos: Repositories, ctx: RequestContext, revisionId: string, itemId: string) {
   const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
   await repos.competitions.removeItem(itemId)
-  await syncBudgetFromLinks(repos, ref.competitionId, revisionId, [])
   await recompute(repos, ref.competitionId, revisionId)
 }
 
@@ -542,6 +593,8 @@ async function approveAndFreeze(repos: Repositories, ctx: RequestContext, compet
     competition: data.competition,
     revision: { ...data.revision, status: 'approved', decidedAt: nowIso },
     items: data.items,
+    references: data.references,
+    referenceLines: data.links,
     suppliers: data.suppliers,
     prices: data.prices,
     approvals: await repos.approvals.listForRevision(revisionId),

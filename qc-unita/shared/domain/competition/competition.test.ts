@@ -98,7 +98,14 @@ describe('revisões', () => {
       items, suppliers, best: computeBestConditions(items, suppliers, prices),
     })
     const fields = issues.map((i) => i.field)
-    expect(fields).toEqual(expect.arrayContaining(['serviceEndOn', 'engineeringOwnerId', 'contractTypeId', 'winnerJustification', 'suppliers']))
+    expect(fields).toEqual(expect.arrayContaining(['serviceEndOn', 'engineeringOwnerId', 'contractTypeId', 'winnerJustification']))
+    // Sem mínimo de fornecedores: um participante basta
+    expect(fields).not.toContain('suppliers')
+    const none = validateForSubmission({
+      revision: { id: 'r', number: 0, status: 'draft', frozenAt: null, requestedOn: null, serviceStartOn: null, serviceEndOn: null, engineeringOwnerId: null, procurementOwnerId: null, contractTypeId: null, winnerSupplierId: null, winnerJustification: null },
+      items, suppliers: [], best: [],
+    })
+    expect(none.map((i) => i.field)).toContain('suppliers')
   })
 })
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { D } from '../decimal'
 import type { BudgetLineDTO, WorkCompetitionDTO } from '../../contracts'
-import { consolidate, groupBudgetLines, lineBalances, lineBudgetValue, linkBalanceByItem, linkFromQuantity, linkFromShare, rebalance, validateLinks } from './links'
+import { consolidate, groupBudgetLines, lineBalances, lineBudgetValue, linkFromQuantity, linkFromShare, rebalance } from './links'
 import { buildWorkOverview, UNLINKED } from '../work/overview'
 
 const line = (id: string, materialId: string, code: string, pkg: string, quantity: string, total: string): BudgetLineDTO => ({
@@ -58,15 +58,6 @@ describe('vínculos de planejamento', () => {
     expect(lineBudgetValue(inputs[0]!, D(33)).toFixed()).toBe('24.7500')
   })
 
-  it('exige quantidade vinculada igual à do item', () => {
-    const items = [{ id: 'i1', quantity: D(150) }, { id: 'i2', quantity: D(10) }] as never
-    const links = [{ itemId: 'i1', materialId: 'm1', packageCode: 'IP1', quantity: D(100), budgetUnitCost: D('0.75') }]
-    expect(linkBalanceByItem(items, links).get('i1')!.diff.toFixed()).toBe('50')
-    const msgs = validateLinks(items, links).map((i) => i.message)
-    expect(msgs.join()).toMatch(/sem vínculo/)
-    expect(msgs.join()).toMatch(/diferente/)
-  })
-
   it('redistribui proporcionalmente fechando o total', () => {
     const r = rebalance([D(100), D(50)], D(160))
     expect(r.map((x) => x.toFixed())).toEqual(['106.6667', '53.3333'])
@@ -76,7 +67,7 @@ describe('vínculos de planejamento', () => {
   it('consolida orçado × outros QCs × este QC por vínculo e por insumo', () => {
     const c = consolidate(
       inputs,
-      [{ itemId: 'i1', materialId: 'm1', packageCode: 'IP1', quantity: D(80), budgetUnitCost: D('0.75'), awardedTotal: D(56) }],
+      [{ referenceId: 'r1', materialId: 'm1', packageCode: 'IP1', quantity: D(80), budgetUnitCost: D('0.75'), awardedTotal: D(56) }],
       [{ competitionId: 'x', category: 'contracted', packageCode: 'IP1', materialId: 'm2', lineKey: 'k-c', quantity: '10', share: '1', budgetValue: '600', amount: '580' }],
     )
     const ip1 = c.byPackage[0]!

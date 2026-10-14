@@ -1,11 +1,12 @@
 /**
  * Fornecedores participantes e condições comerciais (prazo, pagamento, reajuste, pontos +/−).
+ * Sem mínimo de participantes: quadros internos usam só o "Sem Fornecedor".
  */
 import { useState } from 'react'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import type { CompetitionDetailDTO, QcSupplierDTO, UpdateSupplierTermsInput } from '@shared/contracts'
 import type { QcMap } from '@shared/domain/competition/qc-map'
-import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, Field, Input, Select, Textarea } from '@/components/ui'
+import { Badge, Button, Card, CardBody, CardHeader, Combobox, ConfirmDialog, EmptyState, Field, Input, Select, Textarea } from '@/components/ui'
 import { formatBRL, formatDate, formatTaxId } from '@/utils/format'
 import { useSuppliers } from './api'
 import { supplierStatus } from './status'
@@ -19,46 +20,61 @@ interface Props {
   onRemove: (id: string) => Promise<unknown>
 }
 
+/** "Sem Fornecedor" usa CNPJ só de zeros */
+export const isPlaceholderTaxId = (taxId: string) => /^0+$/.test(taxId)
+
 export function SuppliersPanel({ detail, map, today, onAdd, onUpdate, onRemove }: Props) {
-  const catalog = useSuppliers()
+  const [search, setSearch] = useState('')
+  const catalog = useSuppliers(search)
   const [selected, setSelected] = useState('')
+  const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<QcSupplierDTO | null>(null)
   const participating = new Set(detail.suppliers.map((s) => s.supplierId))
-  const available = (catalog.data ?? []).filter((s) => !participating.has(s.id))
+  const options = (catalog.data ?? []).map((s) => ({
+    value: s.id,
+    label: s.tradeName && s.tradeName !== s.legalName ? `${s.tradeName} — ${s.legalName}` : s.legalName,
+    hint: s.isPlaceholder ? 'Quadros internos, sem fornecedor externo' : formatTaxId(s.taxId),
+    aside: participating.has(s.id) ? 'já participa' : undefined,
+    disabled: participating.has(s.id),
+  }))
+  const add = async (id: string) => {
+    setSelected(id)
+    setAdding(true)
+    try {
+      await onAdd(id)
+    } finally {
+      setAdding(false)
+      setSelected('')
+    }
+  }
 
   return (
     <div className="grid gap-3">
       {detail.can.edit && (
         <Card>
           <CardBody className="flex flex-wrap items-end gap-3">
-            <Field label="Convidar fornecedor" className="min-w-72 flex-1">
-              <Select value={selected} onChange={(e) => setSelected(e.target.value)}>
-                <option value="">Selecione um fornecedor cadastrado…</option>
-                {available.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.legalName} — {formatTaxId(s.taxId)}
-                  </option>
-                ))}
-              </Select>
+            <Field label="Convidar fornecedor" hint="Digite o nome ou o CNPJ; a lista abre abaixo. Para quadros internos, escolha “Sem Fornecedor”." className="min-w-72 flex-1">
+              <Combobox
+                options={options}
+                value={selected || null}
+                onChange={add}
+                onQueryChange={setSearch}
+                loading={catalog.isFetching && !catalog.data}
+                disabled={adding}
+                placeholder="Buscar fornecedor por nome ou CNPJ…"
+                emptyText="Nenhum fornecedor encontrado"
+                maxResults={50}
+                aria-label="Convidar fornecedor"
+              />
             </Field>
-            <Button
-              variant="primary"
-              icon={<Plus className="size-4" />}
-              disabled={!selected}
-              onClick={async () => {
-                await onAdd(selected)
-                setSelected('')
-              }}
-            >
-              Adicionar
-            </Button>
+            {adding && <Button variant="primary" icon={<Plus className="size-4" />} loading>Adicionando</Button>}
           </CardBody>
         </Card>
       )}
 
       {detail.suppliers.length === 0 ? (
         <Card>
-          <EmptyState title="Nenhum fornecedor convidado" description="Adicione ao menos três fornecedores para comparar propostas." />
+          <EmptyState title="Nenhum fornecedor convidado" description="Convide os fornecedores que vão cotar. Para quadros internos, use o “Sem Fornecedor”." />
         </Card>
       ) : (
         <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
@@ -138,7 +154,7 @@ function SupplierCard({
         }
         description={
           <span className="tabular">
-            {s.legalName} · {formatTaxId(s.taxId)} · Total {formatBRL(total)}
+            {isPlaceholderTaxId(s.taxId) ? 'Quadro interno, sem fornecedor externo' : `${s.legalName} · ${formatTaxId(s.taxId)}`} · Total {formatBRL(total)}
           </span>
         }
         actions={

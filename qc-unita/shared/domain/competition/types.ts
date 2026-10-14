@@ -18,6 +18,10 @@ export interface QcItem {
   pctMaterial: Decimal
   pctEquipment: Decimal
   pctRetention: Decimal
+  /** Insumos referência ligados (comparação com o orçado) */
+  referenceIds?: string[]
+  /** Orçado do item vindo das referências (rateado); quando presente, substitui quantidade × unitário orçados */
+  referenceBudget?: Decimal
 }
 
 export interface QcSupplier {

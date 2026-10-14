@@ -68,6 +68,8 @@ export interface SupplierDTO {
   city: string | null
   state: string | null
   erpId: string | null
+  /** "Sem Fornecedor": quadros internos; sem CNPJ real nem CND */
+  isPlaceholder?: boolean
 }
 
 export interface BudgetPackageDTO {
@@ -109,6 +111,13 @@ export interface CompetitionListItemDTO {
   updatedAt: string
 }
 
+/** Origem do insumo do mapa: preenchido a partir de uma referência ou criado no mapa */
+export type QcItemOrigin = 'reference' | 'manual'
+
+/**
+ * Insumo do mapa de cotação (insumo real, de contrato): é o que os fornecedores cotam.
+ * Liga-se a um ou mais insumos referência, que dão a verba orçada para comparar.
+ */
 export interface QcItemDTO {
   id: string
   sortOrder: number
@@ -116,6 +125,7 @@ export interface QcItemDTO {
   code: string
   description: string
   unit: string
+  /** Orçado do item (verba das referências rateada) — derivado, gravado pelo recálculo */
   budgetQuantity: string
   budgetUnitCost: string
   quantity: string
@@ -124,6 +134,22 @@ export interface QcItemDTO {
   pctMaterial: string
   pctEquipment: string
   pctRetention: string
+  origin: QcItemOrigin
+  /** IP escolhido à mão (substitui os IPs herdados das referências) */
+  planningCode: string | null
+  planningDescription: string | null
+  /** Insumos referência usados para comparar este item */
+  referenceIds: string[]
+}
+
+/** Insumo referência: insumo do orçamento puxado pelo QC (suas linhas e % ficam nos vínculos) */
+export interface QcReferenceDTO {
+  id: string
+  sortOrder: number
+  materialId: string
+  code: string
+  description: string
+  unit: string
 }
 
 export interface QcSupplierDTO {
@@ -217,6 +243,8 @@ export interface BudgetLineDTO {
   total: string
   /** Composição auxiliar de onde o insumo veio (aberta linha a linha), ou null para insumo direto */
   aux: AuxCompositionDTO | null
+  /** IP escolhido à mão (substitui o da planilha) */
+  packageManual?: boolean
 }
 
 export interface AuxCompositionDTO {
@@ -249,9 +277,10 @@ export interface BudgetLineUsageDTO extends BudgetLineDTO {
 }
 
 /** Amarração de um item do QC a uma linha do orçamento */
+/** Linha do orçamento puxada por um insumo referência (com seu IP) */
 export interface QcLinkDTO {
   id: string
-  itemId: string
+  referenceId: string
   activityItemId: string | null
   lineKey: string | null
   materialId: string
@@ -324,12 +353,15 @@ export interface CompetitionDetailDTO {
   }
   revision: RevisionDTO
   revisions: Pick<RevisionDTO, 'id' | 'number' | 'status' | 'decidedAt' | 'createdAt' | 'reason'>[]
+  /** Insumos do mapa (reais, cotados) */
   items: QcItemDTO[]
+  /** Insumos referência (do orçamento) */
+  references: QcReferenceDTO[]
   suppliers: QcSupplierDTO[]
   prices: QcPriceDTO[]
   overrides: BestOverrideDTO[]
   approvals: ApprovalDTO[]
-  /** Vínculos item × insumo × vínculo de planejamento desta revisão */
+  /** Linhas do orçamento de cada insumo referência (com IP e % da linha) */
   links: QcLinkDTO[]
   /** Linhas do orçamento vigente relevantes ao QC (IPs e insumos tocados) — base do consolidador */
   budgetLines: BudgetLineDTO[]
@@ -418,11 +450,35 @@ export const updateItemSchema = z
     pctMaterial: ratioString,
     pctEquipment: ratioString,
     pctRetention: ratioString,
+    /** Identificação do insumo (só para insumos criados no mapa) */
+    code: z.string().trim().min(1).max(30),
+    description: z.string().trim().min(2).max(300),
+    unit: z.string().trim().min(1).max(10),
+    /** IP manual; null volta a herdar das referências */
+    planningCode: z.string().trim().min(1).max(30).nullable(),
+    planningDescription: z.string().trim().max(300).nullable(),
   })
   .partial()
 export type UpdateItemInput = z.infer<typeof updateItemSchema>
 
-export const setItemLinksSchema = z.object({
+/** Insumo novo no mapa: da lista de insumos da obra (UAU) ou livre, ligado às referências */
+export const addQcItemSchema = z.object({
+  materialCode: z.string().trim().max(30).nullable().optional(),
+  code: z.string().trim().min(1, 'Informe o código').max(30),
+  description: z.string().trim().min(2, 'Informe a descrição').max(300),
+  unit: z.string().trim().min(1, 'Informe a unidade').max(10),
+  quantity: decimalString.refine((v) => !v.startsWith('-'), 'Quantidade não pode ser negativa'),
+  referenceIds: z.array(uuid).max(200).default([]),
+  planningCode: z.string().trim().min(1).max(30).nullable().optional(),
+  planningDescription: z.string().trim().max(300).nullable().optional(),
+})
+export type AddQcItemInput = z.infer<typeof addQcItemSchema>
+
+export const setItemReferencesSchema = z.object({ referenceIds: z.array(uuid).max(200) })
+export type SetItemReferencesInput = z.infer<typeof setItemReferencesSchema>
+
+/** Linhas do orçamento de um insumo referência e o % de cada uma */
+export const setReferenceLinesSchema = z.object({
   links: z
     .array(
       z
@@ -436,12 +492,45 @@ export const setItemLinksSchema = z.object({
     )
     .max(200),
 })
-export type SetItemLinksInput = z.infer<typeof setItemLinksSchema>
+export type SetReferenceLinesInput = z.infer<typeof setReferenceLinesSchema>
 
 export const addLinesSchema = z.object({
   lineIds: z.array(uuid).min(1).max(5000),
   shares: z.record(uuid, ratioString).optional(),
+  /** Cada insumo referência novo já ganha seu insumo no mapa (1:1) */
+  fillMap: z.boolean().optional(),
 })
+
+/** IP escolhido à mão para uma linha do orçamento (null volta ao IP da planilha) */
+export const setLinePlanningSchema = z.object({
+  lineKey: z.string().trim().min(1).max(300),
+  code: z.string().trim().min(1).max(30).nullable(),
+  description: z.string().trim().max(300).nullable().optional(),
+})
+export type SetLinePlanningInput = z.infer<typeof setLinePlanningSchema>
+
+/** Vínculo de planejamento (IP) disponível para a obra */
+export interface PlanningCodeDTO {
+  code: string
+  description: string
+  unit: string | null
+}
+
+/** Insumo da obra (para criar insumos no mapa) */
+export interface WorkMaterialDTO {
+  code: string
+  description: string
+  unit: string
+  category: string | null
+}
+
+/** Lista vinda da UAU ou, como alternativa, do orçamento importado */
+export interface WorkListDTO<T> {
+  source: 'uau' | 'budget'
+  /** Motivo de não ter vindo da UAU (sem chave da obra, UAU fora do ar...) */
+  warning: string | null
+  items: T[]
+}
 
 // Cadastro manual de obra (obras do ERP chegam pela sincronização)
 export const createWorkSchema = z
@@ -646,6 +735,18 @@ export interface ContractItemDTO {
   pctMaterial: string
   pctEquipment: string
   allocations: ContractAllocationDTO[]
+  /** Insumos referência (do orçamento) usados para comparar este item no QC */
+  references: ContractItemReferenceDTO[]
+}
+
+/** Insumo referência de um item contratado: insumo do orçamento, seus IPs e a verba usada */
+export interface ContractItemReferenceDTO {
+  code: string
+  description: string
+  unit: string
+  packageCodes: string[]
+  /** Verba da referência (Σ linhas puxadas do orçamento) */
+  budget: string
 }
 
 export interface ContractProjectDTO {

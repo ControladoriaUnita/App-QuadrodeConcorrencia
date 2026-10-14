@@ -54,6 +54,7 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
               quantity: a.quantity as string,
               amount: lineTotal(unitPrice, Decimal.from(a.quantity as string)).toDb(),
             })),
+          references: (i.references as ContractItemDTO['references']) ?? [],
         }
       })
 

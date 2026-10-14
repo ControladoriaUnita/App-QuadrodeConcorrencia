@@ -1,23 +1,21 @@
 /**
- * Vínculos de planejamento dos itens do QC — linha a linha do orçamento da obra.
- * Cada vínculo aponta para uma linha do orçamento (insumo de uma composição, com seu IP).
+ * Vínculos de planejamento dos insumos referência do QC — linha a linha do orçamento da obra.
+ * Cada vínculo aponta para uma linha do orçamento (insumo de uma composição, com seu IP) e o
+ * percentual dela que o QC compromete (verba puxada).
  *
  * Regras
- *  - A soma das quantidades vinculadas de um item deve ser igual à quantidade equalizada do item
- *    (planilha: "VÍNCULOS NÃO INDICADOS / ERRO NA QUANTIDADE VINCULADA").
- *  - Preço contratado do item = preço da vencedora indicada (se cotou); senão, a melhor condição.
- *  - Valor contratado do vínculo = preço contratado × quantidade vinculada (4 casas).
+ *  - Preço contratado do insumo do mapa = preço da vencedora indicada (se cotou); senão, a melhor condição.
+ *  - Valor contratado de cada linha: ver ./references.ts (contratado do grupo distribuído pela verba).
  *  - Consolidação: orçado do vínculo/insumo × comprometido em outros QCs × este QC × saldo.
  */
 import type { BudgetLineDTO, LinkCommitmentDTO } from '../../contracts'
 import { Decimal } from '../decimal'
 import { lineTotal } from '../competition/best-condition'
-import type { ValidationIssue } from '../competition/revision'
 import type { BestCondition, QcItem, QcPrice } from '../competition/types'
 
 export interface PlanningLink {
   id?: string
-  itemId: string
+  referenceId: string
   activityItemId?: string | null
   lineKey?: string | null
   materialId: string
@@ -94,40 +92,6 @@ export function awardedTotal(items: QcItem[], awarded: Map<string, Decimal | nul
     const u = awarded.get(i.id)
     return u ? lineTotal(u, i.quantity) : ZERO
   }))
-}
-
-export function linkAwardedValue(link: Pick<PlanningLink, 'itemId' | 'quantity'>, awarded: Map<string, Decimal | null>) {
-  const unit = awarded.get(link.itemId) ?? null
-  return { unit, total: unit ? lineTotal(unit, link.quantity) : null }
-}
-
-export interface ItemLinkBalance {
-  linked: Decimal
-  /** quantidade do item − quantidade vinculada (0 = ok) */
-  diff: Decimal
-  count: number
-}
-
-export function linkBalanceByItem(items: QcItem[], links: PlanningLink[]): Map<string, ItemLinkBalance> {
-  const out = new Map<string, ItemLinkBalance>()
-  for (const i of items) {
-    const own = links.filter((l) => l.itemId === i.id)
-    const linked = Decimal.sum(own.map((l) => l.quantity))
-    out.set(i.id, { linked, diff: i.quantity.minus(linked), count: own.length })
-  }
-  return out
-}
-
-export function validateLinks(items: QcItem[], links: PlanningLink[]): ValidationIssue[] {
-  const balance = linkBalanceByItem(items, links)
-  const missing = items.filter((i) => i.quantity.isPositive() && balance.get(i.id)!.count === 0)
-  const wrong = items.filter((i) => balance.get(i.id)!.count > 0 && !balance.get(i.id)!.diff.isZero())
-  const issues: ValidationIssue[] = []
-  if (missing.length) issues.push({ field: 'links', message: `${missing.length} item(ns) sem vínculo de planejamento.` })
-  if (wrong.length) {
-    issues.push({ field: 'links', message: `${wrong.length} item(ns) com quantidade vinculada diferente da quantidade do QC.` })
-  }
-  return issues
 }
 
 /**

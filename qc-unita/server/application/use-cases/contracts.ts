@@ -137,6 +137,7 @@ export async function createContractRequest(repos: Repositories, ctx: RequestCon
         pctMaterial: i.pctMaterial.toFixed(6),
         pctEquipment: i.pctEquipment.toFixed(6),
         allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: a.quantity.toDb() })),
+        references: i.references.map((r) => ({ ...r, budget: r.budget.toDb() })),
       })),
     },
     ctx.actor.id,

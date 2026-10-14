@@ -17,6 +17,7 @@ import type {
   CompetitionListItemDTO,
   IntegrationLogDTO,
   QcItemDTO,
+  QcReferenceDTO,
   QcSupplierDTO,
   RevisionDTO,
   SupplierDTO,
@@ -24,7 +25,7 @@ import type {
 } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import type { Actor } from '../../application/context'
-import type { CompetitionData, NewLink, Repositories } from '../../application/ports'
+import type { AggregatedInput, CompetitionData, NewLink, Repositories } from '../../application/ports'
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
 import { createSupabaseAttachments, createSupabaseStorage } from './supabase-attachments'
 import { createSupabaseContracts } from './supabase-contracts'
@@ -44,7 +45,7 @@ const WORK_COLS =
    budgets(id, version, source, totalAmount:total_amount::text, isCurrent:is_current, importFileName:import_file_name,
            importedAt:imported_at, erpSyncedAt:erp_synced_at, linesCount:lines_count)`
 const SUPPLIER_COLS =
-  'id, legalName:legal_name, tradeName:trade_name, taxId:tax_id, contactName:contact_name, phone, email, cndValidUntil:cnd_valid_until, city, state, erpId:erp_id'
+  'id, legalName:legal_name, tradeName:trade_name, taxId:tax_id, contactName:contact_name, phone, email, cndValidUntil:cnd_valid_until, city, state, erpId:erp_id, isPlaceholder:is_placeholder'
 const REVISION_COLS = `id, number, status, reason, serviceStartOn:service_start_on, serviceEndOn:service_end_on,
   budgetAmount:budget_amount::text, budgetUsedAmount:budget_used_amount::text, budgetAdjustmentAmount:budget_adjustment_amount::text,
   engineeringNotes:engineering_notes, procurementNotes:procurement_notes, contractTypeId:contract_type_id,
@@ -53,17 +54,19 @@ const REVISION_COLS = `id, number, status, reason, serviceStartOn:service_start_
 const ITEM_COLS = `id, sortOrder:sort_order, materialId:material_id, code, description, unit,
   budgetQuantity:budget_quantity::text, budgetUnitCost:budget_unit_cost::text, quantity:quantity::text,
   scopeDescription:scope_description, contractNotes:contract_notes, pctMaterial:pct_material::text,
-  pctEquipment:pct_equipment::text, pctRetention:pct_retention::text`
+  pctEquipment:pct_equipment::text, pctRetention:pct_retention::text, origin, planningCode:planning_code,
+  planningDescription:planning_description, competition_item_references(reference_id)`
+const REF_COLS = 'id, sortOrder:sort_order, materialId:material_id, code, description, unit'
 const CS_COLS = `id, supplierId:supplier_id, sortOrder:sort_order, status, legalName:legal_name, tradeName:trade_name, taxId:tax_id,
   contactName:contact_name, phone, email, cndValidUntil:cnd_valid_until, deliveryTerms:delivery_terms,
   paymentTerms:payment_terms, readjustmentTerms:readjustment_terms, notes, strengths, weaknesses,
   supplier_proposals(id, proposalRef:proposal_ref, receivedOn:received_on, validUntil:valid_until)`
 
-const LINK_COLS = `id, itemId:competition_item_id, activityItemId:activity_item_id, lineKey:line_key, materialId:material_id, packageCode:package_code, packageDescription:package_description,
+const LINK_COLS = `id, referenceId:reference_id, activityItemId:activity_item_id, lineKey:line_key, materialId:material_id, packageCode:package_code, packageDescription:package_description,
   quantity:quantity::text, share:budget_share::text, budgetValue:budget_value::text, budgetUnitCost:budget_unit_cost::text, awardedUnitPrice:awarded_unit_price::text, awardedTotal:awarded_total::text`
 
-const linkRow = (revisionId: string, itemId: string, l: NewLink, sortOrder: number) => ({
-  revision_id: revisionId, competition_item_id: itemId, activity_item_id: l.activityItemId, line_key: l.lineKey,
+const linkRow = (revisionId: string, referenceId: string, l: NewLink, sortOrder: number) => ({
+  revision_id: revisionId, reference_id: referenceId, activity_item_id: l.activityItemId, line_key: l.lineKey,
   material_id: l.materialId, package_code: l.packageCode, package_description: l.packageDescription,
   quantity: l.quantity, budget_share: l.share, budget_value: l.budgetValue, budget_unit_cost: l.budgetUnitCost, sort_order: sortOrder,
 })
@@ -96,7 +99,7 @@ function toWork(w: Json): WorkDTO {
 }
 
 const LINE_SELECT = `id, lineKey:line_key, quantity:quantity::text, unitCost:unit_cost::text, total:total_cost::text,
-  packageCode:package_code, packageDescription:package_description, sortOrder:sort_order,
+  packageCode:package_code, packageDescription:package_description, packageManual:package_manual, sortOrder:sort_order,
   aux_code, aux_description, aux_unit, aux_coefficient:aux_coefficient::text, aux_unit_cost:aux_unit_cost::text,
   activities(wbs_code, composition_code, description), materials(id, code, description, unit)`
 
@@ -115,6 +118,7 @@ function toLine(r: Json): BudgetLineDTO {
     unit: m.unit,
     packageCode: (r.packageCode as string) ?? null,
     packageDescription: (r.packageDescription as string) ?? null,
+    packageManual: r.packageManual === true,
     quantity: r.quantity as string,
     unitCost: r.unitCost as string,
     total: r.total as string,
@@ -230,6 +234,54 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
     return rows.map(({ roles, ...a }) => ({ ...a, roleName: roles?.name ?? '', decidedByName: names.find((n) => n.id === a.decidedById)?.full_name ?? null }))
   }
 
+  /** Insumos referência e suas linhas do orçamento */
+  const insertReferences = async (revisionId: string, refs: AggregatedInput[]): Promise<string[]> => {
+    if (!refs.length) return []
+    const current = must(await db.from('competition_references').select('sort_order').eq('revision_id', revisionId).order('sort_order', { ascending: false }).limit(1)) as { sort_order: number }[]
+    const base = current[0]?.sort_order ?? 0
+    const inserted = must(await db.from('competition_references').insert(
+      refs.map((r, k) => ({ revision_id: revisionId, material_id: r.materialId, sort_order: base + k + 1, code: r.code, description: r.description, unit: r.unit })),
+    ).select('id, sort_order')) as { id: string; sort_order: number }[]
+    const ids = refs.map((_, k) => inserted.find((x) => x.sort_order === base + k + 1)!.id)
+    const links = refs.flatMap((r, k) => r.links.map((l, li) => linkRow(revisionId, ids[k]!, l, li)))
+    for (const part of chunk(links, 500)) must(await db.from('competition_item_links').insert(part))
+    return ids
+  }
+
+  /**
+   * Aplica o IP manual (ou devolve o da planilha) nas linhas do orçamento da obra com a chave dada
+   * e nas linhas puxadas pelos QCs em rascunho. Retorna quantas linhas do orçamento mudaram.
+   */
+  const applyLinePlanning = async (workId: string, lineKey: string): Promise<number> => {
+    const manual = must(await service.from('budget_line_planning').select('package_code, package_description').eq('work_id', workId).eq('line_key', lineKey).maybeSingle()) as
+      { package_code: string; package_description: string | null } | null
+    const budgets = (must(await service.from('budgets').select('id').eq('work_id', workId)) as { id: string }[]).map((b) => b.id)
+    if (!budgets.length) return 0
+    const rows = must(await service.from('activity_items')
+      .select('id, package_code, package_description, package_manual, original_package_code, original_package_description')
+      .in('budget_id', budgets).eq('line_key', lineKey)) as
+      { id: string; package_code: string | null; package_description: string | null; package_manual: boolean; original_package_code: string | null; original_package_description: string | null }[]
+    let current: { code: string | null; description: string | null } | null = null
+    for (const r of rows) {
+      const original = r.package_manual ? { code: r.original_package_code, description: r.original_package_description } : { code: r.package_code, description: r.package_description }
+      const next = manual
+        ? { package_code: manual.package_code, package_description: manual.package_description, package_manual: true, original_package_code: original.code, original_package_description: original.description }
+        : { package_code: original.code, package_description: original.description, package_manual: false, original_package_code: null, original_package_description: null }
+      must(await service.from('activity_items').update(next).eq('id', r.id))
+      current = { code: next.package_code, description: next.package_description }
+    }
+    if (current) {
+      const comps = (must(await db.from('competitions').select('id').eq('work_id', workId)) as { id: string }[]).map((c) => c.id)
+      const drafts = comps.length
+        ? (must(await db.from('competition_revisions').select('id').in('competition_id', comps).eq('status', 'draft').is('frozen_at', null)) as { id: string }[]).map((r) => r.id)
+        : []
+      if (drafts.length) {
+        must(await db.from('competition_item_links').update({ package_code: current.code, package_description: current.description }).in('revision_id', drafts).eq('line_key', lineKey))
+      }
+    }
+    return rows.length
+  }
+
   return {
     contracts: createSupabaseContracts(db),
     attachments: createSupabaseAttachments(db),
@@ -284,7 +336,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         return w ? toWork(w) : null
       },
       async listSuppliers(search) {
-        let q = db.from('suppliers').select(SUPPLIER_COLS).eq('active', true).order('legal_name').limit(500)
+        let q = db.from('suppliers').select(SUPPLIER_COLS).eq('active', true).order('is_placeholder', { ascending: false }).order('legal_name').limit(500)
         if (search?.trim()) {
           const s = search.trim().replace(/[%,()]/g, ' ')
           q = q.or(`legal_name.ilike.%${s}%,trade_name.ilike.%${s}%,tax_id.ilike.%${s}%`)
@@ -339,6 +391,21 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         for (const part of chunk(ids, 150)) out.push(...(must(await db.from('activity_items').select(LINE_SELECT).in('id', part)) as Json[]).map(toLine))
         return out
       },
+      async findMaterialIdByCode(code) {
+        const r = must(await db.from('materials').select('id').eq('code', code).maybeSingle()) as { id: string } | null
+        return r?.id ?? null
+      },
+      async setLinePlanning(workId, lineKey, planning) {
+        if (planning) {
+          must(await service.from('budget_line_planning').upsert(
+            { work_id: workId, line_key: lineKey, package_code: planning.code, package_description: planning.description, updated_at: new Date().toISOString() },
+            { onConflict: 'work_id,line_key' },
+          ))
+        } else {
+          must(await service.from('budget_line_planning').delete().eq('work_id', workId).eq('line_key', lineKey))
+        }
+        return applyLinePlanning(workId, lineKey)
+      },
     },
 
     // ------------------------------------------------------------------ concorrências
@@ -373,20 +440,8 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           id: revisionId, competition_id: competitionId, number: 0, budget_amount: data.budgetAmount, created_by: actorId,
         }))
         must(await db.from('competitions').update({ current_revision_id: revisionId }).eq('id', competitionId))
-        if (data.items.length) {
-          const inserted = must(await db.from('competition_items').insert(
-            data.items.map((i, idx) => ({
-              revision_id: revisionId, material_id: i.materialId, sort_order: idx + 1, code: i.code, description: i.description,
-              unit: i.unit, budget_quantity: i.quantity, budget_unit_cost: i.unitCost, quantity: i.quantity,
-            })),
-          ).select('id, sort_order')) as { id: string; sort_order: number }[]
-          const links = data.items.flatMap((i, idx) => {
-            const itemId = inserted.find((x) => x.sort_order === idx + 1)!.id
-            return i.links.map((l, li) => linkRow(revisionId, itemId, l, li))
-          })
-          if (links.length) must(await db.from('competition_item_links').insert(links))
-        }
-        return { competitionId, revisionId }
+        const referenceIds = await insertReferences(revisionId, data.references)
+        return { competitionId, revisionId, referenceIds }
       },
 
       async getData(competitionId, revisionId): Promise<CompetitionData | null> {
@@ -402,7 +457,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         if (!c) return null
         const revId = revisionId ?? (c.currentRevisionId as string)
 
-        const [rev, revisions, items, sups, best, approvals, contractTypes, people, links] = await Promise.all([
+        const [rev, revisions, items, sups, best, approvals, contractTypes, people, links, refs] = await Promise.all([
           db.from('competition_revisions').select(REVISION_COLS).eq('id', revId).eq('competition_id', competitionId).maybeSingle(),
           db.from('competition_revisions').select('id, number, status, decidedAt:decided_at, createdAt:created_at, reason').eq('competition_id', competitionId).order('number'),
           db.from('competition_items').select(ITEM_COLS).eq('revision_id', revId).order('sort_order'),
@@ -412,6 +467,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           db.from('contract_types').select('id, code, name').eq('active', true).order('code'),
           db.from('profiles').select('id, fullName:full_name').eq('active', true).order('full_name'),
           db.from('competition_item_links').select(LINK_COLS).eq('revision_id', revId).order('sort_order'),
+          db.from('competition_references').select(REF_COLS).eq('revision_id', revId).order('sort_order'),
         ])
         const revision = must(rev) as unknown as (RevisionDTO & { competitionId: string }) | null
         if (!revision) return null
@@ -459,7 +515,10 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           },
           revision: revisionDto,
           revisions: must(revisions) as unknown as CompetitionData['revisions'],
-          items: must(items) as unknown as QcItemDTO[],
+          items: (must(items) as unknown as (Omit<QcItemDTO, 'referenceIds'> & { competition_item_references: { reference_id: string }[] | null })[]).map(
+            ({ competition_item_references: refsOf, ...i }) => ({ ...i, referenceIds: (refsOf ?? []).map((x) => x.reference_id) }),
+          ),
+          references: must(refs) as unknown as QcReferenceDTO[],
           suppliers,
           prices: priceRows.map((p) => ({
             competitionSupplierId: p.supplier_proposals.competition_supplier_id,
@@ -576,6 +635,19 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         }
       },
 
+      addReferences: insertReferences,
+
+      async removeReference(referenceId) {
+        must(await db.from('competition_references').delete().eq('id', referenceId))
+      },
+
+      async setReferenceLinks(revisionId, referenceId, links) {
+        must(await db.from('competition_item_links').delete().eq('reference_id', referenceId))
+        if (links.length) {
+          must(await db.from('competition_item_links').insert(links.map((l, i) => linkRow(revisionId, referenceId, l, i))))
+        }
+      },
+
       async addItems(revisionId, items) {
         const current = must(await db.from('competition_items').select('sort_order').eq('revision_id', revisionId).order('sort_order', { ascending: false }).limit(1)) as { sort_order: number }[]
         let order = current[0]?.sort_order ?? 0
@@ -583,23 +655,28 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         for (const i of items) {
           const row = must(await db.from('competition_items').insert({
             revision_id: revisionId, material_id: i.materialId, sort_order: ++order, code: i.code, description: i.description,
-            unit: i.unit, budget_quantity: i.quantity, budget_unit_cost: i.unitCost, quantity: i.quantity,
+            unit: i.unit, budget_quantity: i.quantity, budget_unit_cost: i.budgetUnitCost ?? '0', quantity: i.quantity,
+            origin: i.origin, planning_code: i.planningCode, planning_description: i.planningDescription,
           }).select('id').single()) as { id: string }
-          if (i.links.length) must(await db.from('competition_item_links').insert(i.links.map((l, li) => linkRow(revisionId, row.id, l, li))))
+          const refs = [...new Set(i.referenceIds)]
+          if (refs.length) {
+            must(await db.from('competition_item_references').insert(refs.map((r) => ({ revision_id: revisionId, competition_item_id: row.id, reference_id: r }))))
+          }
           ids.push(row.id)
         }
         return ids
       },
 
-      async removeItem(itemId) {
-        must(await db.from('competition_items').delete().eq('id', itemId))
+      async setItemReferences(revisionId, itemId, referenceIds) {
+        must(await db.from('competition_item_references').delete().eq('competition_item_id', itemId))
+        const refs = [...new Set(referenceIds)]
+        if (refs.length) {
+          must(await db.from('competition_item_references').insert(refs.map((r) => ({ revision_id: revisionId, competition_item_id: itemId, reference_id: r }))))
+        }
       },
 
-      async setItemLinks(revisionId, itemId, links) {
-        must(await db.from('competition_item_links').delete().eq('competition_item_id', itemId))
-        if (links.length) {
-          must(await db.from('competition_item_links').insert(links.map((l, i) => linkRow(revisionId, itemId, l, i))))
-        }
+      async removeItem(itemId) {
+        must(await db.from('competition_items').delete().eq('id', itemId))
       },
 
       async workCommitments(workId) {
@@ -796,6 +873,9 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         const { total, count } = await writeBudgetLines(service, budget.id, { groups: input.groups, activities: input.activities, items: input.lines })
         must(await service.from('budgets').update({ is_current: false, status: 'superseded' }).eq('work_id', workId).eq('is_current', true))
         must(await service.from('budgets').update({ is_current: true, status: 'active', total_amount: total.toDb(), lines_count: count }).eq('id', budget.id))
+        // IPs escolhidos à mão continuam valendo na versão nova (pela chave da linha)
+        const manual = must(await service.from('budget_line_planning').select('line_key').eq('work_id', workId)) as { line_key: string }[]
+        for (const m of manual) await applyLinePlanning(workId, m.line_key)
         if (meta.sheet) {
           must(await service.from('works').update({
             uau_company_code: meta.sheet.company, uau_work_code: meta.sheet.work, uau_budget_number: meta.sheet.budget,

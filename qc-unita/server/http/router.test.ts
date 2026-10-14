@@ -143,49 +143,72 @@ describe('obra e vínculos de planejamento', () => {
     expect(new Set(d.links.map((l) => l.packageCode)).size).toBeGreaterThan(1)
     expect(d.links.some((l) => l.packageCode === 'IP00105')).toBe(false)
     expect(d.links.every((l) => l.activityItemId && l.lineKey)).toBe(true)
-    expect(buildQcMap(d).issues.some((i) => i.field === 'links')).toBe(false)
+    expect(buildQcMap(d).issues.some((i) => i.field === 'references')).toBe(false)
     expect(d.otherCommitments.length).toBeGreaterThan(0)
-    // orçado do QC acompanha os vínculos selecionados
-    const linkedBudget = d.items.reduce((a, i) => a + Number(i.budgetQuantity) * Number(i.budgetUnitCost), 0)
-    expect(Number(d.revision.budgetAmount)).toBeCloseTo(linkedBudget, 0)
+    // orçado do QC = verba das referências (linhas puxadas); cada referência nasce com seu insumo no mapa
+    const pulled = d.links.reduce((a, l) => a + Number(l.budgetValue), 0)
+    expect(Number(d.revision.budgetAmount)).toBeCloseTo(pulled, 2)
     expect(Number(d.revision.budgetAmount)).toBeLessThan(112000)
+    expect(d.items.every((i) => i.referenceIds.length === 1)).toBe(true)
+    expect(new Set(d.items.map((i) => i.referenceIds[0])).size).toBe(d.references.length)
   })
 
-  it('compromete % da linha (verba puxada) e acusa diferença de quantidade no envio', async () => {
+  it('compromete % da linha na referência; insumos do mapa criados e ligados a referências', async () => {
     const all = (await call<CompetitionListItemDTO[]>('GET', '/competitions')).data
     const terra = all.find((c) => c.title.startsWith('Terraplenagem'))!
     const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${terra.id}`)
-    expect(d.links.length).toBeGreaterThanOrEqual(d.items.length)
+    expect(d.links.length).toBeGreaterThanOrEqual(d.references.length)
     expect(d.budgetLines.length).toBeGreaterThan(3)
-    const item = d.items.find((i) => d.links.filter((l) => l.itemId === i.id).length === 1)!
-    const link = d.links.find((l) => l.itemId === item.id)!
+    const ref = d.references.find((r) => d.links.filter((l) => l.referenceId === r.id).length === 1)!
+    const item = d.items.find((i) => i.referenceIds[0] === ref.id)!
+    const link = d.links.find((l) => l.referenceId === ref.id)!
     const line = d.budgetLines.find((l) => l.id === link.activityItemId)!
     expect(link.share).toBe('1.000000')
     expect(link.budgetValue).toBe(Number(line.total).toFixed(4))
 
-    // 40% da linha: verba e quantidade proporcionais; quantidade do item acompanha
-    const r = await call('PUT', `/revisions/${d.revision.id}/items/${item.id}/links`, {
+    // 40% da linha: verba e quantidade proporcionais; o insumo do mapa (1:1) acompanha a quantidade
+    const r = await call('PUT', `/revisions/${d.revision.id}/references/${ref.id}/lines`, {
       links: [{ activityItemId: link.activityItemId, share: '0.4' }],
     })
     expect(r.status).toBe(200)
     const { data: after } = await call<CompetitionDetailDTO>('GET', `/competitions/${terra.id}`)
-    const l2 = after.links.find((l) => l.itemId === item.id)!
+    const l2 = after.links.find((l) => l.referenceId === ref.id)!
     expect(l2.share).toBe('0.400000')
     expect(Number(l2.budgetValue)).toBeCloseTo(Number(line.total) * 0.4, 3)
     expect(Number(l2.quantity)).toBeCloseTo(Number(line.quantity) * 0.4, 3)
     expect(after.items.find((i) => i.id === item.id)!.quantity).toBe(l2.quantity)
-    expect(buildQcMap(after).issues.map((i) => i.message).join()).not.toMatch(/quantidade vinculada diferente/)
 
-    // Quantidade do item alterada à mão → divergência acusada
-    await call('PATCH', `/revisions/${d.revision.id}/items/${item.id}`, { quantity: '1' })
-    const { data: diverged } = await call<CompetitionDetailDTO>('GET', `/competitions/${terra.id}`)
-    expect(buildQcMap(diverged).issues.map((i) => i.message).join()).toMatch(/quantidade vinculada diferente/)
+    // Insumo criado no mapa, ligado a duas referências; outro sem referência acusa pendência
+    const [r1, r2] = after.references.filter((x) => x.id !== ref.id)
+    const created = await call<{ id: string }>('POST', `/revisions/${d.revision.id}/items`, {
+      code: 'IS99999', description: 'Serviço contratado de outra forma', unit: 'vb', quantity: '1', referenceIds: [r1!.id, r2!.id],
+    })
+    expect(created.status).toBe(201)
+    const orphan = await call<{ id: string }>('POST', `/revisions/${d.revision.id}/items`, { code: 'X1', description: 'Sem referência', unit: 'un', quantity: '2' })
+    const { data: withItems } = await call<CompetitionDetailDTO>('GET', `/competitions/${terra.id}`)
+    const novo = withItems.items.find((i) => i.id === created.data.id)!
+    expect(novo.origin).toBe('manual')
+    expect(novo.referenceIds.sort()).toEqual([r1!.id, r2!.id].sort())
+    expect(buildQcMap(withItems).issues.map((i) => i.message).join()).toMatch(/sem insumo referência/)
+    // IP manual resolve a pendência do insumo sem referência
+    await call('PATCH', `/revisions/${d.revision.id}/items/${orphan.data.id}`, { planningCode: 'IP00001', planningDescription: 'Teste' })
+    const { data: fixed } = await call<CompetitionDetailDTO>('GET', `/competitions/${terra.id}`)
+    expect(buildQcMap(fixed).issues.map((i) => i.message).join()).not.toMatch(/sem insumo referência/)
+    // Identificação só muda em insumo criado no mapa
+    expect((await call('PATCH', `/revisions/${d.revision.id}/items/${item.id}`, { description: 'Outro nome' })).status).toBe(409)
 
-    const bad = await call('PUT', `/revisions/${d.revision.id}/items/${item.id}/links`, {
+    // Desliga a referência do insumo 1:1 → referência sem uso; "preencher" cria o insumo de volta
+    await call('PUT', `/revisions/${d.revision.id}/items/${item.id}/references`, { referenceIds: [] })
+    const { data: unused } = await call<CompetitionDetailDTO>('GET', `/competitions/${terra.id}`)
+    expect(buildQcMap(unused).issues.map((i) => i.message).join()).toMatch(/referência não usado/)
+    const filled = await call<{ created: number }>('POST', `/revisions/${d.revision.id}/items/fill-from-references`)
+    expect(filled.data.created).toBe(1)
+
+    const bad = await call('PUT', `/revisions/${d.revision.id}/references/${ref.id}/lines`, {
       links: [{ activityItemId: '00000000-0000-4000-8000-00000000abcd', quantity: '1' }],
     })
     expect(bad.status).toBe(422)
-    const over = await call('PUT', `/revisions/${d.revision.id}/items/${item.id}/links`, {
+    const over = await call('PUT', `/revisions/${d.revision.id}/references/${ref.id}/lines`, {
       links: [{ activityItemId: link.activityItemId, share: '1.5' }],
     })
     expect(over.status).toBe(422)
@@ -204,7 +227,7 @@ describe('obra e vínculos de planejamento', () => {
     const mats = (await call<CompetitionListItemDTO[]>('GET', '/competitions')).data.find((c) => c.title.startsWith('Materiais'))!
     const { data: before } = await call<CompetitionDetailDTO>('GET', `/competitions/${mats.id}`)
     const free = lines.filter((l) => l.packageCode === 'IP00157').slice(0, 3)
-    const r = await call<{ createdItems: number; mergedItems: number }>('POST', `/revisions/${before.revision.id}/lines`, { lineIds: free.map((l) => l.id) })
+    const r = await call<{ createdReferences: number; mergedReferences: number }>('POST', `/revisions/${before.revision.id}/lines`, { lineIds: free.map((l) => l.id), fillMap: true })
     expect(r.status).toBe(200)
     const { data: after } = await call<CompetitionDetailDTO>('GET', `/competitions/${mats.id}`)
     expect(after.links.length).toBe(before.links.length + 3)

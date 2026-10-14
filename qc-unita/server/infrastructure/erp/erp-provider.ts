@@ -85,6 +85,16 @@ export interface ErpWorkOption {
   name: string
 }
 
+/** Insumo do orçamento de uma obra no ERP (UAU: Orcamento/ConsultarInsumosPorChave) */
+export interface ErpWorkMaterial {
+  code: string
+  description: string
+  unit: string
+  category: string | null
+  /** Grupo/categoria descrita (ex.: "Planejamento e Orçamento") */
+  groupDescription: string | null
+}
+
 /** Operações de leitura/envio; usadas para saber o que cada provider já implementa. */
 export type ErpOperation = 'works' | 'suppliers' | 'materials' | 'budget' | 'pushContract'
 
@@ -105,6 +115,8 @@ export interface ERPProvider {
   /** Listas para o seletor de "Nova obra" (empresas e obras ativas), ordenadas */
   listCompanies(): Promise<ErpCompany[]>
   listWorkOptions(): Promise<ErpWorkOption[]>
+  /** Insumos do orçamento da obra no ERP (inclui os IPs); ausente = o provider não oferece */
+  listWorkMaterials?(key: { company: string; work: string; budget: string }): Promise<ErpWorkMaterial[]>
 }
 
 export class ErpNotConfiguredError extends AppError {

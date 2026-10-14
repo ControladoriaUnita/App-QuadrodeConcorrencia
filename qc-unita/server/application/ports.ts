@@ -17,6 +17,7 @@ import type {
   CompetitionDetailDTO,
   CompetitionListItemDTO,
   CompetitionStatus,
+  ContractItemReferenceDTO,
   ContractListItemDTO,
   ContractProjectDTO,
   ContractRequestDTO,
@@ -26,6 +27,7 @@ import type {
   ContractTypeDTO,
   IntegrationLogDTO,
   ProfileRefDTO,
+  QcItemOrigin,
   RevisionStatus,
   SupplierDTO,
   UauWorkKeyDTO,
@@ -55,6 +57,7 @@ export interface NewLink {
   budgetUnitCost: string
 }
 
+/** Insumo referência a criar: um insumo do orçamento com as linhas puxadas */
 export interface AggregatedInput {
   materialId: string
   code: string
@@ -81,7 +84,23 @@ export interface NewCompetition {
   requestedOn: string
   procurementOwnerId: string | null
   budgetAmount: string
-  items: AggregatedInput[]
+  /** Insumos referência (do orçamento) da revisão inicial */
+  references: AggregatedInput[]
+}
+
+/** Insumo do mapa (real, de contrato) a criar */
+export interface NewQcItem {
+  materialId: string | null
+  code: string
+  description: string
+  unit: string
+  quantity: string
+  /** Custo unitário orçado de partida (insumo igual à referência); o orçado efetivo vem das referências */
+  budgetUnitCost?: string
+  origin: QcItemOrigin
+  planningCode: string | null
+  planningDescription: string | null
+  referenceIds: string[]
 }
 
 export interface RevisionStatusChange {
@@ -140,12 +159,19 @@ export interface CatalogRepository {
   getBudgetStructure(budgetId: string): Promise<BudgetStructureDTO>
   /** Linhas por id (de qualquer versão do orçamento) */
   getBudgetLines(ids: string[]): Promise<BudgetLineDTO[]>
+  /** Insumo do cadastro pelo código (null se não existir) */
+  findMaterialIdByCode(code: string): Promise<string | null>
+  /**
+   * IP escolhido à mão para uma linha do orçamento (pela chave da linha): vale para a versão vigente,
+   * para as próximas versões importadas e para os QCs em rascunho. null volta ao IP da planilha.
+   */
+  setLinePlanning(workId: string, lineKey: string, planning: { code: string; description: string | null } | null): Promise<number>
 }
 
 export interface CompetitionRepository {
   list(filter: { workId?: string; status?: CompetitionStatus }): Promise<CompetitionListItemDTO[]>
   nextCode(workId: string): Promise<string>
-  create(data: NewCompetition, actorId: string): Promise<{ competitionId: string; revisionId: string }>
+  create(data: NewCompetition, actorId: string): Promise<{ competitionId: string; revisionId: string; referenceIds: string[] }>
   getData(competitionId: string, revisionId?: string): Promise<CompetitionData | null>
   getRevisionRef(revisionId: string): Promise<{ competitionId: string; workId: string; status: RevisionStatus; number: number; frozenAt: string | null } | null>
   updateCompetition(id: string, patch: { engineeringOwnerId?: string | null; procurementOwnerId?: string | null; status?: CompetitionStatus; currentRevisionId?: string }): Promise<void>
@@ -157,12 +183,18 @@ export interface CompetitionRepository {
   upsertPrices(revisionId: string, prices: { competitionSupplierId: string; itemId: string; unitPrice: string | null; notes?: string | null }[]): Promise<void>
   persistComputed(revisionId: string, computed: ComputedPersistence): Promise<void>
   cloneRevision(revisionId: string, reason: string): Promise<string>
-  /** Inclui itens (com vínculos) numa revisão existente */
-  addItems(revisionId: string, items: AggregatedInput[]): Promise<string[]>
-  /** Remove um item (preços e vínculos juntos) */
+  /** Inclui insumos referência (com suas linhas do orçamento) numa revisão existente */
+  addReferences(revisionId: string, references: AggregatedInput[]): Promise<string[]>
+  /** Remove um insumo referência (linhas e ligações com os insumos do mapa juntas) */
+  removeReference(referenceId: string): Promise<void>
+  /** Substitui as linhas do orçamento de um insumo referência */
+  setReferenceLinks(revisionId: string, referenceId: string, links: NewLink[]): Promise<void>
+  /** Inclui insumos do mapa (reais), já ligados às referências */
+  addItems(revisionId: string, items: NewQcItem[]): Promise<string[]>
+  /** Substitui as referências de um insumo do mapa */
+  setItemReferences(revisionId: string, itemId: string, referenceIds: string[]): Promise<void>
+  /** Remove um insumo do mapa (preços e ligações juntos) */
   removeItem(itemId: string): Promise<void>
-  /** Substitui os vínculos de planejamento de um item */
-  setItemLinks(revisionId: string, itemId: string, links: NewLink[]): Promise<void>
   /** Revisões efetivas e compromissos por vínculo de todas as concorrências da obra */
   workCommitments(workId: string): Promise<WorkCommitments>
   setRevisionStatus(revisionId: string, change: RevisionStatusChange): Promise<void>
@@ -243,6 +275,8 @@ export interface NewContractItem {
   pctMaterial: string
   pctEquipment: string
   allocations: { packageCode: string | null; quantity: string }[]
+  /** Insumos referência usados no QC (para a solicitação mostrar) */
+  references: ContractItemReferenceDTO[]
 }
 
 export interface NewContractRequest {

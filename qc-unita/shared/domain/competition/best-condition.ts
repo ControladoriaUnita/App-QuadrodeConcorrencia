@@ -29,7 +29,7 @@ export function lineTotal(unitPrice: Decimal, quantity: Decimal): Decimal {
 }
 
 export function budgetTotalOf(item: QcItem): Decimal {
-  return lineTotal(item.budgetUnitCost, item.budgetQuantity)
+  return item.referenceBudget ?? lineTotal(item.budgetUnitCost, item.budgetQuantity)
 }
 
 function isEligible(s: QcSupplier) {

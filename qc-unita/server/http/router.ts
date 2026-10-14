@@ -15,7 +15,10 @@ import {
   overrideSchema,
   addLinesSchema,
   budgetImportSchema,
-  setItemLinksSchema,
+  setReferenceLinesSchema,
+  addQcItemSchema,
+  setItemReferencesSchema,
+  setLinePlanningSchema,
   updateItemSchema,
   updateRevisionSchema,
   updateSupplierTermsSchema,
@@ -91,6 +94,11 @@ route('POST', '/works/:id/budget-sheet/refresh', async ({ repos, ctx, params, bo
   workSetup.refreshSheetBudget(repos, getBudgetSheetSource(), ctx, parse(uuidParam, params.id), parse(refreshSheetBudgetSchema, await body())))
 route('GET', '/works/:id/overview', async ({ repos, ctx, params }) => works.getWorkOverview(repos, ctx, parse(uuidParam, params.id)))
 route('GET', '/works/:id/packages', async ({ repos, ctx, params }) => catalog.listPackages(repos, ctx, parse(uuidParam, params.id)))
+// IPs (vínculos de planejamento) e insumos da obra: UAU, ou o orçamento importado como alternativa
+route('GET', '/works/:id/planning-codes', async ({ repos, ctx, params }) => works.listPlanningCodes(repos, getErpProvider(), ctx, parse(uuidParam, params.id)))
+route('GET', '/works/:id/work-materials', async ({ repos, ctx, params }) => works.listWorkMaterials(repos, getErpProvider(), ctx, parse(uuidParam, params.id)))
+route('PUT', '/works/:id/budget-lines/planning', async ({ repos, ctx, params, body }) =>
+  works.setLinePlanning(repos, ctx, parse(uuidParam, params.id), parse(setLinePlanningSchema, await body())))
 route('GET', '/suppliers', async ({ repos, ctx, url }) => catalog.listSuppliers(repos, ctx, url.searchParams.get('search') ?? undefined))
 route('GET', '/contract-types', async ({ repos }) => catalog.listContractTypes(repos))
 
@@ -113,13 +121,25 @@ route('PATCH', '/revisions/:rid/items/:itemId', async ({ repos, ctx, params, bod
   await qc.updateItem(repos, ctx, parse(uuidParam, params.rid), parse(uuidParam, params.itemId), parse(updateItemSchema, await body()))
   return { ok: true }
 })
-route('PUT', '/revisions/:rid/items/:itemId/links', async ({ repos, ctx, params, body }) => {
-  await qc.setItemLinks(repos, ctx, parse(uuidParam, params.rid), parse(uuidParam, params.itemId), parse(setItemLinksSchema, await body()))
+// Insumos referência (linhas do orçamento puxadas) e insumos do mapa ligados a elas
+route('PUT', '/revisions/:rid/references/:refId/lines', async ({ repos, ctx, params, body }) => {
+  await qc.setReferenceLines(repos, ctx, parse(uuidParam, params.rid), parse(uuidParam, params.refId), parse(setReferenceLinesSchema, await body()))
+  return { ok: true }
+})
+route('DELETE', '/revisions/:rid/references/:refId', async ({ repos, ctx, params }) => {
+  await qc.removeReference(repos, ctx, parse(uuidParam, params.rid), parse(uuidParam, params.refId))
   return { ok: true }
 })
 route('POST', '/revisions/:rid/lines', async ({ repos, ctx, params, body }) => {
   const input = parse(addLinesSchema, await body())
-  return qc.addLines(repos, ctx, parse(uuidParam, params.rid), input.lineIds, input.shares)
+  return qc.addLines(repos, ctx, parse(uuidParam, params.rid), input.lineIds, input.shares, input.fillMap)
+})
+route('POST', '/revisions/:rid/items', async ({ repos, ctx, params, body }) =>
+  qc.addQcItem(repos, ctx, parse(uuidParam, params.rid), parse(addQcItemSchema, await body())), 201)
+route('POST', '/revisions/:rid/items/fill-from-references', async ({ repos, ctx, params }) => qc.fillFromReferences(repos, ctx, parse(uuidParam, params.rid)))
+route('PUT', '/revisions/:rid/items/:itemId/references', async ({ repos, ctx, params, body }) => {
+  await qc.setItemReferences(repos, ctx, parse(uuidParam, params.rid), parse(uuidParam, params.itemId), parse(setItemReferencesSchema, await body()).referenceIds)
+  return { ok: true }
 })
 route('DELETE', '/revisions/:rid/items/:itemId', async ({ repos, ctx, params }) => {
   await qc.removeItem(repos, ctx, parse(uuidParam, params.rid), parse(uuidParam, params.itemId))

@@ -134,10 +134,10 @@ describe.runIf(RUN)('Supabase repositories (integração)', () => {
 
     // rev01 (rascunho) aceita reescrever vínculos; rev00 congelada não
     const rev1 = detail.revision.id
-    const item = detail.items[0]!
-    const link = detail.links.find((l) => l.itemId === item.id)!
-    await qc.setItemLinks(s.repos, s.ctx, rev1, item.id, { links: [{ activityItemId: link.activityItemId!, quantity: item.quantity }] })
-    await expect(s.repos.competitions.setItemLinks(revisionId, (await s.repos.competitions.getData(competitionId, revisionId))!.items[0]!.id, [])).rejects.toThrow(/QC_REVISION_FROZEN/)
+    const ref = detail.references[0]!
+    const link = detail.links.find((l) => l.referenceId === ref.id)!
+    await qc.setReferenceLines(s.repos, s.ctx, rev1, ref.id, { links: [{ activityItemId: link.activityItemId!, quantity: link.quantity }] })
+    await expect(s.repos.competitions.setReferenceLinks(revisionId, (await s.repos.competitions.getData(competitionId, revisionId))!.references[0]!.id, [])).rejects.toThrow(/QC_REVISION_FROZEN/)
   })
 
   it('orçamento linha a linha: QC com linhas de outro IP e sincronização preserva linhas vinculadas', async () => {
@@ -146,11 +146,11 @@ describe.runIf(RUN)('Supabase repositories (integração)', () => {
     const lines = await works.listBudgetLinesUsage(s.repos, s.ctx, detail.competition.workId, { packages: ['IP00157'] })
     expect(lines.length).toBeGreaterThan(2)
     const r = await qc.addLines(s.repos, s.ctx, detail.revision.id, lines.slice(0, 2).map((l) => l.id))
-    expect(r.createdItems + r.mergedItems).toBeGreaterThan(0)
+    expect(r.createdReferences + r.mergedReferences).toBeGreaterThan(0)
     // % da linha: 50% puxa metade da verba e grava budget_share/budget_value
     const d2 = await qc.getCompetition(s.repos, s.ctx, competitionId)
     const lk = d2.links.find((l) => l.lineKey === lines[0]!.lineKey)!
-    await qc.setItemLinks(s.repos, s.ctx, d2.revision.id, lk.itemId, { links: [{ activityItemId: lk.activityItemId!, share: '0.5' }] })
+    await qc.setReferenceLines(s.repos, s.ctx, d2.revision.id, lk.referenceId, { links: [{ activityItemId: lk.activityItemId!, share: '0.5' }] })
     // (a rev01 é rascunho; o consumo da obra segue a rev00 aprovada, então conferimos no próprio QC)
     const half = (await qc.getCompetition(s.repos, s.ctx, competitionId)).links.find((l) => l.lineKey === lines[0]!.lineKey)!
     expect(half.share).toBe('0.500000')

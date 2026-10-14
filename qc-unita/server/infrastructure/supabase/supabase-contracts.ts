@@ -29,7 +29,7 @@ const HEADER = `id, code, status, start_on, end_on, total_amount::text, pct_mate
   supplier:suppliers!supplier_id(${PARTY}),
   second:suppliers!second_supplier_id(${PARTY})`
 const ITEM = `id, competition_item_id, material_id, code, description, specification, unit, quantity::text, unit_price::text,
-  pct_retention::text, pct_material::text, pct_equipment::text, sort_order,
+  pct_retention::text, pct_material::text, pct_equipment::text, sort_order, "references",
   contract_item_allocations(package_code, location_code, quantity::text)`
 const ADDENDUM = `id, kind, number, reason, requested_on, new_end_on, status, total_delta::text, submitted_at, decided_at, decided_by,
   decision_comment, created_at,
@@ -145,6 +145,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
             quantity: a.quantity as string,
             amount: lineTotal(unitPrice, Decimal.from(a.quantity as string)).toDb(),
           })),
+          references: (i.references as ContractItemDTO['references']) ?? [],
         }
       })
 
@@ -236,6 +237,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
             contract_request_id: cr.id, competition_item_id: i.competitionItemId, material_id: i.materialId, code: i.code,
             description: i.description, specification: i.specification, unit: i.unit, quantity: i.quantity, unit_price: i.unitPrice,
             pct_retention: i.pctRetention, pct_material: i.pctMaterial, pct_equipment: i.pctEquipment, sort_order: idx,
+            references: i.references,
           })),
         ).select('id, sort_order')) as { id: string; sort_order: number }[]
         const allocations = d.items.flatMap((i, idx) => {

@@ -10,6 +10,7 @@ import {
   type ErpCompany,
   type ErpOperation,
   type ErpSupplier,
+  type ErpWorkMaterial,
   type ErpWorkOption,
 } from '../erp-provider'
 import { extractRows, uauError, UauClient, type UauConfig } from './uau-client'
@@ -32,6 +33,7 @@ export interface UauProviderOptions {
 const PEOPLE_ROUTE = 'Pessoas/ConsultarPessoasPorCondicao'
 const COMPANIES_ROUTE = 'Empresa/ObterEmpresasAtivas'
 const WORKS_ROUTE = 'Obras/ObterObrasAtivas'
+const WORK_MATERIALS_ROUTE = 'Orcamento/ConsultarInsumosPorChave'
 /** As listas mudam pouco: guardadas por alguns minutos na instância */
 const LIST_TTL_MS = 5 * 60 * 1000
 
@@ -102,6 +104,29 @@ export class UauERPProvider implements ERPProvider {
         .map((r) => ({ company: str(r.Empresa_obr), code: str(r.Cod_obr).toUpperCase(), name: str(r.Descr_obr) || str(r.Cod_obr) }))
         .filter((w) => w.company && w.code && !seen.has(`${w.company}|${w.code}`) && seen.add(`${w.company}|${w.code}`))
         .sort(byCompanyAndCode)
+    })
+  }
+
+  /**
+   * Insumos do orçamento da obra (Cod_ins · Descr_ins · CodUn_InsO · Categ_ins · Desc_cger), sem
+   * quantidade nem preço. ~2 s para ~640 insumos; os IPs são os de código "IP…".
+   */
+  listWorkMaterials(key: { company: string; work: string; budget: string }): Promise<ErpWorkMaterial[]> {
+    return this.cachedList(`materials|${key.company}|${key.work}|${key.budget}`, async () => {
+      const body = { empresa: Number(key.company), obra: key.work, orcamento: Number(key.budget), composicao: '' }
+      const res = await this.client.call(WORK_MATERIALS_ROUTE, body, { timeoutMs: 30_000 })
+      if (!res.ok) throw uauError(`A UAU respondeu HTTP ${res.status} ao listar os insumos da obra ${key.work}.${describe(res.data)}`)
+      const seen = new Set<string>()
+      return extractRows(res.data)
+        .map((r) => ({
+          code: str(r.Cod_ins).toUpperCase(),
+          description: str(r.Descr_ins),
+          unit: str(r.CodUn_InsO) || str(r.CodUn_UnIns),
+          category: str(r.Categ_ins) || null,
+          groupDescription: str(r.Desc_cger) || null,
+        }))
+        .filter((m) => m.code && !seen.has(m.code) && seen.add(m.code))
+        .sort((a, b) => a.code.localeCompare(b.code))
     })
   }
 

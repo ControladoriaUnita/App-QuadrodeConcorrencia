@@ -18,18 +18,17 @@ import { AuditPanel } from './AuditPanel'
 import { LinksPanel } from './LinksPanel'
 import { QcGrid } from './QcGrid'
 import { RevisionForm } from './RevisionForm'
-import { ScopePanel } from './ScopePanel'
 import { SuppliersPanel } from './SuppliersPanel'
 import { budgetTone, competitionStatus, revisionStatus } from './status'
 
-type TabKey = 'mapa' | 'vinculos' | 'dados' | 'escopo' | 'fornecedores' | 'anexos' | 'aprovacoes' | 'historico'
+type TabKey = 'vinculos' | 'mapa' | 'fornecedores' | 'dados' | 'anexos' | 'aprovacoes' | 'historico'
 const today = () => new Date().toISOString().slice(0, 10)
 
 export function CompetitionPage() {
   const { id = '' } = useParams()
   const [params, setParams] = useSearchParams()
   const revisionParam = params.get('rev') ?? undefined
-  const tab = (params.get('aba') as TabKey) ?? 'mapa'
+  const tab = (params.get('aba') as TabKey) ?? 'vinculos'
   const setTab = (k: TabKey) => setParams((p) => (p.set('aba', k), p), { replace: true })
 
   const q = useCompetition(id, revisionParam)
@@ -47,7 +46,7 @@ export function CompetitionPage() {
   const [revisionDialog, setRevisionDialog] = useState(false)
   const [reason, setReason] = useState('')
 
-  const anyError = [m.addLines, m.removeItem, m.setLinks, m.updateRevision, m.updateItem, m.addSupplier, m.updateSupplier, m.removeSupplier, m.upsertPrices, m.submit, m.decide, newRevision, createContract]
+  const anyError = [m.addLines, m.removeItem, m.removeReference, m.setReferenceLines, m.addItem, m.fillFromReferences, m.setItemReferences, m.updateRevision, m.updateItem, m.addSupplier, m.updateSupplier, m.removeSupplier, m.upsertPrices, m.submit, m.decide, newRevision, createContract]
     .map((x) => x.error)
     .find(Boolean) as ApiError | undefined
 
@@ -195,19 +194,15 @@ export function CompetitionPage() {
           value={tab}
           onChange={setTab}
           items={[
-            { key: 'mapa', label: 'Mapa de cotação', icon: <Table2 className="size-4" /> },
             {
               key: 'vinculos',
               label: 'Vínculos e insumos',
               icon: <Link2 className="size-4" />,
-              count: detail.items.filter((i) => {
-                const b = map.linkBalance.get(i.id)
-                return !b || b.count === 0 || !b.diff.isZero()
-              }).length || undefined,
+              count: detail.references.filter((r) => !map.referenceUsage.get(r.id)?.length).length || undefined,
             },
-            { key: 'dados', label: 'Dados do QC', icon: <ClipboardList className="size-4" /> },
-            { key: 'escopo', label: 'Escopo e distribuição', icon: <ClipboardList className="size-4" /> },
+            { key: 'mapa', label: 'Mapa de cotação', icon: <Table2 className="size-4" />, count: detail.items.length || undefined },
             { key: 'fornecedores', label: 'Fornecedores e condições', icon: <Users className="size-4" />, count: detail.suppliers.length },
+            { key: 'dados', label: 'Dados do QC', icon: <ClipboardList className="size-4" /> },
             { key: 'anexos', label: 'Anexos', icon: <Paperclip className="size-4" /> },
             { key: 'aprovacoes', label: 'Aprovações', icon: <ShieldCheck className="size-4" /> },
             { key: 'historico', label: 'Histórico', icon: <History className="size-4" /> },
@@ -220,20 +215,27 @@ export function CompetitionPage() {
           detail={detail}
           map={map}
           today={today()}
+          saving={m.addItem.isPending || m.setItemReferences.isPending || m.updateItem.isPending || m.fillFromReferences.isPending}
           onPrice={(competitionSupplierId, itemId, unitPrice) => m.upsertPrices.mutate({ prices: [{ competitionSupplierId, itemId, unitPrice }] })}
-          onQuantity={(itemId, quantity) => m.updateItem.mutate({ itemId, quantity })}
+          onUpdateItem={(itemId, patch) => m.updateItem.mutate({ itemId, ...patch })}
+          onAddItem={(input) => m.addItem.mutateAsync(input)}
+          onFill={() => m.fillFromReferences.mutate()}
+          onSaveItem={async (itemId, referenceIds, patch) => {
+            if (referenceIds) await m.setItemReferences.mutateAsync({ itemId, referenceIds })
+            if (patch) await m.updateItem.mutateAsync({ itemId, ...patch })
+          }}
+          onRemoveItem={(itemId) => m.removeItem.mutate(itemId)}
         />
       )}
       {tab === 'vinculos' && (
         <LinksPanel
           detail={detail}
           map={map}
-          saving={m.setLinks.isPending || m.removeItem.isPending || m.updateItem.isPending}
+          saving={m.setReferenceLines.isPending || m.removeReference.isPending}
           adding={m.addLines.isPending}
-          onSave={(itemId, links) => m.setLinks.mutate({ itemId, links })}
-          onAddLines={(selection) => m.addLines.mutateAsync(selection)}
-          onRemoveItem={(itemId) => m.removeItem.mutate(itemId)}
-          onItemQuantity={(itemId, quantity) => m.updateItem.mutate({ itemId, quantity })}
+          onSaveLines={(referenceId, links) => m.setReferenceLines.mutate({ referenceId, links })}
+          onAddLines={(selection, fillMap) => m.addLines.mutateAsync({ selection, fillMap })}
+          onRemoveReference={(referenceId) => m.removeReference.mutate(referenceId)}
         />
       )}
       {tab === 'anexos' && (
@@ -247,7 +249,6 @@ export function CompetitionPage() {
         />
       )}
       {tab === 'dados' && <RevisionForm detail={detail} map={map} saving={m.updateRevision.isPending} onSave={(v) => m.updateRevision.mutate(v)} />}
-      {tab === 'escopo' && <ScopePanel detail={detail} map={map} onUpdate={(itemId, patch) => m.updateItem.mutate({ itemId, ...patch })} />}
       {tab === 'fornecedores' && (
         <SuppliersPanel
           detail={detail}
@@ -300,7 +301,7 @@ export function CompetitionPage() {
                 const { revisionId } = await newRevision.mutateAsync(reason.trim())
                 setRevisionDialog(false)
                 setReason('')
-                setParams((p) => (p.set('rev', revisionId), p.set('aba', 'mapa'), p))
+                setParams((p) => (p.set('rev', revisionId), p.set('aba', 'vinculos'), p))
               }}
             >
               Criar revisão

@@ -111,6 +111,11 @@ async function seed(db: MemoryDb) {
     const { repos, ctx } = await load(DEMO_USERS[0].id, 'erp_sync')
     await syncFromErp(repos, new MockERPProvider(), ctx, { scope: 'all' })
   }
+  // "Sem Fornecedor" para quadros internos (no Supabase vem da migration 018)
+  db.put('suppliers', {
+    id: '00000000-0000-4000-8000-00000000f000', legalName: 'Sem Fornecedor', tradeName: 'Sem Fornecedor', taxId: '00000000000000',
+    active: true, isPlaceholder: true, source: 'manual', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  })
 
   const [admin, procurement, engineering, manager, director] = DEMO_USERS
   const s = await load(procurement.id)

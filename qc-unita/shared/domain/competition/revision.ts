@@ -89,11 +89,9 @@ export function validateForSubmission(input: {
   items: QcItem[]
   suppliers: QcSupplier[]
   best: BestCondition[]
-  minSuppliers?: number
   today?: string // yyyy-mm-dd
 }): ValidationIssue[] {
   const { revision: r, items, suppliers, best } = input
-  const minSuppliers = input.minSuppliers ?? 3
   const issues: ValidationIssue[] = []
   const req = (cond: unknown, field: string, message: string) => {
     if (!cond) issues.push({ field, message })
@@ -121,12 +119,9 @@ export function validateForSubmission(input: {
     }
   }
 
+  // Sem mínimo de fornecedores: quadros internos usam só o "Sem Fornecedor"
   const participating = suppliers.filter((s) => s.status !== 'declined' && s.status !== 'disqualified')
-  req(
-    participating.length >= minSuppliers,
-    'suppliers',
-    `São necessários ao menos ${minSuppliers} fornecedores participantes (há ${participating.length}).`,
-  )
+  req(participating.length > 0, 'suppliers', 'Inclua ao menos um fornecedor participante (ou o "Sem Fornecedor").')
 
   const winner = suppliers.find((s) => s.supplierId === r.winnerSupplierId)
   if (r.winnerSupplierId && !winner) {

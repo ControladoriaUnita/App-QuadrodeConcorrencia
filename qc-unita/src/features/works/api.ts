@@ -5,7 +5,11 @@ import type {
   BudgetStructureDTO,
   CreateWorkFromUauInput,
   CreateWorkInput,
+  PlanningCodeDTO,
   RefreshSheetBudgetInput,
+  SetLinePlanningInput,
+  WorkListDTO,
+  WorkMaterialDTO,
   WorkOverviewDTO,
   WorkSetupOptionsDTO,
 } from '@shared/contracts'
@@ -40,6 +44,33 @@ export const useBudgetStructure = (workId: string, enabled = true) =>
     enabled: !!workId && enabled,
     staleTime: 60_000,
   })
+
+/** Vínculos de planejamento (IPs) da obra: UAU, ou o orçamento importado */
+export const usePlanningCodes = (workId: string, enabled = true) =>
+  useQuery({
+    queryKey: ['planning-codes', workId],
+    queryFn: () => api<WorkListDTO<PlanningCodeDTO>>(`/works/${workId}/planning-codes`),
+    enabled: !!workId && enabled,
+    staleTime: 5 * 60_000,
+  })
+
+/** Insumos da obra (para criar insumos no mapa): UAU, ou o orçamento importado */
+export const useWorkMaterials = (workId: string, enabled = true) =>
+  useQuery({
+    queryKey: ['work-materials', workId],
+    queryFn: () => api<WorkListDTO<WorkMaterialDTO>>(`/works/${workId}/work-materials`),
+    enabled: !!workId && enabled,
+    staleTime: 5 * 60_000,
+  })
+
+/** IP escolhido à mão para uma linha do orçamento */
+export function useSetLinePlanning(workId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: SetLinePlanningInput) => api<{ changed: number }>(`/works/${workId}/budget-lines/planning`, { method: 'PUT', body: input }),
+    onSuccess: () => BUDGET_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
 
 /** Tudo o que depende do orçamento vigente da obra */
 const BUDGET_KEYS = ['works', 'work-overview', 'budget-lines', 'budget-structure', 'packages', 'competition']

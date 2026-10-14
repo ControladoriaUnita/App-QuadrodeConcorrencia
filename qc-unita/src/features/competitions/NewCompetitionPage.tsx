@@ -61,7 +61,7 @@ export function NewCompetitionPage() {
       lineIds: [...selection.keys()],
       lineShares: Object.fromEntries(selection),
     })
-    navigate(`${workPath.competition(workId, r.competitionId)}?aba=fornecedores`)
+    navigate(`${workPath.competition(workId, r.competitionId)}?aba=vinculos`)
   }
 
   return (

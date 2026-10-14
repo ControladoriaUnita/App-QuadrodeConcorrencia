@@ -5,7 +5,9 @@
  *  - A solicitação nasce da revisão APROVADA do QC, com a empresa vencedora indicada.
  *  - Entram os itens com quantidade > 0 que a vencedora cotou, ao preço dela (R$ TOTAL = quant. × unit., 4 casas).
  *    Itens que a vencedora não cotou ficam de fora e são informados (exigiriam outro contrato).
- *  - Vínculos (IP · Qtd · Valor) vêm dos vínculos de planejamento do item; valor = quantidade × R$ unitário.
+ *  - Vínculos (IP · Qtd · Valor): IP manual do item ou herdados das linhas dos insumos referência
+ *    (pela verba de cada linha); valor = quantidade × R$ unitário.
+ *  - Cada item leva os insumos referência usados (código, IPs, verba).
  *  - Distribuição (§1.6) ponderada pelo valor contratado de cada item.
  *  - Aditivos e distratos: ver ./addendum.ts.
  */
@@ -36,6 +38,15 @@ export interface DraftContractItem {
   pctMaterial: Decimal
   pctEquipment: Decimal
   allocations: DraftAllocation[]
+  references: DraftReference[]
+}
+
+export interface DraftReference {
+  code: string
+  description: string
+  unit: string
+  packageCodes: string[]
+  budget: Decimal
 }
 
 export interface ContractDraft {
@@ -57,6 +68,7 @@ export function buildContractDraft(source: QcMapSource, map: QcMap): ContractDra
       .map((p) => [p.itemId, p.unitPrice as Decimal]),
   )
   const dto = new Map(source.items.map((i) => [i.id, i]))
+  const refById = new Map((source.references ?? []).map((r) => [r.id, r]))
   const items: DraftContractItem[] = []
   const excluded: ContractDraft['excluded'] = []
 
@@ -67,14 +79,15 @@ export function buildContractDraft(source: QcMapSource, map: QcMap): ContractDra
       excluded.push({ itemId: i.id, code: i.code, description: i.description })
       continue
     }
-    const byPackage = new Map<string, DraftAllocation>()
-    for (const l of source.links.filter((x) => x.itemId === i.id)) {
-      const k = l.packageCode ?? ''
-      const a = byPackage.get(k) ?? { packageCode: l.packageCode, quantity: ZERO }
-      a.quantity = a.quantity.plus(l.quantity)
-      byPackage.set(k, a)
-    }
+    const allocations = (map.allocationsByItem.get(i.id) ?? []).map((a) => ({ packageCode: a.packageCode, quantity: a.quantity }))
     const raw = dto.get(i.id)!
+    const references = (raw.referenceIds ?? []).map((rid) => refById.get(rid)).filter((r): r is NonNullable<typeof r> => !!r).map((r) => ({
+      code: r.code,
+      description: r.description,
+      unit: r.unit,
+      packageCodes: [...new Set(source.links.filter((l) => l.referenceId === r.id).map((l) => l.packageCode).filter((p): p is string => !!p))].sort(),
+      budget: map.referenceBudget.get(r.id) ?? ZERO,
+    }))
     items.push({
       competitionItemId: i.id,
       materialId: raw.materialId,
@@ -88,7 +101,8 @@ export function buildContractDraft(source: QcMapSource, map: QcMap): ContractDra
       pctRetention: i.pctRetention,
       pctMaterial: i.pctMaterial,
       pctEquipment: i.pctEquipment,
-      allocations: [...byPackage.values()].sort((a, b) => (a.packageCode ?? '').localeCompare(b.packageCode ?? '')),
+      allocations,
+      references,
     })
   }
 
