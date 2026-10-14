@@ -350,15 +350,18 @@ function ReferencesView({
                           <p className="font-medium">{l.packageCode ?? 'Sem IP'}</p>
                           <p className="max-w-44 truncate text-[11px] leading-4 text-text-muted" title={l.packageDescription ?? undefined}>{l.packageDescription ?? EMPTY}</p>
                         </td>
-                        <td className={cn(td, 'max-w-80')}>
-                          {line ? (
-                            <>
-                              <p className="truncate" title={line.activityDescription}>{line.activityWbs} · {line.activityDescription}</p>
-                              <p className="text-[11px] leading-4 text-text-muted">{line.code} · {line.description}</p>
-                            </>
-                          ) : (
-                            <p className="text-xs text-warning">Linha não existe no orçamento vigente ({l.lineKey ?? 'sem chave'})</p>
-                          )}
+                        <td className={td}>
+                          {/* Largura limitada no bloco (a célula sozinha não segura texto em linha única) */}
+                          <div className="w-80 min-w-0">
+                            {line ? (
+                              <>
+                                <p className="truncate" title={`${line.activityWbs} · ${line.activityDescription}`}>{line.activityWbs} · {line.activityDescription}</p>
+                                <p className="truncate text-[11px] leading-4 text-text-muted" title={`${line.code} · ${line.description}`}>{line.code} · {line.description}</p>
+                              </>
+                            ) : (
+                              <p className="text-xs whitespace-normal text-warning">Linha não existe no orçamento vigente ({l.lineKey ?? 'sem chave'})</p>
+                            )}
+                          </div>
                         </td>
                         <td className={cn(td, 'text-right whitespace-nowrap')}>
                           {line ? (

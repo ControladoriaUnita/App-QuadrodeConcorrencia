@@ -180,7 +180,7 @@ route('GET', '/contracts', async ({ repos, ctx, url }) =>
 )
 route('POST', '/contracts', async ({ repos, ctx, body }) =>
   contracts.createContractRequest(repos, ctx, parse(createContractRequestSchema, await body()).competitionId), 201)
-route('GET', '/contracts/:id', async ({ repos, ctx, params }) => contracts.getContract(repos, ctx, parse(uuidParam, params.id)))
+route('GET', '/contracts/:id', async ({ repos, ctx, params }) => contracts.getContract(repos, getErpProvider(), ctx, parse(uuidParam, params.id)))
 route('PATCH', '/contracts/:id', async ({ repos, ctx, params, body }) => {
   await contracts.updateContractRequest(repos, ctx, parse(uuidParam, params.id), parse(updateContractRequestSchema, await body()))
   return { ok: true }

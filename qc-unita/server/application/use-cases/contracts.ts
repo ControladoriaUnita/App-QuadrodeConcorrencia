@@ -15,7 +15,7 @@ import { Decimal } from '../../../shared/domain/decimal'
 import { buildQcMap } from '../../../shared/domain/competition/qc-map'
 import { DomainError } from '../../../shared/domain/competition/revision'
 import { buildContractDraft, contractDistribution, validateContractRequest } from '../../../shared/domain/contract/contract-request'
-import type { ERPProvider } from '../../infrastructure/erp/erp-provider'
+import { erpSupports, type ERPProvider } from '../../infrastructure/erp/erp-provider'
 import { AppError, can, notFound, requirePermission, type Actor, type RequestContext } from '../context'
 import type { ContractData, Repositories } from '../ports'
 
@@ -58,7 +58,7 @@ export async function listContracts(repos: Repositories, ctx: RequestContext, fi
   return all.filter((c) => can(ctx.actor, 'contract.read', c.workId))
 }
 
-export async function getContract(repos: Repositories, ctx: RequestContext, id: string): Promise<ContractRequestDTO> {
+export async function getContract(repos: Repositories, erp: ERPProvider, ctx: RequestContext, id: string): Promise<ContractRequestDTO> {
   const c = await loadContract(repos, ctx, id)
   const workId = c.work.id
   const manage = can(ctx.actor, 'contract.manage', workId)
@@ -74,7 +74,8 @@ export async function getContract(repos: Repositories, ctx: RequestContext, id: 
       edit: manage && c.status === 'draft',
       submit: manage && c.status === 'draft',
       cancel: manage && (c.status === 'draft' || c.status === 'submitted'),
-      pushToErp: manage && c.status === 'submitted',
+      // Só quando o ERP configurado sabe criar contrato (a API da UAU não tem essa rota)
+      pushToErp: manage && c.status === 'submitted' && erpSupports(erp, 'pushContract'),
       sign: manage && (c.status === 'submitted' || c.status === 'sent_to_erp'),
       addendum: manage && ['submitted', 'sent_to_erp', 'signed'].includes(c.status) && !openAddendum,
       decideAddendum: canDecideAddendum(ctx.actor, workId) && c.addenda.some((a) => a.status === 'submitted'),
@@ -199,6 +200,9 @@ export async function cancelContractRequest(repos: Repositories, ctx: RequestCon
 export async function pushContractToErp(repos: Repositories, erp: ERPProvider, ctx: RequestContext, id: string) {
   const c = await loadContract(repos, ctx, id, 'contract.manage')
   assertStatus(c, ['submitted'], 'Somente solicitações enviadas podem ir para o ERP.')
+  if (!erpSupports(erp, 'pushContract')) {
+    throw new AppError('ERP_PUSH_UNAVAILABLE', `O ERP configurado (${erp.name}) não oferece criação de contrato pela API. Lance o contrato no ERP e registre a assinatura com o número dele.`, 501)
+  }
   if (!c.work.erpId || !c.supplier.erpId) {
     throw new DomainError('CONTRACT_ERP_IDS', 'Obra ou fornecedor sem código no ERP. Sincronize os cadastros antes de enviar.')
   }

@@ -34,8 +34,12 @@ type Depth = 'items' | 'compositions' | 'all'
 const ROW_H = 34
 const OVERSCAN = 12
 // Classes literais (o Tailwind só gera o que encontra escrito por extenso)
-const COLS = 'grid-cols-[6.5rem_6.5rem_minmax(20rem,1fr)_4.5rem_7rem_7.5rem_8.5rem_7rem_9rem_10rem_7.5rem]'
-const SELECT_COLS = 'grid-cols-[2.25rem_6.5rem_6.5rem_minmax(18rem,1fr)_4.5rem_7rem_7.5rem_8.5rem_7rem_9rem_10rem_7.5rem_6.5rem_8.5rem]'
+// Colunas: Item · Código · Descrição · Unid · Quantidade · Custo Unit. · Custo Total · Vínculo PL · Classificação · Comprometido · Livre
+// (larguras pelo conteúdo real: códigos inteiros; a descrição fica com o espaço que sobra)
+const COLS = 'grid-cols-[8.75rem_5.75rem_minmax(16rem,1fr)_4rem_6.5rem_6.75rem_7.5rem_6.5rem_8rem_8.5rem_6.75rem]'
+const SELECT_COLS = 'grid-cols-[2.25rem_8.75rem_5.75rem_minmax(14rem,1fr)_4rem_6.5rem_6.75rem_7.5rem_6.5rem_8rem_8.5rem_6.75rem_6.5rem_8.5rem]'
+/** Recuo de cada nível da EAP na coluna Item */
+const indentOf = (level: number) => ({ paddingLeft: `${0.5 + level * 0.6}rem` })
 const tone = { contracted: 'success', in_approval: 'warning', quoting: 'primary' } as const
 /** Colunas do seletor fixas à direita (como "congelar painéis"): sempre visíveis ao rolar para o lado */
 const PIN_SHARE = 'sticky right-[8.5rem] z-[1] grid h-full items-center bg-primary-soft shadow-[-1px_0_0_var(--color-border)]'
@@ -342,7 +346,7 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
             {([
               ['item', 'Item'], ['code', 'Código'], ['description', 'Descrição'], ['unit', 'Unid'], ['quantity', 'Quantidade'],
               ['unitCost', 'Custo Unit.'], ['total', 'Custo Total'], ['package', 'Vínculo PL'], ['classification', 'Classificação'],
-              ['usage', 'Comprometido em'], ['free', 'Livre'],
+              ['usage', 'Comprometido'], ['free', 'Livre'],
             ] as [ColKey, string][]).map(([k, label]) => {
               const numeric = NUMERIC.includes(k)
               return (
@@ -415,7 +419,7 @@ function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning, onRenam
   onRenameGroup?: (wbs: string, description: string | null) => Promise<unknown>
 }) {
   const cell = 'min-w-0 truncate px-2'
-  const indent = { paddingLeft: `${0.5 + r.level * 0.9}rem` }
+  const indent = indentOf(r.level)
   const chevron = (
     <button type="button" onClick={onToggle} aria-expanded={open} aria-label={open ? 'Recolher' : 'Expandir'} className="mr-1 shrink-0 rounded p-0.5 text-ink-500 hover:bg-ink-200">
       {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
@@ -447,7 +451,7 @@ function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning, onRenam
     return (
       <div role="row" style={style} className={cn(base, 'font-semibold', r.level === 0 ? 'bg-ink-100 text-text' : 'bg-ink-50 text-ink-800')}>
         {lead}
-        <span className={cn(cell, 'flex items-center')} style={indent}>{chevron}{r.wbs}</span>
+        <span className={cn(cell, 'flex items-center')} style={indent}>{chevron}<span className="text-xs tabular-nums">{r.wbs}</span></span>
         <span className={cn(cell, 'text-xs text-text-muted')}>Item</span>
         {onRenameGroup ? <GroupName wbs={r.wbs} name={r.description} onRename={onRenameGroup} /> : <span className={cell} title={r.description}>{r.description}</span>}
         <span />
@@ -468,7 +472,7 @@ function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning, onRenam
     return (
       <div role="row" style={style} className={cn(base, 'bg-surface font-medium text-text')}>
         {lead}
-        <span className={cn(cell, 'flex items-center')} style={indent}>{r.lines > 0 ? chevron : <span className="w-5" />}{r.wbs}</span>
+        <span className={cn(cell, 'flex items-center')} style={indent}>{r.lines > 0 ? chevron : <span className="w-5" />}<span className="text-xs tabular-nums">{r.wbs}</span></span>
         <span className={cn(cell, 'text-xs')}>{r.code ?? EMPTY}</span>
         <span className={cell} title={r.description}>{r.description}</span>
         <span className={cn(cell, 'text-xs')}>{r.unit ?? ''}</span>
@@ -494,7 +498,7 @@ function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning, onRenam
       className={cn(base, 'bg-surface text-ink-700 hover:bg-primary-soft/30', checked && 'bg-primary-soft/50', dimmed && 'opacity-55')}
     >
       {lead}
-      <span className={cn(cell, 'text-[11px] text-ink-400')} style={indent}>{l.activityWbs}</span>
+      <span />
       <span className={cn(cell, 'text-xs font-medium text-text')}>{l.code}</span>
       <span className={cn(cell, 'pl-5')} title={l.description}>{l.description}</span>
       <span className={cn(cell, 'text-xs')}>{l.unit}</span>
@@ -547,7 +551,7 @@ function AuxTreeRow({ r, style, base, lead, tail, chevron }: { r: AuxRow; style:
   return (
     <div role="row" style={style} className={cn(base, 'bg-ink-50/60 text-ink-800')}>
       {lead}
-      <span className={cn(cell, 'flex items-center gap-1')} style={{ paddingLeft: `${0.5 + r.level * 0.9}rem` }}>
+      <span className={cn(cell, 'flex items-center gap-1')} style={indentOf(r.level)}>
         {chevron}
         <Badge tone="neutral" className="px-1.5 text-[10px]" title="Composição auxiliar">AUX</Badge>
       </span>

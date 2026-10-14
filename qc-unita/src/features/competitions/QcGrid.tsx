@@ -34,7 +34,7 @@ interface Props {
   onRemoveItem: (itemId: string) => void
 }
 
-const th = 'sticky top-0 z-10 border-b border-border bg-ink-50 px-3 py-2 text-right text-xs font-semibold text-text-muted whitespace-nowrap'
+const th = 'border-b border-border bg-ink-50 px-3 py-2 text-right text-xs font-semibold text-text-muted whitespace-nowrap'
 const td = 'border-b border-border px-3 py-2 text-right whitespace-nowrap'
 const stickyFirst = 'sticky left-0 z-[5] bg-surface'
 const PCT = ['pctMaterial', 'pctEquipment', 'pctRetention'] as const
@@ -95,10 +95,11 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
 
       <div className="max-h-[calc(100dvh-10rem)] min-h-80 overflow-auto rounded-card border border-border bg-surface shadow-card">
         <table className="tabular w-full border-separate border-spacing-0 text-sm">
-          <thead>
+          {/* O cabeçalho inteiro fica fixo ao rolar: as duas linhas se encaixam sem deslocamento fixo */}
+          <thead className="sticky top-0 z-20">
             {/* Linha 1: grupos */}
             <tr>
-              <th rowSpan={2} className={cn(th, 'left-0 z-20 min-w-80 text-left')}>Insumo do mapa</th>
+              <th rowSpan={2} className={cn(th, 'sticky left-0 z-10 min-w-80 text-left')}>Insumo do mapa</th>
               <th rowSpan={2} className={cn(th, 'text-left')}>Un</th>
               <th rowSpan={2} className={cn(th, 'min-w-28')}>Quant.</th>
               {showDist && <th colSpan={5} className={cn(th, 'border-l text-center')}>Distribuição e escopo</th>}
@@ -128,23 +129,23 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
             <tr>
               {showDist && (
                 <>
-                  {PCT.map((k, i) => <th key={k} className={cn(th, 'top-[52px] w-20', i === 0 && 'border-l')}>{PCT_LABEL[k]}</th>)}
-                  <th className={cn(th, 'top-[52px] min-w-56 text-left')}>Especificação</th>
-                  <th className={cn(th, 'top-[52px] min-w-44 text-left')}>Obs. contratos</th>
+                  {PCT.map((k, i) => <th key={k} className={cn(th, 'w-20', i === 0 && 'border-l')}>{PCT_LABEL[k]}</th>)}
+                  <th className={cn(th, 'min-w-56 text-left')}>Especificação</th>
+                  <th className={cn(th, 'min-w-44 text-left')}>Obs. contratos</th>
                 </>
               )}
-              <th className={cn(th, 'top-[52px] border-l min-w-28')}>R$ unit.</th>
-              <th className={cn(th, 'top-[52px] min-w-32')}>R$ total</th>
+              <th className={cn(th, 'border-l min-w-28')}>R$ unit.</th>
+              <th className={cn(th, 'min-w-32')}>R$ total</th>
               {suppliers.map((s) => (
                 <Fragment key={s.id}>
-                  <th className={cn(th, 'top-[52px] border-l min-w-28')}>R$ unit.</th>
-                  <th className={cn(th, 'top-[52px] min-w-32')}>R$ total</th>
+                  <th className={cn(th, 'border-l min-w-28')}>R$ unit.</th>
+                  <th className={cn(th, 'min-w-32')}>R$ total</th>
                 </Fragment>
               ))}
-              <th className={cn(th, 'top-[52px] border-l min-w-32 text-left')}>Fornecedor</th>
-              <th className={cn(th, 'top-[52px] min-w-28')}>R$ unit.</th>
-              <th className={cn(th, 'top-[52px] min-w-32')}>R$ total</th>
-              <th className={cn(th, 'top-[52px] min-w-24')}>vs. orçado</th>
+              <th className={cn(th, 'border-l min-w-32 text-left')}>Fornecedor</th>
+              <th className={cn(th, 'min-w-28')}>R$ unit.</th>
+              <th className={cn(th, 'min-w-32')}>R$ total</th>
+              <th className={cn(th, 'min-w-24')}>vs. orçado</th>
             </tr>
           </thead>
 
