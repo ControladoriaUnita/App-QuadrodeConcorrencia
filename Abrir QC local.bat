@@ -6,7 +6,7 @@ cd /d "%~dp0qc-unita"
 set "BR=?"
 set "VER=?"
 for /f "delims=" %%b in ('git branch --show-current 2^>nul') do set "BR=%%b"
-for /f "delims=" %%v in ('git describe --tags --always 2^>nul') do set "VER=%%v"
+for /f "delims=" %%v in ('git describe --tags --abbrev=0 2^>nul') do set "VER=%%v"
 
 echo.
 echo   QC Unita - ambiente local
