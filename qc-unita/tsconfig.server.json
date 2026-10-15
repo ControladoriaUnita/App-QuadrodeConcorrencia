@@ -16,5 +16,5 @@
     "types": ["node"],
     "resolveJsonModule": true
   },
-  "include": ["api", "server", "shared", "vite.config.mts", "vitest.config.mts", "vitest.integration.config.mts", "dev"]
+  "include": ["api", "server", "shared", "vite.config.mts", "vitest.config.mts", "vitest.integration.config.mts", "dev", "e2e", "playwright.config.ts"]
 }

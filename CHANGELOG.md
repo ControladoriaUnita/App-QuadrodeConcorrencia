@@ -7,14 +7,16 @@ Cada versão é uma tag git (`v01`, `v02`…). Uma versão só vai para a produ�
 
 ## Testes de regressão
 
-O comando `npm run verificar`, rodado em `qc-unita`, checa tipos e cores, roda todos os testes e faz o build.
+O comando `npm run verificar`, rodado em `qc-unita`, checa tipos e cores, roda os testes de regras e de API (Vitest), roda os testes de tela (`npm run test:e2e`, Playwright no Edge) e faz o build.
+
+Os testes de tela ficam em `qc-unita/e2e`. Eles abrem o app inteiro no modo demonstração, com banco em memória e ERP simulado, e nunca tocam no Supabase nem na UAU. Cobrem obras (inclusive arquivar), orçamento e filtros, quadro de concorrências, QC (abas, mapa, preço, "Sem Fornecedor" vencedor), aprovações por alçada, contrato e aditivo, e nova concorrência. Um teste também falha se a página der erro de JavaScript, erro no console ou 5xx na API.
 - Toda versão precisa passar nele antes de ganhar a tag.
 - Todo bug corrigido ganha um teste que reproduz o problema: o teste falha antes da correção e passa depois.
 
 Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 1. A tag só é criada depois que o `verificar` passa.
 2. O hook `.githooks/pre-push` bloqueia o envio ao `main` se o `verificar` falhar. Ele é ativado com `git config core.hooksPath .githooks`.
-3. A Vercel roda o mesmo `verificar` como build. Se um teste falhar, a produção não é publicada.
+3. A Vercel roda `verificar:vercel` (tudo, menos os testes de tela, que precisam de navegador) como build. Se um teste falhar, a produção não é publicada.
 
 | Ambiente | Versão |
 |---|---|
@@ -25,6 +27,7 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 - Atalho `Abrir QC local.bat` para subir o app local.
 - Portão de regressão: `npm run verificar`, hook pre-push e build da Vercel.
+- Testes de tela (E2E) com Playwright: 20 testes dos fluxos principais.
 
 ## v02 — dev (2026-10-15)
 
