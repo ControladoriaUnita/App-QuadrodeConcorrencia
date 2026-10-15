@@ -1,0 +1,18 @@
+#!/bin/sh
+# Portão de regressão: nada chega ao main (produção) sem passar em
+# tipos, lint, testes e build. Ativar uma vez com:
+#   git config core.hooksPath .githooks
+
+raiz="$(git rev-parse --show-toplevel)"
+
+while read -r ref_local sha_local ref_remota sha_remota; do
+  if [ "$ref_remota" = "refs/heads/main" ]; then
+    echo "pre-push: verificando antes de enviar ao main (produção)..."
+    if ! npm --prefix "$raiz/qc-unita" run verificar; then
+      echo "pre-push: a verificação falhou. Envio ao main cancelado."
+      exit 1
+    fi
+  fi
+done
+
+exit 0

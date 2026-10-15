@@ -5,10 +5,26 @@
 
 Cada versão é uma tag git (`v01`, `v02`…). Uma versão só vai para a produção depois de liberada. O `main` avança até a tag liberada e é enviado ao GitHub com as tags.
 
+## Testes de regressão
+
+O comando `npm run verificar`, rodado em `qc-unita`, checa tipos e cores, roda todos os testes e faz o build.
+- Toda versão precisa passar nele antes de ganhar a tag.
+- Todo bug corrigido ganha um teste que reproduz o problema: o teste falha antes da correção e passa depois.
+
+Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
+1. A tag só é criada depois que o `verificar` passa.
+2. O hook `.githooks/pre-push` bloqueia o envio ao `main` se o `verificar` falhar. Ele é ativado com `git config core.hooksPath .githooks`.
+3. A Vercel roda o mesmo `verificar` como build. Se um teste falhar, a produção não é publicada.
+
 | Ambiente | Versão |
 |---|---|
 | produção | v01 |
 | dev | v02 |
+
+## v03 — em andamento
+
+- Atalho `Abrir QC local.bat` para subir o app local.
+- Portão de regressão: `npm run verificar`, hook pre-push e build da Vercel.
 
 ## v02 — dev (2026-10-15)
 
