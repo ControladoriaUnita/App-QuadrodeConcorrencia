@@ -20,10 +20,15 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v05 |
-| dev | v06 |
+| produção | v06 |
+| dev | v07 |
 
-## v06 — dev (2026-10-22)
+## v07 — dev (2026-10-22)
+
+- Botão **Tela cheia** no topo, no mesmo esquema da apresentação de obras (`toggleFullscreen`): o app ocupa a tela inteira; o mesmo botão (ou Esc) sai. Em telas menores aparece só o ícone, para as abas continuarem cabendo.
+- Manual: tela cheia e a aba De-para no mapa das telas.
+
+## v06 — produção (2026-10-22)
 
 - Concorrência só com o orçamento 100% completo: toda linha com vínculo de planejamento (IP do cadastro da UAU) e todo Item com nome. Enquanto faltar algo, o orçamento e a nova concorrência mostram o aviso "Orçamento incompleto" (quantas linhas sem IP e quais Itens sem nome), o botão Nova concorrência fica bloqueado e o servidor recusa a criação.
 - O IP não é mais preenchido com o código do item: linha sem IP no SharePoint, no de-para ou escolhido na obra fica sem IP (inclusive no indireto aberto).

@@ -1,8 +1,9 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Building2, LogOut } from 'lucide-react'
+import { Building2, LogOut, Maximize, Minimize } from 'lucide-react'
 import logoWhite from '@/assets/brand/logo-unita-white.png'
 import { Button } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
+import { toggleFullscreen, useIsFullscreen } from '@/lib/fullscreen'
 import { cn } from '@/utils/cn'
 import { useWorks } from '@/features/competitions/api'
 import { useCurrentWorkId, workPath } from '@/features/works/currentWork'
@@ -28,6 +29,7 @@ export function AppShell() {
   const works = useWorks()
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const fullscreen = useIsFullscreen()
   const known = works.data?.some((w) => w.id === workId)
   const wid = known ? workId : null
 
@@ -99,6 +101,18 @@ export function AppShell() {
           </nav>
 
           <div className="ml-auto flex shrink-0 items-center gap-3">
+            <Button
+              variant="inverse"
+              size="sm"
+              icon={fullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+              onClick={toggleFullscreen}
+              title={fullscreen ? 'Sair da tela cheia (Esc)' : 'Tela cheia'}
+              aria-label={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+              className="px-2 2xl:px-3"
+            >
+              {/* Texto só em telas largas: no resto o ícone basta e as abas continuam cabendo */}
+              <span className="hidden 2xl:inline">{fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}</span>
+            </Button>
             {demo && <DemoUserSwitcher />}
             {user && (
               <div className="hidden text-right leading-tight 2xl:block">
