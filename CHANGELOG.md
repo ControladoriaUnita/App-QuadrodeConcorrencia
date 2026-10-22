@@ -20,10 +20,10 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v01 |
-| dev | v02 |
+| produção | v03 |
+| dev | v03 |
 
-## v03 — em andamento
+## v03 — produção (2026-10-22)
 
 - Atalho `Abrir QC local.bat` para subir o app local.
 - Portão de regressão: `npm run verificar`, hook pre-push e build da Vercel.
@@ -33,7 +33,7 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 - Textos sem "planilha": "Atualizar dados", "Importar do SharePoint" etc. (telas, mensagens e manual).
 - Testes: 178 de regras/API e 22 de tela.
 
-## v02 — dev (2026-10-15)
+## v02 — produção (2026-10-15)
 
 - Insumos do mapa separados dos insumos referência (ligação N:N): IP herdado das referências e "Sem Fornecedor" como opção. Abas: Vínculos e insumos → Mapa → Fornecedores → Dados.
 - Orçamento:
