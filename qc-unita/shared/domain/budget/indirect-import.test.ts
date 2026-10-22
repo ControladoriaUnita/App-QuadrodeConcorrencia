@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import readXlsxFile from 'read-excel-file/node'
 import { describe, expect, it } from 'vitest'
 import type { BudgetImportInput } from '../../contracts'
-import { indirectMaterialCode, IndirectMismatchError, openIndirect, parseIndirectWorkbook, type WorkbookSheet } from './indirect-import'
+import { indirectKind, indirectMaterialCode, IndirectMismatchError, openIndirect, parseIndirectWorkbook, type WorkbookSheet } from './indirect-import'
 import { EMPTY_MAPPINGS, mappingResolver } from './mappings'
 import { EQUIPAMENTOS, SUMMARY, WORKBOOK } from './__fixtures__/indirect-workbook'
 
@@ -119,6 +119,32 @@ describe('abrir o indireto no orçamento', () => {
     expect(out.groups.map((g) => g.wbs)).toEqual(['01', '16'])
     expect(out.activities.some((a) => a.wbs === '16.01.01')).toBe(false)
     expect(out.lines.filter((l) => l.activityWbs.startsWith('16.01')).every((l) => l.activityWbs === '16.01')).toBe(true)
+  })
+
+  it('tipo de custo pela descrição da UAU e do arquivo', () => {
+    const uau = ['EQUIPAMENTOS - (INDIRETO)', 'INSTALAÇÕES DA OBRA - (INDIRETO)', 'SERVIÇOS TERCEIRIZADOS - (INDIRETO)', 'CONSUMOS PERMANENTES - (INDIRETO)',
+      'M.O.I (PJ) - (INDIRETO)', 'M.O.I (CLT) - (INDIRETO)', 'M.O.D - (INDIRETO)', 'TARIFAS - (INDIRETO)', 'LIGAÇÕES E HABITE-SE - (INDIRETO)']
+    const arquivo = ['EQUIPAMENTOS', 'INSTALAÇÃO DA OBRA', 'SERVIÇOS TERCEIRIZADOS', 'CONSUMOS PERMANENTES', 'MÃO DE OBRA INDIRETA - PJ',
+      'MÃO DE OBRA INDIRETA - CLT', 'MÃO DE OBRA DIRETA', 'TARIFAS', 'LIGAÇÕES ']
+    const kinds = ['equipamentos', 'instalacao', 'terceirizados', 'consumos', 'moi-pj', 'moi-clt', 'mod', 'tarifas', 'ligacoes']
+    expect(uau.map(indirectKind)).toEqual(kinds)
+    expect(arquivo.map(indirectKind)).toEqual(kinds)
+  })
+
+  it('bug de produção: na UAU o 16.05 é M.O.I (PJ) e o 16.06 é M.O.I (CLT) — cada aba vai para o item do mesmo tipo', () => {
+    const b = budget()
+    b.activities = [
+      ...b.activities.filter((a) => a.wbs !== '16.05'),
+      { wbs: '16.05', code: 'CPL00231', description: 'M.O.I (PJ) - (INDIRETO)', unit: 'VB', quantity: '1.0000', unitCost: '20000.0000' },
+      { wbs: '16.06', code: 'CPL00232', description: 'M.O.I (CLT) - (INDIRETO)', unit: 'VB', quantity: '1.0000', unitCost: '9000.0000' },
+    ]
+    b.lines = [...b.lines.filter((l) => l.activityWbs !== '16.05'), closed('16.05', '20000.0000', 'IP00490'), closed('16.06', '9000.0000', 'IP00491')]
+    const { budget: out, warnings } = openIndirect(b, indirect, mappingResolver(EMPTY_MAPPINGS))
+    const descr = (wbs: string) => out.lines.filter((l) => l.activityWbs === wbs).map((l) => out.materials.find((m) => m.code === l.materialCode)!.description)
+    expect(descr('16.05')).toEqual(['Engenheiro Pleno'])
+    expect(descr('16.06')).toEqual(['Almoxarife', 'Vale refeição (ADM)'])
+    expect(warnings.some((w) => /16\.0[56]/.test(w))).toBe(false)
+    expect(out.lines.some((l) => l.materialCode.startsWith('IP004'))).toBe(false)
   })
 
   it('arquivo de outra obra (nenhum item no orçamento) é recusado', () => {

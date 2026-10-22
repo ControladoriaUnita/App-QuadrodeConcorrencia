@@ -347,7 +347,13 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         return rows.map((r) => ({ packageCode: r.package_code, description: r.description, total: r.total, inputs: r.inputs }))
       },
       async listBudgetLines(budgetId, packages) {
-        const rows = must(await db.rpc('qc_budget_lines', { p_budget_id: budgetId, p_packages: packages?.length ? packages : null })) as Json[]
+        // PostgREST limita cada resposta (padrão 1.000 linhas): lê em páginas, na ordem da função
+        const rows: Json[] = []
+        for (let from = 0; ; from += 1000) {
+          const page = must(await db.rpc('qc_budget_lines', { p_budget_id: budgetId, p_packages: packages?.length ? packages : null }).range(from, from + 999)) as Json[]
+          rows.push(...page)
+          if (page.length < 1000) break
+        }
         return rows.map((r) => ({
           id: r.id as string, lineKey: r.line_key as string, activityWbs: r.activity_wbs as string, activityCode: (r.activity_code as string) ?? null,
           activityDescription: r.activity_description as string, materialId: r.material_id as string, code: r.code as string,

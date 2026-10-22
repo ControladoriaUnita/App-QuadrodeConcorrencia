@@ -190,6 +190,46 @@ export function indirectMaterialCode(description: string, unit: string): string 
 
 type BudgetParts = Pick<BudgetImportInput, 'groups' | 'activities' | 'lines' | 'materials'>
 
+/**
+ * Tipo de custo indireto pela descrição, para achar o item do orçamento: a UAU descreve os itens
+ * do indireto ("M.O.I (PJ) - (INDIRETO)", "INSTALAÇÕES DA OBRA - (INDIRETO)") e a numeração do
+ * arquivo pode não bater com a do orçamento (ex.: CLT e PJ trocados entre 16.05 e 16.06).
+ */
+export function indirectKind(description: string): string | null {
+  const d = descriptionKey(description).replace(/\./g, '')
+  const moi = /\bmoi\b|mao de obra indireta/.test(d)
+  if (moi) return /\bclt\b/.test(d) ? 'moi-clt' : /\bpj\b/.test(d) ? 'moi-pj' : 'moi'
+  if (/\bmod\b|mao de obra direta/.test(d)) return 'mod'
+  const kinds: [string, RegExp][] = [
+    ['equipamentos', /equipamento/], ['instalacao', /instalac/], ['terceirizados', /terceiriz/],
+    ['consumos', /consumo/], ['tarifas', /tarifa/], ['ligacoes', /ligac/],
+  ]
+  return kinds.find(([, re]) => re.test(d))?.[0] ?? null
+}
+
+/**
+ * Item do orçamento de cada item do indireto: o item irmão (mesmo pai, ex.: 16) cuja descrição é do
+ * mesmo tipo; sem um único item assim, o código do arquivo.
+ */
+function targetItems(budget: BudgetParts, items: IndirectItem[]): Map<IndirectItem, string> {
+  const parentOf = (wbs: string) => wbs.split('.').slice(0, -1).join('.')
+  const out = new Map<IndirectItem, string>()
+  const used = new Set<string>()
+  for (const item of items) {
+    const kind = indirectKind(item.description)
+    const parent = parentOf(item.wbs)
+    const matches = kind
+      ? budget.activities.filter((a) => parentOf(a.wbs) === parent && indirectKind(a.description) === kind).map((a) => a.wbs)
+      : []
+    const wbs = matches.length === 1 && !used.has(matches[0]!) ? matches[0]! : item.wbs
+    used.add(wbs)
+    out.set(item, wbs)
+  }
+  // Dois itens no mesmo código: volta à numeração do arquivo
+  if (new Set(out.values()).size < out.size) for (const item of items) out.set(item, item.wbs)
+  return out
+}
+
 /** O arquivo não é desta obra: nenhum item dele existe no orçamento. */
 export class IndirectMismatchError extends Error {}
 
@@ -200,13 +240,15 @@ const parentsOf = (wbs: string) => {
 }
 
 /**
- * Troca as linhas fechadas de cada item do indireto pelos insumos abertos. O item passa a ser uma
+ * Troca as linhas fechadas de cada item do indireto pelos insumos abertos (o item do orçamento é
+ * achado pelo tipo de custo da descrição; ver targetItems). O item passa a ser uma
  * composição com os insumos do arquivo (o que havia abaixo dele no orçamento sai). O IP de cada
  * insumo vem do de-para do indireto (pela descrição); sem ele, do de-para do Item; sem os dois, o
  * próprio item do orçamento.
  */
 export function openIndirect(budget: BudgetParts, indirect: IndirectBudget, resolver: MappingResolver): { budget: BudgetParts; warnings: string[] } {
-  const items = indirect.items.filter((i) => i.lines.length)
+  const targets = targetItems(budget, indirect.items.filter((i) => i.lines.length))
+  const items = [...targets].map(([item, wbs]) => ({ ...item, wbs }))
   const known = (wbs: string) => budget.activities.some((a) => under(a.wbs, wbs)) || budget.groups.some((g) => under(g.wbs, wbs))
   if (!items.some((i) => known(i.wbs))) {
     throw new IndirectMismatchError(`Nenhum item do indireto (${items.map((i) => i.wbs).join(', ')}) existe no orçamento da obra. Confira se o arquivo é desta obra.`)
