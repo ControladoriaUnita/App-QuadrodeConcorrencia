@@ -1,23 +1,30 @@
 /**
- * Nova obra a partir da planilha de orçamentos "BD_Orcamento" (SharePoint).
+ * Obras e orçamentos vindos do SharePoint (aba "BD_Orcamento" do Excel online).
  *
- *  - A planilha é a fonte da verdade do que pode ser criado: Empresa_pla · Obra_pla · NumOrca_pla.
+ *  - O SharePoint é a fonte da verdade do que pode ser criado: Empresa_pla · Obra_pla · NumOrca_pla.
  *    Empresa e obra são os próprios códigos da UAU (o mesmo código de obra pode existir em mais de
  *    uma empresa, então a chave é sempre empresa + obra). A UAU só completa os nomes.
- *  - O orçamento é carregado e conferido ANTES de criar a obra: erro na planilha não deixa obra
+ *  - O orçamento é carregado e conferido ANTES de criar a obra: erro nos dados não deixa obra
  *    criada sem orçamento. Se a gravação do orçamento falhar depois (banco), o erro diz que a obra
- *    foi criada e como completar ("Atualizar da planilha").
- *  - Reimportar cria uma nova versão vigente; versões anteriores e QCs ficam intactos.
+ *    foi criada e como completar ("Atualizar dados").
+ *  - Cada versão do orçamento = orçamento do SharePoint + de-para (IP por Item) + indireto aberto
+ *    da obra, quando importado (composeVersion). Reimportar cria uma nova versão vigente; versões
+ *    anteriores e QCs ficam intactos.
  */
 import type {
   BudgetImportInput,
   CreateWorkFromUauData,
+  IndirectImportInput,
   RefreshSheetBudgetInput,
   WorkDTO,
+  WorkIndirectDTO,
   WorkSetupCompanyDTO,
   WorkSetupOptionsDTO,
 } from '../../../shared/contracts'
 import { compareItemCodes, type BudgetSheetEntry, type BudgetSheetKey, type SheetBudget } from '../../../shared/domain/budget/budget-sheet'
+import { IndirectMismatchError, openIndirect, type IndirectBudget } from '../../../shared/domain/budget/indirect-import'
+import { applyItemPlanning, mappingResolver } from '../../../shared/domain/budget/mappings'
+import { Decimal } from '../../../shared/domain/decimal'
 import type { ERPProvider, ErpCompany, ErpWorkOption } from '../../infrastructure/erp/erp-provider'
 import { AppError, notFound, requirePermission, type RequestContext } from '../context'
 import type { BudgetSheetSource, Repositories } from '../ports'
@@ -30,7 +37,7 @@ export interface SheetBudgetImportResult {
 }
 
 // ----------------------------------------------------------------------------- opções da tela
-/** Empresas → obras → orçamentos da planilha, com os nomes da UAU e as obras já cadastradas no QC. */
+/** Empresas → obras → orçamentos do SharePoint, com os nomes da UAU e as obras já cadastradas no QC. */
 export async function listWorkSetupOptions(
   repos: Repositories,
   erp: ERPProvider,
@@ -76,20 +83,20 @@ export async function createWorkFromUau(
   if (existing) {
     throw new AppError(
       'WORK_EXISTS',
-      `A obra ${existing.code} — ${existing.name} já existe no QC. Para trazer o orçamento de novo, use "Atualizar da planilha" nela.`,
+      `A obra ${existing.code} — ${existing.name} já existe no QC. Para trazer o orçamento de novo, use "Atualizar dados" nela.`,
       409,
       { workId: existing.id },
     )
   }
 
-  // Planilha primeiro: só cria a obra com o orçamento já lido e conferido
+  // SharePoint primeiro: só cria a obra com o orçamento já lido e conferido
   const budget = await readSheet(() => sheet.loadBudget(key))
-  const importInput = toImportInput(budget, sheet.sheetName, key)
-  assertConsistentBudget(importInput)
+  const version = await composeVersion(repos, budget, sheet.sheetName, key, null)
+  assertConsistentBudget(version.input)
 
   const uau = await uauNames(erp)
   const name = uau.work(key.company, key.work) ?? `Obra ${key.work}`
-  const warnings = [...(uau.warning ? [uau.warning] : []), ...budget.warnings]
+  const warnings = [...(uau.warning ? [uau.warning] : []), ...version.warnings]
 
   const id = await repos.catalog.createWork(
     { code: key.work, name, clientName: input.clientName ?? null, status: input.status },
@@ -97,20 +104,23 @@ export async function createWorkFromUau(
     { erpId: `${key.company}:${key.work}`, uau: { ...key } },
   )
   try {
-    const saved = await saveBudgetVersion(repos, ctx, id, importInput, { provider: 'sharepoint', integrationId: keyId(key), sheet: key })
+    const saved = await saveBudgetVersion(repos, ctx, id, version.input, { provider: 'sharepoint', integrationId: keyId(key), sheet: key })
     return { id, budget: saved, warnings }
   } catch (err) {
     const reason = err instanceof AppError ? err.message : 'erro ao gravar no banco'
     throw new AppError(
       'WORK_CREATED_WITHOUT_BUDGET',
-      `A obra ${key.work} foi criada, mas o orçamento não foi gravado (${reason}). Abra a obra e use "Atualizar da planilha".`,
+      `A obra ${key.work} foi criada, mas o orçamento não foi gravado (${reason}). Abra a obra e use "Atualizar dados".`,
       502,
       { workId: id },
     )
   }
 }
 
-/** Reimporta o orçamento da planilha (o mesmo nº guardado na obra, ou outro da mesma empresa + obra). */
+/**
+ * Reimporta o orçamento do SharePoint (o mesmo nº guardado na obra, ou outro da mesma empresa +
+ * obra), com o de-para e o indireto aberto da obra.
+ */
 export async function refreshSheetBudget(
   repos: Repositories,
   sheet: BudgetSheetSource,
@@ -118,21 +128,54 @@ export async function refreshSheetBudget(
   workId: string,
   input: RefreshSheetBudgetInput,
 ): Promise<SheetBudgetImportResult> {
-  requirePermission(ctx, 'budget.import', workId)
-  const work = await repos.catalog.getWork(workId)
-  if (!work) throw notFound('Obra')
-  if (!work.uau) throw new AppError('SHEET_BUDGET_REQUIRED', 'Esta obra não foi criada pela planilha de orçamentos (falta a empresa e a obra da UAU).', 422)
+  const { work, key } = await sheetWork(repos, ctx, workId, input.budget)
+  const [loaded, indirect] = await Promise.all([readSheet(() => sheet.loadBudget(key)), repos.indirect.get(work.id)])
+  const version = await composeVersion(repos, loaded, sheet.sheetName, key, indirect?.budget ?? null)
+  const saved = await saveBudgetVersion(repos, ctx, workId, version.input, { provider: 'sharepoint', integrationId: keyId(key), sheet: key })
+  return { id: workId, budget: saved, warnings: version.warnings }
+}
 
-  const budget = input.budget ?? work.uau.budget
-  if (!budget) throw new AppError('SHEET_BUDGET_REQUIRED', 'Escolha o nº do orçamento da planilha para esta obra.', 422)
-  const key = sheetKey(work.uau.company, work.uau.work, budget)
+// ----------------------------------------------------------------------------- indireto aberto
+/**
+ * Importa o indireto aberto da obra (arquivo de custo indireto lido no navegador) e grava uma nova
+ * versão do orçamento do SharePoint com ele. O indireto fica guardado e é reaplicado a cada
+ * "Atualizar dados", até a API trazer o indireto aberto.
+ */
+export async function importIndirect(
+  repos: Repositories,
+  sheet: BudgetSheetSource,
+  ctx: RequestContext,
+  workId: string,
+  input: IndirectImportInput,
+): Promise<SheetBudgetImportResult> {
+  const { work, key } = await sheetWork(repos, ctx, workId)
+  const indirect = checkedIndirect(input)
   const loaded = await readSheet(() => sheet.loadBudget(key))
-  const saved = await saveBudgetVersion(repos, ctx, workId, toImportInput(loaded, sheet.sheetName, key), {
-    provider: 'sharepoint',
-    integrationId: keyId(key),
-    sheet: key,
-  })
-  return { id: workId, budget: saved, warnings: loaded.warnings }
+  const version = await composeVersion(repos, loaded, sheet.sheetName, key, indirect, { strict: true })
+  const saved = await saveBudgetVersion(repos, ctx, work.id, version.input, { provider: 'sharepoint', integrationId: keyId(key), sheet: key })
+  await repos.indirect.save(work.id, { fileName: input.fileName, budget: indirect }, ctx.actor.id)
+  return { id: work.id, budget: saved, warnings: [...indirect.warnings, ...version.warnings] }
+}
+
+/** Indireto em uso na obra (`indirect: null` se nunca foi importado) */
+export async function getWorkIndirect(repos: Repositories, ctx: RequestContext, workId: string): Promise<{ indirect: WorkIndirectDTO | null }> {
+  requirePermission(ctx, 'budget.read', workId)
+  const stored = await repos.indirect.get(workId)
+  if (!stored) return { indirect: null }
+  const { fileName, importedAt, importedByName, budget } = stored
+  return {
+    indirect: {
+      fileName, importedAt, importedByName, total: budget.total,
+      items: budget.items.map((i) => ({ wbs: i.wbs, description: i.description, total: i.total, lines: i.lines.length })),
+    },
+  }
+}
+
+/** Os totais vêm do navegador: refeitos aqui a partir dos insumos */
+function checkedIndirect(input: IndirectImportInput): IndirectBudget {
+  const items = input.items.map((i) => ({ ...i, total: Decimal.sum(i.lines.map((l) => l.total)).toDb() }))
+  if (!items.some((i) => i.lines.length)) throw new AppError('INDIRECT_EMPTY', 'O arquivo de indireto não tem insumos com valor.', 422)
+  return { items, total: Decimal.sum(items.map((i) => i.total)).toDb(), warnings: input.warnings }
 }
 
 // ----------------------------------------------------------------------------- apoio
@@ -176,6 +219,17 @@ async function uauNames(erp: ERPProvider): Promise<UauNames> {
   }
 }
 
+/** Obra com orçamento do SharePoint: chave da UAU e nº do orçamento (o informado ou o da obra). */
+async function sheetWork(repos: Repositories, ctx: RequestContext, workId: string, budget?: string) {
+  requirePermission(ctx, 'budget.import', workId)
+  const work = await repos.catalog.getWork(workId)
+  if (!work) throw notFound('Obra')
+  if (!work.uau) throw new AppError('SHEET_BUDGET_REQUIRED', 'Esta obra não tem o orçamento do SharePoint (falta a empresa e a obra da UAU).', 422)
+  const number = budget ?? work.uau.budget
+  if (!number) throw new AppError('SHEET_BUDGET_REQUIRED', 'Escolha o nº do orçamento do SharePoint para esta obra.', 422)
+  return { work, key: sheetKey(work.uau.company, work.uau.work, number) }
+}
+
 /** Erros do parser (colunas ausentes, orçamento inexistente ou vazio) viram mensagens claras. */
 async function readSheet<T>(fn: () => Promise<T>): Promise<T> {
   try {
@@ -188,13 +242,51 @@ async function readSheet<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-function toImportInput(budget: SheetBudget, sheetName: string, key: BudgetSheetKey): BudgetImportInput {
+/**
+ * Versão do orçamento a gravar: o orçamento do SharePoint com o indireto aberto da obra (quando
+ * houver) e o IP das linhas pelo de-para dos Itens (se o SharePoint não trouxer o Vínculo PL).
+ * `strict`: indireto que não é desta obra é recusado (na reimportação, só avisa e fica fora).
+ */
+async function composeVersion(
+  repos: Repositories,
+  budget: SheetBudget,
+  sheetName: string,
+  key: BudgetSheetKey,
+  indirect: IndirectBudget | null,
+  opts: { strict?: boolean } = {},
+): Promise<{ input: BudgetImportInput; warnings: string[] }> {
+  const resolver = mappingResolver(await repos.budgetMappings.list())
+  const warnings = [...budget.warnings]
+  let parts: Pick<BudgetImportInput, 'groups' | 'activities' | 'lines' | 'materials'> = budget
+  let opened: string[] = []
+
+  if (indirect) {
+    try {
+      const r = openIndirect(parts, indirect, resolver)
+      parts = r.budget
+      opened = indirect.items.filter((i) => i.lines.length).map((i) => i.wbs)
+      warnings.push(...r.warnings)
+    } catch (err) {
+      if (!(err instanceof IndirectMismatchError)) throw err
+      if (opts.strict) throw new AppError('INDIRECT_MISMATCH', err.message, 422)
+      warnings.push(`Indireto aberto não aplicado: ${err.message}`)
+    }
+  }
+
+  if (!budget.planningFromSheet) {
+    // Linhas do indireto aberto já receberam o IP pelo de-para do indireto
+    const isOpened = (wbs: string) => opened.some((o) => wbs === o || wbs.startsWith(`${o}.`))
+    const r = applyItemPlanning(parts.lines, resolver, (l) => isOpened(l.activityWbs))
+    parts = { ...parts, lines: r.lines }
+    if (r.unmapped) warnings.push(`${r.unmapped} linha(s) sem IP no de-para dos Itens: ficam vinculadas ao próprio item do orçamento até o planejamento escolher o IP.`)
+  }
+
   return {
-    fileName: `SharePoint · ${sheetName} · empresa ${key.company} · obra ${key.work} · orçamento ${key.budget}`,
-    sheetName,
-    groups: budget.groups,
-    activities: budget.activities,
-    lines: budget.lines,
-    materials: budget.materials,
+    input: {
+      fileName: `SharePoint · ${sheetName} · empresa ${key.company} · obra ${key.work} · orçamento ${key.budget}${indirect ? ' · indireto aberto' : ''}`,
+      sheetName,
+      ...parts,
+    },
+    warnings,
   }
 }

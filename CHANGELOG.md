@@ -28,6 +28,10 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 - Atalho `Abrir QC local.bat` para subir o app local.
 - Portão de regressão: `npm run verificar`, hook pre-push e build da Vercel.
 - Testes de tela (E2E) com Playwright: 20 testes dos fluxos principais.
+- De-para do orçamento (tela **De-para**, quem mantém o cadastro): nome e IP por Item da EAP e IP por insumo do indireto. O nome troca o "Item 02" genérico; o IP do Item vai para todas as linhas abaixo dele a cada versão do orçamento do SharePoint. Nome e IP dados na obra continuam valendo sobre o de-para. Migration 022.
+- Indireto aberto: **Importar indireto (Excel)** no orçamento das obras do SharePoint lê o arquivo de custo indireto da obra e troca o indireto fechado de cada item pelos insumos abertos, já com o IP do de-para. O indireto fica guardado e volta a cada **Atualizar dados**.
+- Textos sem "planilha": "Atualizar dados", "Importar do SharePoint" etc. (telas, mensagens e manual).
+- Testes: 178 de regras/API e 22 de tela.
 
 ## v02 — dev (2026-10-15)
 

@@ -70,7 +70,7 @@ export class GraphBudgetSheetSource implements BudgetSheetSource {
       const matches = (r: Cell[]) => sameKey(r, idx.cols, key)
       const sheetRows = idx.rows.flatMap((r, i) => (matches(r) ? [idx.area.firstRow + 1 + i] : []))
       if (!sheetRows.length) {
-        throw new AppError('SHEET_BUDGET_NOT_FOUND', `Orçamento ${key.budget} da obra ${key.work} (empresa ${key.company}) não encontrado na planilha.`, 404)
+        throw new AppError('SHEET_BUDGET_NOT_FOUND', `Orçamento ${key.budget} da obra ${key.work} (empresa ${key.company}) não encontrado no SharePoint.`, 404)
       }
       const rows = await this.client.readRows(this.ref, {
         columns: range(idx.area.firstColumn, idx.area.lastColumn),
@@ -84,7 +84,7 @@ export class GraphBudgetSheetSource implements BudgetSheetSource {
         // Linha de origem = linha real da aba (o parser numera a partir do recorte)
         return { ...budget, lines: budget.lines.map((l) => ({ ...l, sourceRow: sheetRows[l.sourceRow - 2] ?? l.sourceRow })) }
       }
-      if (attempt) throw new AppError('SHEET_CHANGED', 'A planilha de orçamentos mudou durante a leitura. Tente de novo em instantes.', 409)
+      if (attempt) throw new AppError('SHEET_CHANGED', 'Os orçamentos do SharePoint mudaram durante a leitura. Tente de novo em instantes.', 409)
     }
   }
 

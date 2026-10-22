@@ -683,6 +683,107 @@ export const budgetImportSchema = z.object({
 })
 export type BudgetImportInput = z.infer<typeof budgetImportSchema>
 
+// ----------------------------------------------------------------------------- de-para do orçamento
+/*
+ * Primeira visão de toda obra vinda do SharePoint (shared/domain/budget/mappings.ts): nome e IP por
+ * Item da EAP, e IP por insumo do indireto. Na obra, nome do Item e IP da linha continuam ajustáveis.
+ */
+export interface PlanningRefDTO {
+  code: string
+  description: string | null
+}
+
+/** Item da EAP no de-para, ou que aparece nas obras sem estar nele */
+export interface ItemMappingRowDTO {
+  wbs: string
+  description: string | null
+  planning: PlanningRefDTO | null
+  /** Está no de-para (com nome ou IP) */
+  mapped: boolean
+  /** Obras ativas com o Item no orçamento vigente */
+  works: number
+  /** Nome mais usado nas obras (dado no app), para completar o de-para */
+  suggestion: string | null
+}
+
+/** Insumo do indireto no de-para, ou que aparece nos indiretos importados sem estar nele */
+export interface IndirectMappingRowDTO {
+  description: string
+  planning: PlanningRefDTO | null
+  /** Itens do orçamento onde o insumo aparece (16.05 MÃO DE OBRA INDIRETA - CLT…) */
+  items: string[]
+  works: number
+}
+
+export interface BudgetMappingsDTO {
+  items: ItemMappingRowDTO[]
+  indirect: IndirectMappingRowDTO[]
+  /** IPs do cadastro da UAU para escolher */
+  planningCodes: PlanningCodeDTO[]
+}
+
+const itemCode = z.string().trim().max(40).regex(/^\d+(\.\d+)*$/, 'Código do Item inválido (ex.: 02.06)')
+const planningCode = z.string().trim().min(1).max(30)
+
+/** Nome e IP de um Item; os dois vazios tiram o Item do de-para */
+export const setItemMappingSchema = z.object({
+  wbs: itemCode,
+  description: z.string().trim().min(1).max(300).nullable(),
+  planningCode: planningCode.nullable(),
+  planningDescription: z.string().trim().max(300).nullable().optional(),
+})
+export type SetItemMappingInput = z.infer<typeof setItemMappingSchema>
+
+/** IP de um insumo do indireto (pela descrição); null tira do de-para */
+export const setIndirectMappingSchema = z.object({
+  description: z.string().trim().min(1).max(1000),
+  planningCode: planningCode.nullable(),
+  planningDescription: z.string().trim().max(300).nullable().optional(),
+})
+export type SetIndirectMappingInput = z.infer<typeof setIndirectMappingSchema>
+
+// ----------------------------------------------------------------------------- indireto aberto da obra
+/** Indireto lido do arquivo da obra (shared/domain/budget/indirect-import.ts); o servidor refaz os totais */
+const positiveAmount = decimalString.refine((v) => !v.startsWith('-'), 'Valor negativo')
+export const indirectImportSchema = z.object({
+  fileName: z.string().trim().min(1).max(255),
+  items: z
+    .array(
+      z.object({
+        wbs: itemCode,
+        description: z.string().trim().max(300),
+        declaredTotal: decimalString,
+        total: positiveAmount,
+        lines: z
+          .array(
+            z.object({
+              description: z.string().trim().min(1).max(1000),
+              unit: z.string().trim().min(1).max(20),
+              quantity: positiveAmount,
+              total: positiveAmount,
+              sheet: z.string().max(100),
+              row: z.number().int().positive(),
+            }),
+          )
+          .max(5000),
+      }),
+    )
+    .min(1)
+    .max(100),
+  total: positiveAmount,
+  warnings: z.array(z.string().max(1000)).max(200),
+})
+export type IndirectImportInput = z.infer<typeof indirectImportSchema>
+
+/** Indireto aberto em uso na obra */
+export interface WorkIndirectDTO {
+  fileName: string
+  importedAt: string
+  importedByName: string | null
+  total: string
+  items: { wbs: string; description: string; total: string; lines: number }[]
+}
+
 export const addSupplierSchema = z.object({ supplierId: uuid })
 
 export const updateSupplierTermsSchema = z

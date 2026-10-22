@@ -39,6 +39,8 @@ import type {
 } from '../../shared/contracts'
 import type { ApprovalInstance, ApprovalStepConfig } from '../../shared/domain/approval/approval-flow'
 import type { BudgetSheetEntry, BudgetSheetKey, SheetBudget } from '../../shared/domain/budget/budget-sheet'
+import type { IndirectBudget } from '../../shared/domain/budget/indirect-import'
+import type { BudgetMappings, Planning } from '../../shared/domain/budget/mappings'
 import type { ErpBudget, ErpMaterial, ErpSupplier, ErpWork } from '../infrastructure/erp/erp-provider'
 import type { Actor } from './context'
 
@@ -271,6 +273,35 @@ export interface BudgetSheetSource {
   loadBudget(key: BudgetSheetKey): Promise<SheetBudget>
 }
 
+/**
+ * De-para do orçamento (global): nome e IP por Item da EAP, IP por insumo do indireto. Escrita
+ * server-side (service_role), depois de conferida a permissão.
+ */
+export interface BudgetMappingRepository {
+  list(): Promise<BudgetMappings>
+  /** Nome e IP de um Item; os dois vazios tiram o Item do de-para */
+  setItem(wbs: string, mapping: { description: string | null; planning: Planning | null }, actorId: string): Promise<void>
+  /** IP de um insumo do indireto (pela descrição); null tira do de-para */
+  setIndirect(description: string, planning: Planning | null, actorId: string): Promise<void>
+  /** Itens dos orçamentos vigentes das obras ativas, com o nome dado no app em cada obra */
+  listWorkItems(): Promise<{ workId: string; wbs: string; name: string | null }[]>
+}
+
+/** Indireto aberto importado por obra: reaplicado a cada nova versão do orçamento do SharePoint */
+export interface StoredIndirect {
+  fileName: string
+  importedAt: string
+  importedByName: string | null
+  budget: IndirectBudget
+}
+
+export interface IndirectRepository {
+  get(workId: string): Promise<StoredIndirect | null>
+  save(workId: string, data: { fileName: string; budget: IndirectBudget }, actorId: string): Promise<void>
+  /** Indiretos de todas as obras (para completar o de-para do indireto) */
+  listAll(): Promise<{ workId: string; budget: IndirectBudget }[]>
+}
+
 // ----------------------------------------------------------------------------- contratos
 export type ContractData = Omit<ContractRequestDTO, 'can' | 'contractTypes' | 'issues'>
 
@@ -413,4 +444,6 @@ export interface Repositories {
   integrationLogs: IntegrationLogRepository
   erpWriter: ErpSyncWriter
   budgetWriter: BudgetWriter
+  budgetMappings: BudgetMappingRepository
+  indirect: IndirectRepository
 }

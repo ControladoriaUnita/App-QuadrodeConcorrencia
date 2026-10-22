@@ -94,7 +94,7 @@ export function WorkSelectPage() {
         </Card>
       ) : !works.data?.length ? (
         <Card>
-          <EmptyState title="Nenhuma obra disponível" description="Crie uma obra a partir da UAU (com o orçamento da planilha) ou peça ao administrador acesso a uma obra." action={newButton} />
+          <EmptyState title="Nenhuma obra disponível" description="Crie uma obra a partir da UAU (com o orçamento do SharePoint) ou peça ao administrador acesso a uma obra." action={newButton} />
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

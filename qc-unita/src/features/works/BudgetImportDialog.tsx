@@ -73,7 +73,7 @@ export function BudgetImportDialog({ open, work, onClose }: { open: boolean; wor
       }}
       width="min(94vw, 52rem)"
       title="Importar orçamento (Excel)"
-      description="Use o orçamento analítico (colunas ITEM_PLA · ITEM · SERVIÇO · DESCRIÇÕES · UNID. · QNT · CUSTO UNITÁRIO · CUSTO TOTAL). Itens, composições e insumos entram na mesma estrutura da planilha. A importação cria uma nova versão vigente; QCs existentes continuam vinculados às suas linhas."
+      description="Use o orçamento analítico (colunas ITEM_PLA · ITEM · SERVIÇO · DESCRIÇÕES · UNID. · QNT · CUSTO UNITÁRIO · CUSTO TOTAL). Itens, composições e insumos entram na mesma estrutura do arquivo. A importação cria uma nova versão vigente; QCs existentes continuam vinculados às suas linhas."
       footer={
         <>
           <Button variant="ghost" className="mr-auto" onClick={() => (reset(), onClose())}>
@@ -129,7 +129,7 @@ export function BudgetImportDialog({ open, work, onClose }: { open: boolean; wor
                 <Kpi label="IPs de planejamento" value={parsed.packages.length} />
               ) : (
                 <Kpi
-                  label="Custo raso da planilha"
+                  label="Custo raso do arquivo"
                   value={formatBRL(parsed.declaredTotal ?? parsed.compositionsTotal)}
                   hint={`Σ composições ${formatBRL(parsed.compositionsTotal)}`}
                 />

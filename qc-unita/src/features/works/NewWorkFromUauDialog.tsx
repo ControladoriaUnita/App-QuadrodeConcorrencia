@@ -2,7 +2,7 @@
  * Nova obra pela planilha de orçamentos: Empresa → Obra → Orçamento.
  * As três listas vêm da aba BD_Orcamento (Empresa_pla · Obra_pla · NumOrca_pla), que usa os códigos
  * da UAU; os nomes vêm da UAU. A obra é criada já com o orçamento completo importado.
- * O cadastro manual continua disponível como alternativa ("Cadastrar sem a planilha").
+ * O cadastro manual continua disponível como alternativa ("Cadastrar sem o SharePoint").
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { CreateWorkFromUauInput, WorkSetupCompanyDTO, WorkSetupWorkDTO } from '@shared/contracts'
@@ -50,7 +50,7 @@ export function NewWorkFromUauDialog({ open, onClose, onCreated, onManual }: Pro
       companies.map((c) => ({
         value: c.code,
         label: labelOf(c),
-        hint: `${c.works.length} obra(s) com orçamento na planilha`,
+        hint: `${c.works.length} obra(s) com orçamento no SharePoint`,
       })),
     [companies],
   )
@@ -85,11 +85,11 @@ export function NewWorkFromUauDialog({ open, onClose, onCreated, onManual }: Pro
       onClose={onClose}
       width="min(94vw, 42rem)"
       title="Nova obra"
-      description="Escolha a empresa, a obra e o orçamento da planilha de orçamentos (SharePoint). A obra já abre com o orçamento completo."
+      description="Escolha a empresa, a obra e o orçamento do SharePoint. A obra já abre com o orçamento completo."
       footer={
         <>
           <Button variant="ghost" className="mr-auto" onClick={onManual}>
-            Cadastrar sem a planilha
+            Cadastrar sem o SharePoint
           </Button>
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button variant="primary" disabled={!ready} loading={create.isPending} onClick={submit}>
@@ -106,7 +106,7 @@ export function NewWorkFromUauDialog({ open, onClose, onCreated, onManual }: Pro
         }}
       >
         {error && (
-          <Alert tone="error" title={create.error ? 'Não foi possível criar a obra' : 'Não foi possível ler a planilha de orçamentos'} className="sm:col-span-2">
+          <Alert tone="error" title={create.error ? 'Não foi possível criar a obra' : 'Não foi possível ler os orçamentos do SharePoint'} className="sm:col-span-2">
             {error.message}
           </Alert>
         )}
@@ -116,7 +116,7 @@ export function NewWorkFromUauDialog({ open, onClose, onCreated, onManual }: Pro
         <Field
           label="Empresa"
           required
-          hint={options.isLoading ? 'Lendo a planilha de orçamentos… pode levar alguns segundos.' : undefined}
+          hint={options.isLoading ? 'Buscando os orçamentos no SharePoint… pode levar alguns segundos.' : undefined}
           className="sm:col-span-2"
         >
           <Combobox
@@ -158,7 +158,7 @@ export function NewWorkFromUauDialog({ open, onClose, onCreated, onManual }: Pro
         </Field>
         {ready && (
           <p className="text-xs text-text-muted sm:col-span-2">
-            Será criada a obra <span className="font-medium text-ink-700">{labelOf(work)}</span> da empresa {company.code}, com o orçamento {budget} da planilha.
+            Será criada a obra <span className="font-medium text-ink-700">{labelOf(work)}</span> da empresa {company.code}, com o orçamento {budget} do SharePoint.
           </p>
         )}
         <button type="submit" hidden />

@@ -58,7 +58,7 @@ export function createBudgetSheetSource(env: NodeJS.ProcessEnv = process.env): B
   ].filter(Boolean)
   throw new AppError(
     'SHAREPOINT_NOT_CONFIGURED',
-    `A leitura da planilha de orçamentos (SharePoint) não está configurada no servidor. Faltam: ${missing.join(', ')}.`,
+    `A leitura dos orçamentos do SharePoint não está configurada no servidor. Faltam: ${missing.join(', ')}.`,
     503,
   )
 }

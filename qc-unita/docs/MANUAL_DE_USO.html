@@ -175,7 +175,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
 <div class="hero">
   <p class="eyebrow">Quadro de Concorrência</p>
   <h1>QC Unità: como usar e como ele compara as propostas</h1>
-  <p>O QC Unità substitui a planilha de Quadro de Concorrência. Ele parte do orçamento da obra, monta a concorrência com os insumos que serão contratados, compara as propostas dos fornecedores com o orçado, passa pela aprovação por alçada e gera a solicitação de contrato com os vínculos de planejamento (IP) de cada insumo. Este manual mostra o uso de cada tela e explica as regras por trás dos números.</p>
+  <p>O QC Unità substitui o Quadro de Concorrência feito em Excel. Ele parte do orçamento da obra, monta a concorrência com os insumos que serão contratados, compara as propostas dos fornecedores com o orçado, passa pela aprovação por alçada e gera a solicitação de contrato com os vínculos de planejamento (IP) de cada insumo. Este manual mostra o uso de cada tela e explica as regras por trás dos números.</p>
   <div class="formula" aria-label="Resultado do QC">
     <b>Resultado do QC</b><i>=</i><b>Verba disponível</b><i>−</i><b>Total contratado</b>
   </div>
@@ -230,7 +230,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
       <div class="lede"><p class="eyebrow">Navegação</p><h2>Mapa das telas</h2></div>
       <p>No topo, escolha a obra; o menu segue a ordem do fluxo de trabalho.</p>
       <div class="grid2">
-        <div class="card"><h3>1 · Orçamento</h3><p>Tela inicial da obra: o orçamento na estrutura da planilha (Item → composição → insumos), com o que cada concorrência já comprometeu e o saldo livre.</p></div>
+        <div class="card"><h3>1 · Orçamento</h3><p>Tela inicial da obra: o orçamento na estrutura da EAP (Item → composição → insumos), com o que cada concorrência já comprometeu e o saldo livre.</p></div>
         <div class="card"><h3>2 · Concorrências</h3><p>Quadro (kanban) com os QCs da obra por situação: em cotação, em aprovação, aprovados e contratados. Daqui se cria uma concorrência nova.</p></div>
         <div class="card"><h3>3 · Fornecedores</h3><p>Cadastro de fornecedores (vindos da UAU) com busca por nome ou CNPJ, contato e validade da CND.</p></div>
         <div class="card"><h3>Consulta UAU</h3><p>Todos os vínculos de planejamento (IPs) e insumos do cadastro da UAU, com busca por código ou descrição e a data da última sincronização.</p></div>
@@ -260,8 +260,8 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
       <ol class="steps">
         <li><div>
           <h3>Conferir o orçamento da obra</h3>
-          <p>Atualize o orçamento pela planilha do SharePoint quando houver versão nova e, se preciso, escolha o IP de alguma linha.</p>
-          <span class="path"><b>Orçamento</b> › Atualizar da planilha</span>
+          <p>Atualize o orçamento pelo SharePoint quando houver versão nova, importe o indireto aberto da obra e, se preciso, escolha o IP de alguma linha.</p>
+          <span class="path"><b>Orçamento</b> › Atualizar dados</span>
         </div></li>
         <li><div>
           <h3>Criar a concorrência</h3>
@@ -305,10 +305,10 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
     <section id="obra">
       <div class="lede"><p class="eyebrow">Ponto de partida</p><h2>Obra e orçamento</h2></div>
       <div class="prose">
-        <p><b>Nova obra.</b> Em <b>Selecione a obra › Nova obra</b>, escolha a empresa, a obra e o orçamento na lista vinda da planilha de orçamentos do SharePoint (aba <code>BD_Orcamento</code>). A obra já abre com o orçamento completo. Os códigos de empresa e obra são os da UAU, que só completa os nomes. Também dá para cadastrar a obra sem a planilha e importar o orçamento por Excel.</p>
-        <p><b>Atualizar o orçamento.</b> <b>Atualizar da planilha</b> traz uma versão nova do mesmo orçamento; <b>Importar nova versão (Excel)</b> usa um arquivo. A versão nova passa a ser a vigente; os QCs já criados continuam ligados às linhas pela chave de cada linha.</p>
-        <p><b>Linhas zeradas.</b> Se a coluna PrecoItem da planilha vier vazia, o valor da linha sai do PrecoFinal ou de quantidade × unitário. Linhas que continuam com valor zero (preço zerado na própria UAU) aparecem no aviso da importação com o número da linha na aba.</p>
-        <p><b>Ler o orçamento.</b> A árvore segue a planilha: Item → composição → composições auxiliares → insumos. Os botões <b>Itens / Composições / Insumos</b> recolhem ou abrem os níveis. À direita, <b>Comprometido em</b> mostra o % de cada QC na linha e <b>Livre</b>, o que sobra.</p>
+        <p><b>Nova obra.</b> Em <b>Selecione a obra › Nova obra</b>, escolha a empresa, a obra e o orçamento na lista vinda do SharePoint (aba <code>BD_Orcamento</code>). A obra já abre com o orçamento completo. Os códigos de empresa e obra são os da UAU, que só completa os nomes. Também dá para cadastrar a obra sem o SharePoint e importar o orçamento por Excel.</p>
+        <p><b>Atualizar o orçamento.</b> <b>Atualizar dados</b> traz uma versão nova do mesmo orçamento do SharePoint, já com o de-para e o indireto aberto da obra. Em obras sem SharePoint, <b>Importar nova versão (Excel)</b> usa um arquivo. A versão nova passa a ser a vigente; os QCs já criados continuam ligados às linhas pela chave de cada linha.</p>
+        <p><b>Linhas zeradas.</b> Se a coluna PrecoItem vier vazia no SharePoint, o valor da linha sai do PrecoFinal ou de quantidade × unitário. Linhas que continuam com valor zero (preço zerado na própria UAU) aparecem no aviso da importação com o número da linha na aba.</p>
+        <p><b>Ler o orçamento.</b> A árvore segue a EAP: Item → composição → composições auxiliares → insumos. Os botões <b>Itens / Composições / Insumos</b> recolhem ou abrem os níveis. À direita, <b>Comprometido em</b> mostra o % de cada QC na linha e <b>Livre</b>, o que sobra.</p>
       </div>
       <div class="grid2">
         <div class="card">
@@ -317,11 +317,19 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
         </div>
         <div class="card">
           <h3>IP manual da linha</h3>
-          <p>Clique no <b>Vínculo PL</b> de uma linha para escolher o IP entre todos os IPs do cadastro da UAU. A linha fica marcada com <span class="badge b-pri">M</span>. A escolha vale para as próximas versões do orçamento e para os QCs em rascunho; <b>Voltar ao IP da planilha</b> desfaz.</p>
+          <p>Clique no <b>Vínculo PL</b> de uma linha para escolher o IP entre todos os IPs do cadastro da UAU. A linha fica marcada com <span class="badge b-pri">M</span>. A escolha vale para as próximas versões do orçamento e para os QCs em rascunho; <b>Voltar ao IP do orçamento</b> desfaz.</p>
         </div>
         <div class="card">
           <h3>Nome dos Itens</h3>
-          <p>A planilha não traz o nome dos Itens da EAP (02, 02.06…), que chegam como “Item 02”. Clique no nome para renomear: <b>Enter</b> salva, <b>Esc</b> cancela e o campo vazio volta ao nome da planilha. O nome fica salvo na obra e vale para as próximas versões do orçamento.</p>
+          <p>O SharePoint não traz o nome dos Itens da EAP (02, 02.06…): o nome vem do <b>De-para</b>. Clique no nome para renomear só nesta obra: <b>Enter</b> salva, <b>Esc</b> cancela e o campo vazio volta ao nome do de-para. O nome fica salvo na obra e vale para as próximas versões do orçamento.</p>
+        </div>
+        <div class="card">
+          <h3>De-para do orçamento</h3>
+          <p>Em <b>De-para</b> (quem mantém o cadastro) ficam o nome e o IP de cada Item da EAP e o IP de cada insumo do indireto. É a primeira visão de toda obra: o IP de um Item vai para todas as linhas abaixo dele, e o do insumo do indireto vale em todas as obras. A lista já mostra os Itens e insumos das obras que ainda faltam. Os IPs entram na obra no próximo <b>Atualizar dados</b>; depois, o planejamento revisa e ajusta o IP das linhas.</p>
+        </div>
+        <div class="card">
+          <h3>Indireto aberto</h3>
+          <p>O SharePoint traz o indireto fechado (um valor por item). Em <b>Importar indireto (Excel)</b>, envie o arquivo de custo indireto da obra (aba “Total Indiretos” e uma aba por item). Cada item entra aberto, insumo a insumo, no lugar do valor fechado; a prévia mostra o valor de cada item no arquivo e no orçamento. O indireto fica guardado e volta a cada <b>Atualizar dados</b>.</p>
         </div>
       </div>
     </section>
@@ -371,7 +379,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
     <!-- ───────────────────────────── MAPA -->
     <section id="mapa">
       <div class="lede"><p class="eyebrow">QC · 2ª aba</p><h2>Mapa de cotação</h2></div>
-      <p>Grade estilo planilha: os insumos do mapa nas linhas e os fornecedores nas colunas (R$ unitário e R$ total), com a melhor condição e a comparação com o orçado à direita. Digite o preço unitário na célula do fornecedor: a melhor condição e os totais recalculam na hora.</p>
+      <p>Grade estilo Excel: os insumos do mapa nas linhas e os fornecedores nas colunas (R$ unitário e R$ total), com a melhor condição e a comparação com o orçado à direita. Digite o preço unitário na célula do fornecedor: a melhor condição e os totais recalculam na hora.</p>
       <div class="tbl">
         <table>
           <thead><tr><th>Ação</th><th>Como funciona</th></tr></thead>
@@ -449,7 +457,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
     <!-- ───────────────────────────── CONTRATO -->
     <section id="contrato">
       <div class="lede"><p class="eyebrow">Depois da aprovação</p><h2>Solicitação de contrato</h2></div>
-      <p>No QC aprovado, <b>Gerar solicitação de contrato</b> monta o formulário da aba “Solic. Contrato” da planilha.</p>
+      <p>No QC aprovado, <b>Gerar solicitação de contrato</b> monta o formulário da aba “Solic. Contrato” do modelo em Excel.</p>
       <div class="grid2">
         <div class="card"><h3>O que entra</h3><p>Os insumos com quantidade que a vencedora cotou, ao preço dela. Insumos que ela não cotou ficam de fora e são listados (exigiriam outro contrato).</p></div>
         <div class="card"><h3>Vínculos por insumo</h3><p>Cada insumo leva os vínculos <b>IP · Qtd · Valor</b>: herdados das referências (pela verba das linhas) ou o IP manual. Abaixo de cada insumo aparecem as referências usadas, com IP e verba.</p></div>
@@ -537,10 +545,12 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
             <tr><td>As linhas selecionadas já estão neste QC</td><td>Elas já são linhas de uma referência; ajuste o % na aba Vínculos e insumos.</td></tr>
             <tr><td>Código, descrição e unidade só podem ser alterados em insumos criados no mapa</td><td>Insumos vindos de uma referência seguem o orçamento. Para outro nome, crie um insumo no mapa.</td></tr>
             <tr><td>A revisão está aprovada e não pode ser alterada</td><td>Crie uma nova revisão com o motivo.</td></tr>
-            <tr><td>Não foi possível ler a planilha de orçamentos</td><td>Credencial da Microsoft ou nome da aba. A mensagem diz se o arquivo não foi achado ou quais abas existem; avise o administrador.</td></tr>
+            <tr><td>Não foi possível ler os orçamentos do SharePoint</td><td>Credencial da Microsoft ou nome da aba. A mensagem diz se o arquivo não foi achado ou quais abas existem; avise o administrador.</td></tr>
             <tr><td>A lista vem do orçamento importado</td><td>A obra não tem a chave da UAU ou a UAU não respondeu; os IPs e insumos saem do orçamento importado.</td></tr>
             <tr><td>Para ver todos os IPs, sincronize os insumos da UAU</td><td>O cadastro de insumos ainda não foi sincronizado. Use Atualizar da UAU na Consulta UAU ou Integração ERP › Insumos.</td></tr>
-            <tr><td>N linha(s) vieram com valor zero na planilha</td><td>O preço ou o coeficiente está zerado na UAU. Corrija na origem e atualize o orçamento pela planilha.</td></tr>
+            <tr><td>N linha(s) vieram com valor zero</td><td>O preço ou o coeficiente está zerado na UAU. Corrija na origem e use Atualizar dados.</td></tr>
+            <tr><td>N linha(s) sem IP no de-para</td><td>O Item (ou o insumo do indireto) ainda não tem IP no De-para. Complete o De-para e use Atualizar dados, ou escolha o IP na linha.</td></tr>
+            <tr><td>Nenhum item do indireto existe no orçamento da obra</td><td>O arquivo de indireto é de outra obra ou usa outro número de item. Confira o arquivo.</td></tr>
           </tbody>
         </table>
       </div>
@@ -553,7 +563,8 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
         <table>
           <thead><tr><th>Fonte</th><th>O que traz</th></tr></thead>
           <tbody>
-            <tr><td>Planilha de orçamentos (SharePoint)</td><td>Lista de empresas, obras e orçamentos e o orçamento completo de cada obra (aba BD_Orcamento).</td></tr>
+            <tr><td>SharePoint · Orçamentos</td><td>Lista de empresas, obras e orçamentos e o orçamento completo de cada obra (aba BD_Orcamento).</td></tr>
+            <tr><td>Arquivo de indireto da obra (Excel)</td><td>Indireto aberto insumo a insumo, até a API trazer o indireto aberto.</td></tr>
             <tr><td>UAU · Empresas e Obras</td><td>Nomes das empresas e obras.</td></tr>
             <tr><td>UAU · Cadastro de insumos</td><td>Todos os insumos e IPs da UAU (cerca de 13 mil), pela sincronização em Integração ERP (escopo Insumos) ou pelo botão Atualizar da UAU na Consulta UAU. É a lista de IPs para escolher no app.</td></tr>
             <tr><td>UAU · Insumos do orçamento da obra</td><td>Insumos da obra para criar insumos no mapa (e IPs, enquanto o cadastro não foi sincronizado).</td></tr>

@@ -50,8 +50,8 @@ export function SheetBudgetRefreshDialog({ open, workId, uau, onClose, onDone }:
       open={open}
       onClose={onClose}
       width="min(94vw, 38rem)"
-      title="Atualizar orçamento da planilha"
-      description={`Reimporta o orçamento da obra ${uau.work} (empresa ${uau.company}) da planilha de orçamentos do SharePoint. Uma nova versão do orçamento passa a ser a vigente.`}
+      title="Atualizar dados do orçamento"
+      description={`Reimporta o orçamento da obra ${uau.work} (empresa ${uau.company}) do SharePoint, com o de-para e o indireto aberto da obra. Uma nova versão do orçamento passa a ser a vigente.`}
       footer={
         <>
           <Button variant="ghost" className="mr-auto" onClick={onClose}>Cancelar</Button>
@@ -63,7 +63,7 @@ export function SheetBudgetRefreshDialog({ open, workId, uau, onClose, onDone }:
     >
       <div className="grid gap-3">
         {error && <Alert tone="error" title="Não foi possível atualizar o orçamento">{error.message}</Alert>}
-        {options.isLoading && <p className="text-sm text-text-muted">Lendo a planilha de orçamentos… pode levar alguns segundos.</p>}
+        {options.isLoading && <p className="text-sm text-text-muted">Buscando os orçamentos no SharePoint… pode levar alguns segundos.</p>}
         <SheetBudgetField budgets={budgets} value={budget} onChange={setBudget} />
         {changed && uau.budget && (
           <Alert tone="warning">

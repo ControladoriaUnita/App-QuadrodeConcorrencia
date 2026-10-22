@@ -36,9 +36,9 @@ export function SheetBudgetField({ budgets, value, onChange, className }: Props)
 
   return (
     <Field
-      label="Orçamento (planilha do SharePoint)"
+      label="Orçamento (SharePoint)"
       required
-      hint={!budgets ? 'Escolha a obra para listar os orçamentos da planilha.' : undefined}
+      hint={!budgets ? 'Escolha a obra para listar os orçamentos do SharePoint.' : undefined}
       className={className}
     >
       <Combobox

@@ -33,7 +33,7 @@ describe('opções para a nova obra', () => {
     const { data } = await call<WorkSetupOptionsDTO>('GET', '/work-setup/options')
     expect(data.companies.map((c) => [c.code, c.works.map((w) => w.code)])).toEqual([['1', ['2041', '2055']], ['2', ['1980', '2070']]])
     const beta = data.companies[1]!.works.find((w) => w.code === '2070')!
-    expect(beta).toMatchObject({ name: 'Residencial Beta', existingWorkId: null, budgets: [expect.objectContaining({ budget: '3', services: 5 })] })
+    expect(beta).toMatchObject({ name: 'Residencial Beta', existingWorkId: null, budgets: [expect.objectContaining({ budget: '3', services: 7 })] })
     const alpha = (await works()).find((w) => w.code === '2041')!
     expect(data.companies[0]!.works[0]!.existingWorkId).toBe(alpha.id)
   })
@@ -57,13 +57,13 @@ describe('criar obra pela planilha', () => {
   it('cria a obra com a chave da UAU e o orçamento da planilha, auxiliares abertas', async () => {
     const r = await call<SheetBudgetImportResult>('POST', '/works/from-uau', body)
     expect(r.status).toBe(201)
-    expect(r.data.budget).toMatchObject({ version: 1, lines: 14 })
-    expect(r.data.warnings.join()).toContain('Vínculo PL')
+    expect(r.data.budget).toMatchObject({ version: 1, lines: 16 })
+    expect(r.data.warnings.join()).toContain('sem IP no de-para')
 
     const w = (await works()).find((x) => x.id === r.data.id)!
     expect([w.code, w.name, w.clientName, w.status, w.erpId]).toEqual(['2070', 'Residencial Beta', 'SPE Beta', 'active', '2:2070'])
     expect(w.uau).toEqual({ company: '2', work: '2070', budget: '3' })
-    expect(w.currentBudget).toMatchObject({ source: 'sharepoint', fileName: 'SharePoint · BD_Orcamento · empresa 2 · obra 2070 · orçamento 3', lines: 14 })
+    expect(w.currentBudget).toMatchObject({ source: 'sharepoint', fileName: 'SharePoint · BD_Orcamento · empresa 2 · obra 2070 · orçamento 3', lines: 16 })
 
     const lines = (await call<BudgetLineUsageDTO[]>('GET', `/works/${w.id}/budget-lines`)).data
     expect(lines.map((l) => l.activityWbs)).toEqual([...lines.map((l) => l.activityWbs)].sort())

@@ -4,6 +4,7 @@
 import type { BudgetImportInput, BudgetLineDTO, BudgetLineUsageDTO, BudgetStructureDTO, CreateWorkInput, PlanningCodeDTO, SetBudgetGroupNameInput, SetLinePlanningInput, WorkCompetitionDTO, WorkDTO, WorkListDTO, WorkMaterialDTO, WorkOverviewDTO } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import { summarizeWork } from '../../../shared/domain/work/overview'
+import { mappingResolver, nameGroups } from '../../../shared/domain/budget/mappings'
 import { AppError, can, notFound, requirePermission, type RequestContext } from '../context'
 import type { BudgetSheetKey } from '../../../shared/domain/budget/budget-sheet'
 import type { BudgetImportSource, Repositories } from '../ports'
@@ -77,12 +78,17 @@ export async function createWork(repos: Repositories, ctx: RequestContext, input
   return { id }
 }
 
-/** Estrutura do orçamento vigente (grupos "Item" e composições), na ordem da planilha. */
+/**
+ * Estrutura do orçamento vigente (grupos "Item" e composições), na ordem da EAP. Itens com o nome
+ * genérico do SharePoint ("Item 02") ganham o nome do de-para; o nome dado na obra vale sobre ele.
+ */
 export async function getBudgetStructure(repos: Repositories, ctx: RequestContext, workId: string): Promise<BudgetStructureDTO | null> {
   requirePermission(ctx, 'budget.read', workId)
   const work = await repos.catalog.getWork(workId)
   if (!work) throw notFound('Obra')
-  return work.currentBudgetId ? repos.catalog.getBudgetStructure(work.currentBudgetId) : null
+  if (!work.currentBudgetId) return null
+  const [structure, mappings] = await Promise.all([repos.catalog.getBudgetStructure(work.currentBudgetId), repos.budgetMappings.list()])
+  return { ...structure, groups: nameGroups(structure.groups, mappingResolver(mappings)) }
 }
 
 export async function listBudgetLinesUsage(
@@ -158,7 +164,7 @@ export function assertConsistentBudget(input: BudgetImportInput) {
 }
 
 /**
- * Grava uma nova versão vigente do orçamento (Excel ou planilha do SharePoint) e registra o
+ * Grava uma nova versão vigente do orçamento (Excel ou SharePoint) e registra o
  * integration_log. Quem chama já conferiu a permissão e a obra.
  */
 export async function saveBudgetVersion(
@@ -227,19 +233,24 @@ async function workList<T extends { code: string }>(
   return { source: 'budget', warning, items: [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code)) }
 }
 
-/**
- * Vínculos de planejamento (IPs) para escolher: todos os IPs do cadastro sincronizado da UAU.
- * Sem cadastro sincronizado, os IPs do orçamento da obra (UAU ou orçamento importado).
- */
-export async function listPlanningCodes(repos: Repositories, erp: ERPProvider, ctx: RequestContext, workId: string): Promise<WorkListDTO<PlanningCodeDTO>> {
-  await loadWork(repos, ctx, workId)
-  // O cadastro tem centenas de IPs: lê em páginas até o fim
+/** IPs ativos do cadastro sincronizado da UAU (centenas: lê em páginas até o fim) */
+export async function catalogPlanningCodes(repos: Repositories): Promise<PlanningCodeDTO[]> {
   const ips: PlanningCodeDTO[] = []
   for (let offset = 0, total = 1; offset < total; offset += 2000) {
     const page = await repos.catalog.listMaterials({ type: 'ip', offset, limit: 2000 })
     total = page.total
     ips.push(...page.items.filter((m) => m.active).map(({ code, description }) => ({ code, description })))
   }
+  return ips
+}
+
+/**
+ * Vínculos de planejamento (IPs) para escolher: todos os IPs do cadastro sincronizado da UAU.
+ * Sem cadastro sincronizado, os IPs do orçamento da obra (UAU ou orçamento importado).
+ */
+export async function listPlanningCodes(repos: Repositories, erp: ERPProvider, ctx: RequestContext, workId: string): Promise<WorkListDTO<PlanningCodeDTO>> {
+  await loadWork(repos, ctx, workId)
+  const ips = await catalogPlanningCodes(repos)
   if (ips.length) return { source: 'catalog', warning: null, items: ips }
   const isIp = (code: string | null): code is string => !!code?.startsWith('IP')
   const list = await workList(
@@ -268,7 +279,7 @@ export async function setLinePlanning(repos: Repositories, ctx: RequestContext, 
   return effective
 }
 
-/** Nome de um Item da EAP do orçamento (a planilha não traz o nome dos grupos). */
+/** Nome de um Item da EAP do orçamento na obra (vale sobre o nome do de-para). */
 export async function setBudgetGroupName(repos: Repositories, ctx: RequestContext, workId: string, input: SetBudgetGroupNameInput) {
   await loadWork(repos, ctx, workId, 'budget.import')
   if (!(await repos.catalog.setBudgetGroupName(workId, input.wbs, input.description))) {

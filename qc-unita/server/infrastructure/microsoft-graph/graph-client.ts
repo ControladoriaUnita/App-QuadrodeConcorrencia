@@ -149,7 +149,7 @@ export class GraphClient {
         // O login funcionou (há token), mas o app não tem acesso ao arquivo
         this.token = null
         throw new GraphError(
-          `O login na Microsoft funcionou, mas o aplicativo não tem permissão para ler a planilha de orçamentos (Graph ${res.status}). ` +
+          `O login na Microsoft funcionou, mas o aplicativo não tem permissão para ler os orçamentos do SharePoint (Graph ${res.status}). ` +
             'Falta o consentimento do administrador para Sites.Read.All (ou a liberação do site no Sites.Selected). ' +
             'Depois de concedido, aguarde alguns minutos e tente de novo.',
           res.status,
@@ -176,10 +176,10 @@ export class GraphClient {
       )
     }
     if (item?.status === 401 || item?.status === 403) {
-      return 'O login na Microsoft funcionou, mas o aplicativo não tem permissão para abrir o arquivo da planilha de orçamentos. Confira o consentimento do administrador para Sites.Read.All.'
+      return 'O login na Microsoft funcionou, mas o aplicativo não tem permissão para abrir o arquivo de orçamentos do SharePoint. Confira o consentimento do administrador para Sites.Read.All.'
     }
     return (
-      `O aplicativo não encontrou o arquivo da planilha de orçamentos no SharePoint (Graph 404: ${detail}). ` +
+      `O aplicativo não encontrou o arquivo de orçamentos no SharePoint (Graph 404: ${detail}). ` +
       'Confira se o app foi registrado no Entra ID do mesmo tenant do SharePoint (MS_GRAPH_TENANT_ID), ' +
       'se o consentimento para Sites.Read.All foi concedido e se BUDGET_SHEET_DRIVE_ID / BUDGET_SHEET_ITEM_ID apontam para o arquivo certo.'
     )

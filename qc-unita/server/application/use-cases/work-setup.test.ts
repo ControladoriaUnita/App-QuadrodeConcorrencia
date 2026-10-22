@@ -53,7 +53,7 @@ describe('createWorkFromUau', () => {
     repos.budgetWriter.importBudget = () => Promise.reject(new AppError('DB', 'conexão perdida', 500))
     const err = (await createWorkFromUau(repos, new MockERPProvider(), new MockBudgetSheetSource(), ctx, input).catch((e: unknown) => e)) as AppError
     expect(err.code).toBe('WORK_CREATED_WITHOUT_BUDGET')
-    expect(err.message).toBe('A obra 2070 foi criada, mas o orçamento não foi gravado (conexão perdida). Abra a obra e use "Atualizar da planilha".')
+    expect(err.message).toBe('A obra 2070 foi criada, mas o orçamento não foi gravado (conexão perdida). Abra a obra e use "Atualizar dados".')
     const [work] = await repos.catalog.listWorks()
     expect(err.details).toEqual({ workId: work!.id })
     expect(work!.uau).toEqual({ company: '2', work: '2070', budget: '3' })

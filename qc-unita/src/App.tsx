@@ -15,6 +15,7 @@ import { BudgetPage } from '@/features/works/BudgetPage'
 import { getLastWorkId, workPath } from '@/features/works/currentWork'
 import { WorkSelectPage } from '@/features/works/WorkSelectPage'
 import { IntegrationPage } from '@/features/integration/IntegrationPage'
+import { MappingsPage } from '@/features/mappings/MappingsPage'
 import { useAuth } from '@/lib/auth'
 
 const loading = (
@@ -69,6 +70,7 @@ export function App() {
         <Route path="/obras/:workId/contratos/:id" element={<ContractPage />} />
         <Route path="/fornecedores" element={<SuppliersPage />} />
         <Route path="/consulta-uau" element={<UauCatalogPage />} />
+        <Route path="/de-para" element={<MappingsPage />} />
         <Route path="/integracao" element={<IntegrationPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

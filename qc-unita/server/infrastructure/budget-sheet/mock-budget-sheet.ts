@@ -1,7 +1,9 @@
 /**
  * Fonte de orçamentos do modo demonstração: linhas no formato da aba "BD_Orcamento" para as
  * obras do MockERPProvider (2041, 2055, 1980) e para a obra 2070, que ainda não está no QC e pode
- * ser criada pela tela. Empresa_pla e Obra_pla são os códigos da "UAU" de exemplo. Passa pelo mesmo parser da planilha real (shared/domain/budget/budget-sheet).
+ * ser criada pela tela. Empresa_pla e Obra_pla são os códigos da "UAU" de exemplo. A obra 2070 traz
+ * o indireto fechado (item 16), como a API manda hoje. Passa pelo mesmo parser do SharePoint real
+ * (shared/domain/budget/budget-sheet).
  */
 import { buildSheetBudget, listSheetBudgets, type BudgetSheetEntry, type BudgetSheetKey, type SheetBudget } from '../../../shared/domain/budget/budget-sheet'
 import type { Cell } from '../../../shared/domain/budget/excel-import'
@@ -26,6 +28,8 @@ const MATERIALS: Record<string, [string, string]> = {
   IS00075: ['Serviço de pintura acrílica', 'm²'],
   IS00093: ['Serviço de proteção mecânica para manta asfaltica', 'm²'],
   IS00094: ['Execução de impermeabilização com manta asfáltica, uma camada, aderida à maçarico', 'm²'],
+  IS00800: ['Custo indireto - equipamentos', 'vb'],
+  IS00805: ['Custo indireto - mão de obra indireta CLT', 'vb'],
 }
 
 /** Composição auxiliar: insumos com [preço, coeficiente] por unidade da auxiliar */
@@ -46,13 +50,19 @@ const SERVICES: [string, string, string, number, Input[]][] = [
   ['02.02.01', 'PINTURA ACRÍLICA', 'm²', 9800, [['IS00075', 16.8, 1], ['IM00002', 14.35, 0.17]]],
 ]
 
-/** Orçamentos de exemplo: [Empresa_pla, Obra_pla, NumOrca_pla, fator de quantidade] */
-const BUDGETS: [number, string, number, number][] = [
-  [1, '2041', 1, 1],
-  [1, '2041', 2, 1.08],
-  [1, '2055', 1, 0.7],
-  [2, '1980', 1, 0.5],
-  [2, '2070', 3, 1.3],
+/** Indireto fechado: um valor por item (o arquivo de indireto da obra abre cada um) */
+const INDIRECT: typeof SERVICES = [
+  ['16.01', 'EQUIPAMENTOS', 'vb', 1, [['IS00800', 1450, 1]]],
+  ['16.05', 'MÃO DE OBRA INDIRETA - CLT', 'vb', 1, [['IS00805', 9000, 1]]],
+]
+
+/** Orçamentos de exemplo: [Empresa_pla, Obra_pla, NumOrca_pla, fator de quantidade, com indireto] */
+const BUDGETS: [number, string, number, number, boolean][] = [
+  [1, '2041', 1, 1, false],
+  [1, '2041', 2, 1.08, false],
+  [1, '2055', 1, 0.7, false],
+  [2, '1980', 1, 0.5, false],
+  [2, '2070', 3, 1.3, true],
 ]
 
 const round = (n: number, d = 6) => Math.round(n * 10 ** d) / 10 ** d
@@ -60,9 +70,9 @@ const round = (n: number, d = 6) => Math.round(n * 10 ** d) / 10 ** d
 /** Linhas da aba de exemplo (1ª = cabeçalho) */
 export function mockSheetRows(): Cell[][] {
   const rows: Cell[][] = [SHEET_HEADER]
-  for (const [company, work, budget, factor] of BUDGETS) {
-    for (const [item, descr, unit, baseQty, inputs] of SERVICES) {
-      const qty = round(baseQty * factor, 2)
+  for (const [company, work, budget, factor, withIndirect] of BUDGETS) {
+    for (const [item, descr, unit, baseQty, inputs] of [...SERVICES, ...(withIndirect ? INDIRECT : [])]) {
+      const qty = item.startsWith('16.') ? baseQty : round(baseQty * factor, 2)
       const base = [company, work, budget, budget, item, descr, unit, qty]
       for (const input of inputs) {
         if (Array.isArray(input)) {

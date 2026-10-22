@@ -1,7 +1,7 @@
 /**
- * Tela inicial da obra: o orçamento na estrutura da planilha, com o que já está comprometido
+ * Tela inicial da obra: o orçamento na estrutura da EAP, com o que já está comprometido
  * em concorrências. É daqui que o fluxo começa (importar orçamento → nova concorrência).
- * Obras vindas da UAU atualizam o orçamento pela planilha de orçamentos (SharePoint).
+ * Obras vindas da UAU atualizam o orçamento pelo SharePoint e abrem o indireto pelo arquivo da obra.
  */
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -13,6 +13,7 @@ import { ArchiveWorkButton } from './ArchiveWorkButton'
 import { BudgetImportDialog } from './BudgetImportDialog'
 import { BudgetTree } from './BudgetTree'
 import { workPath } from './currentWork'
+import { IndirectImportDialog } from './IndirectImportDialog'
 import { SheetBudgetRefreshDialog } from './SheetBudgetRefreshDialog'
 import { useWorkModel, WorkHeader, WorkPageSkeleton } from './WorkHeader'
 
@@ -29,6 +30,7 @@ export function BudgetPage() {
   const { q, data, ov } = useWorkModel(workId)
   const [importing, setImporting] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [importingIndirect, setImportingIndirect] = useState(false)
   const [sheetImport, setSheetImport] = useState<SheetBudgetImportResult | null>(() => (location.state as BudgetPageState | null)?.sheetImport ?? null)
   const [params, setParams] = useSearchParams()
   const hasBudget = !!data?.work.currentBudgetId
@@ -59,15 +61,23 @@ export function BudgetPage() {
   const canImport = can('budget.import')
   const refreshButton = canImport && uau && (
     <Button variant={hasBudget ? 'secondary' : 'primary'} icon={<RefreshCw className="size-4" />} onClick={() => setRefreshing(true)}>
-      {hasBudget ? 'Atualizar da planilha' : 'Importar da planilha'}
+      {hasBudget ? 'Atualizar dados' : 'Importar do SharePoint'}
     </Button>
   )
-  // Obras da UAU usam a planilha de orçamentos; o Excel fica como alternativa
-  const importButton = canImport && (
-    <Button variant={hasBudget || uau ? 'secondary' : 'primary'} icon={<FileSpreadsheet className="size-4" />} onClick={() => setImporting(true)}>
-      {hasBudget ? 'Importar nova versão (Excel)' : 'Importar orçamento (Excel)'}
-    </Button>
-  )
+  // Obras da UAU: o orçamento vem do SharePoint e o Excel abre o indireto; as demais importam o orçamento pelo Excel
+  const importButton =
+    canImport &&
+    (uau ? (
+      hasBudget && (
+        <Button variant="secondary" icon={<FileSpreadsheet className="size-4" />} onClick={() => setImportingIndirect(true)}>
+          Importar indireto (Excel)
+        </Button>
+      )
+    ) : (
+      <Button variant={hasBudget ? 'secondary' : 'primary'} icon={<FileSpreadsheet className="size-4" />} onClick={() => setImporting(true)}>
+        {hasBudget ? 'Importar nova versão (Excel)' : 'Importar orçamento (Excel)'}
+      </Button>
+    ))
 
   return (
     <div>
@@ -98,8 +108,8 @@ export function BudgetPage() {
             title="Obra sem orçamento"
             description={
               uau
-                ? 'O fluxo começa pelo orçamento: importe-o da planilha de orçamentos (SharePoint) para montar as concorrências.'
-                : 'O fluxo começa pelo orçamento: importe a planilha do orçamento analítico (ou sincronize com o ERP) para montar as concorrências.'
+                ? 'O fluxo começa pelo orçamento: importe-o do SharePoint para montar as concorrências.'
+                : 'O fluxo começa pelo orçamento: importe o orçamento analítico em Excel (ou sincronize com o ERP) para montar as concorrências.'
             }
             action={refreshButton || importButton}
           />
@@ -108,7 +118,7 @@ export function BudgetPage() {
         <Card>
           <CardHeader
             title="Orçamento da obra"
-            description="Estrutura da planilha: Item → composição → composições auxiliares e insumos com Vínculo PL. Clique no nome de um Item para renomeá-lo e no Vínculo PL de uma linha para escolher o IP (M = escolhido à mão). Use ▾ nos cabeçalhos para filtrar como no Excel."
+            description="Estrutura do orçamento: Item → composição → composições auxiliares e insumos com Vínculo PL. Nomes e IPs vêm do De-para; clique no nome de um Item para renomeá-lo e no Vínculo PL de uma linha para escolher o IP (M = escolhido à mão). Use ▾ nos cabeçalhos para filtrar como no Excel."
           />
           {lines.isLoading || structure.isLoading ? (
             <div className="grid gap-2 p-5">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-9" />)}</div>
@@ -135,6 +145,17 @@ export function BudgetPage() {
 
       <BudgetImportDialog open={importing} work={data.work} onClose={() => setImporting(false)} />
       {uau && (
+        <IndirectImportDialog
+          open={importingIndirect}
+          work={data.work}
+          onClose={() => setImportingIndirect(false)}
+          onDone={(result) => {
+            setImportingIndirect(false)
+            setSheetImport(result)
+          }}
+        />
+      )}
+      {uau && (
         <SheetBudgetRefreshDialog
           open={refreshing}
           workId={workId}
@@ -150,14 +171,14 @@ export function BudgetPage() {
   )
 }
 
-/** Resultado da importação pela planilha: versão gerada e avisos do servidor (linhas ignoradas etc.). */
+/** Resultado da atualização do orçamento: versão gerada e avisos do servidor (linhas ignoradas etc.). */
 function SheetImportNotice({ result, onDismiss }: { result: SheetBudgetImportResult; onDismiss: () => void }) {
   const { budget, warnings } = result
   return (
     <Alert
       tone={warnings.length ? 'warning' : 'success'}
       className="mb-3"
-      title={`Orçamento importado da planilha · versão ${budget.version} · ${budget.lines.toLocaleString('pt-BR')} linha(s)`}
+      title={`Orçamento atualizado · versão ${budget.version} · ${budget.lines.toLocaleString('pt-BR')} linha(s)`}
       action={
         <button type="button" onClick={onDismiss} className="self-start rounded-control p-1 text-ink-500 hover:bg-ink-100" aria-label="Fechar aviso">
           <X className="size-4" />

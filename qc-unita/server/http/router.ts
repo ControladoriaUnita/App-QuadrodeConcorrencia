@@ -9,6 +9,9 @@ import {
   createWorkSchema,
   createWorkFromUauSchema,
   refreshSheetBudgetSchema,
+  indirectImportSchema,
+  setItemMappingSchema,
+  setIndirectMappingSchema,
   createRevisionSchema,
   decideApprovalSchema,
   erpSyncSchema,
@@ -42,6 +45,7 @@ import { AppError, toAppError, type RequestContext } from '../application/contex
 import type { Repositories } from '../application/ports'
 import * as addenda from '../application/use-cases/addenda'
 import * as attachments from '../application/use-cases/attachments'
+import * as budgetMappings from '../application/use-cases/budget-mappings'
 import * as catalog from '../application/use-cases/catalog'
 import * as contracts from '../application/use-cases/contracts'
 import * as qc from '../application/use-cases/competitions'
@@ -91,12 +95,21 @@ route('POST', '/works', async ({ repos, ctx, body }) => works.createWork(repos, 
 route('GET', '/works/:id/budget-structure', async ({ repos, ctx, params }) => works.getBudgetStructure(repos, ctx, parse(uuidParam, params.id)))
 route('POST', '/works/:id/budget-import', async ({ repos, ctx, params, body }) =>
   works.importBudget(repos, ctx, parse(uuidParam, params.id), parse(budgetImportSchema, await body())), 201)
-// Nova obra pela planilha de orçamentos BD_Orcamento (SharePoint) + nomes da UAU
+// Nova obra pelo orçamento do SharePoint (aba BD_Orcamento) + nomes da UAU
 route('GET', '/work-setup/options', async ({ repos, ctx }) => workSetup.listWorkSetupOptions(repos, getErpProvider(), getBudgetSheetSource(), ctx))
 route('POST', '/works/from-uau', async ({ repos, ctx, body }) =>
   workSetup.createWorkFromUau(repos, getErpProvider(), getBudgetSheetSource(), ctx, parse(createWorkFromUauSchema, await body())), 201)
 route('POST', '/works/:id/budget-sheet/refresh', async ({ repos, ctx, params, body }) =>
   workSetup.refreshSheetBudget(repos, getBudgetSheetSource(), ctx, parse(uuidParam, params.id), parse(refreshSheetBudgetSchema, await body())))
+// Indireto aberto da obra (arquivo de custo indireto), aplicado sobre o orçamento do SharePoint
+route('GET', '/works/:id/indirect', async ({ repos, ctx, params }) => workSetup.getWorkIndirect(repos, ctx, parse(uuidParam, params.id)))
+route('POST', '/works/:id/indirect', async ({ repos, ctx, params, body }) =>
+  workSetup.importIndirect(repos, getBudgetSheetSource(), ctx, parse(uuidParam, params.id), parse(indirectImportSchema, await body())), 201)
+// De-para do orçamento: nome e IP por Item da EAP, IP por insumo do indireto
+route('GET', '/budget-mappings', async ({ repos, ctx }) => budgetMappings.getBudgetMappings(repos, ctx))
+route('PUT', '/budget-mappings/items', async ({ repos, ctx, body }) => budgetMappings.setItemMapping(repos, ctx, parse(setItemMappingSchema, await body())))
+route('PUT', '/budget-mappings/indirect', async ({ repos, ctx, body }) =>
+  budgetMappings.setIndirectMapping(repos, ctx, parse(setIndirectMappingSchema, await body())))
 route('GET', '/works/:id/overview', async ({ repos, ctx, params }) => works.getWorkOverview(repos, ctx, parse(uuidParam, params.id)))
 route('GET', '/works/:id/packages', async ({ repos, ctx, params }) => catalog.listPackages(repos, ctx, parse(uuidParam, params.id)))
 // IPs (vínculos de planejamento) e insumos da obra: UAU, ou o orçamento importado como alternativa

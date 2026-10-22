@@ -22,7 +22,7 @@ describe('MockBudgetSheetSource', () => {
       ['1', '2041', '1', 5],
       ['1', '2041', '2', 5],
       ['1', '2055', '1', 5],
-      ['2', '2070', '3', 5],
+      ['2', '2070', '3', 7],
     ])
   })
 
@@ -83,7 +83,7 @@ describe('GraphBudgetSheetSource', () => {
   it('orçamento inexistente → 404 claro', async () => {
     const err = await graphSource().source.loadBudget({ company: '1', work: '2041', budget: '9' }).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(AppError)
-    expect([(err as AppError).status, (err as AppError).message]).toEqual([404, 'Orçamento 9 da obra 2041 (empresa 1) não encontrado na planilha.'])
+    expect([(err as AppError).status, (err as AppError).message]).toEqual([404, 'Orçamento 9 da obra 2041 (empresa 1) não encontrado no SharePoint.'])
   })
 })
 

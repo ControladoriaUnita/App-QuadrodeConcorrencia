@@ -15,7 +15,7 @@ import { useWorkOverview } from './api'
 /** Origem da versão do orçamento: selo, verbo ("importado em …") e tom do selo */
 const SOURCE: Record<BudgetVersionDTO['source'], { badge: string; verb: string; tone: Tone }> = {
   excel: { badge: 'Excel', verb: 'importado', tone: 'info' },
-  sharepoint: { badge: 'Planilha SharePoint', verb: 'importado', tone: 'info' },
+  sharepoint: { badge: 'SharePoint', verb: 'importado', tone: 'info' },
   erp: { badge: 'ERP', verb: 'sincronizado', tone: 'neutral' },
   manual: { badge: 'Manual', verb: 'cadastrado', tone: 'neutral' },
 }
@@ -36,7 +36,7 @@ export function WorkHeader({ section, data, ov, actions, strip = true }: { secti
                 {' '}· Orçamento vigente v{b.version}
                 {b.source === 'sharepoint' ? (
                   <>
-                    {' '}· <span className="font-medium text-ink-700">Planilha de orçamentos (SharePoint){work.uau?.budget && <> · orçamento {work.uau.budget}</>}</span>
+                    {' '}· <span className="font-medium text-ink-700">SharePoint{work.uau?.budget && <> · orçamento {work.uau.budget}</>}</span>
                   </>
                 ) : (
                   b.fileName && <> · <span className="font-medium text-ink-700">{b.fileName}</span></>

@@ -5,11 +5,13 @@ import type {
   BudgetStructureDTO,
   CreateWorkFromUauInput,
   CreateWorkInput,
+  IndirectImportInput,
   PlanningCodeDTO,
   RefreshSheetBudgetInput,
   SetBudgetGroupNameInput,
   SetLinePlanningInput,
   WorkDTO,
+  WorkIndirectDTO,
   WorkListDTO,
   WorkMaterialDTO,
   WorkOverviewDTO,
@@ -104,8 +106,8 @@ export function useCreateWork() {
   })
 }
 
-// ----------------------------------------------------------------------------- obras da UAU e planilha de orçamentos (SharePoint)
-/** Empresas → obras → orçamentos da planilha (com nomes da UAU). A 1ª leitura da planilha pode demorar. */
+// ----------------------------------------------------------------------------- obras da UAU e orçamentos do SharePoint
+/** Empresas → obras → orçamentos do SharePoint (com nomes da UAU). A 1ª leitura pode demorar. */
 export const useWorkSetupOptions = (enabled = true) =>
   useQuery({
     queryKey: ['work-setup', 'options'],
@@ -114,7 +116,7 @@ export const useWorkSetupOptions = (enabled = true) =>
     staleTime: 5 * 60_000,
   })
 
-/** Resultado da criação/atualização da obra a partir da planilha */
+/** Resultado da criação/atualização do orçamento da obra pelo SharePoint (também com o indireto aberto) */
 export interface SheetBudgetImportResult {
   id: string
   budget: { budgetId: string; version: number; lines: number }
@@ -138,6 +140,25 @@ export function useRefreshSheetBudget(workId: string) {
     mutationFn: (body: RefreshSheetBudgetInput) => api<SheetBudgetImportResult>(`/works/${workId}/budget-sheet/refresh`, { method: 'POST', body }),
     onSuccess: () => {
       for (const k of BUDGET_KEYS) qc.invalidateQueries({ queryKey: [k] })
+    },
+  })
+}
+
+/** Indireto aberto em uso na obra (null se nunca foi importado) */
+export const useWorkIndirect = (workId: string, enabled = true) =>
+  useQuery({
+    queryKey: ['work-indirect', workId],
+    queryFn: async () => (await api<{ indirect: WorkIndirectDTO | null }>(`/works/${workId}/indirect`)).indirect,
+    enabled: !!workId && enabled,
+  })
+
+/** Importa o indireto aberto da obra: nova versão do orçamento do SharePoint com ele */
+export function useImportIndirect(workId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: IndirectImportInput) => api<SheetBudgetImportResult>(`/works/${workId}/indirect`, { method: 'POST', body }),
+    onSuccess: () => {
+      for (const k of [...BUDGET_KEYS, 'work-indirect']) qc.invalidateQueries({ queryKey: [k] })
     },
   })
 }

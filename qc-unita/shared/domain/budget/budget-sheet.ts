@@ -23,7 +23,8 @@
  *  - A EAP vem do Item_pla: 02.06.01.03 é o serviço; 02, 02.06 e 02.06.01 viram grupos.
  *  - Tudo ordenado pelos códigos (itens numericamente; dentro do serviço, insumos e auxiliares por código).
  *  - Vínculo de planejamento: coluna "Vínculo PL"/"IP" quando existir; sem ela, o próprio item do
- *    orçamento (Item_pla), que é a chave que a UAU usa para vincular contratos ao orçamento.
+ *    orçamento (Item_pla), que é a chave que a UAU usa para vincular contratos ao orçamento. O de-para
+ *    dos Itens (mappings.ts) troca esse vínculo pelo IP do Item ao gravar a versão.
  */
 import { Decimal } from '../decimal'
 import type { BudgetImportResult, Cell, ImportedActivity, ImportedGroup, ImportedLine, ImportedMaterial } from './excel-import'
@@ -164,6 +165,8 @@ export interface SheetBudget extends Omit<BudgetImportResult, 'lines' | 'layout'
   layout: 'bd-orcamentos'
   key: BudgetSheetKey
   lines: SheetBudgetLine[]
+  /** A aba tem a coluna Vínculo PL: o IP das linhas vem dela (sem ela, do de-para dos Itens) */
+  planningFromSheet: boolean
 }
 
 /** Número positivo da célula, ou null (vazio, texto inválido, zero ou negativo) */
@@ -201,6 +204,9 @@ export function lineValues(r: Cell[], cols: SheetColumns): LineValues | null {
   return { quantity, unitCost, total }
 }
 
+/** Nome genérico dos Itens: o orçamento do SharePoint não traz o nome dos grupos (o de-para completa). */
+export const genericItemName = (wbs: string) => `Item ${wbs}`
+
 const isAuxRow = (r: Cell[], cols: SheetColumns) => !!text(r[cols.auxCode]) || text(r[cols.auxFlag]) === '1'
 
 /** Grupos da EAP acima de um item: 02.06.01.03 → 02, 02.06, 02.06.01 */
@@ -217,7 +223,7 @@ export function buildSheetBudget(rows: Cell[][], key: BudgetSheetKey): SheetBudg
   const warnings: string[] = []
 
   const mine = data.map((r, i) => ({ r, row: i + 2 })).filter(({ r }) => sameBudget(keyOf(r, cols), key))
-  if (!mine.length) throw new Error(`Orçamento ${key.budget} da obra ${key.work} (empresa ${key.company}) não encontrado na planilha.`)
+  if (!mine.length) throw new Error(`Orçamento ${key.budget} da obra ${key.work} (empresa ${key.company}) não encontrado no SharePoint.`)
 
   const activities = new Map<string, ImportedActivity & { sum: Decimal }>()
   const materials = new Map<string, ImportedMaterial>()
@@ -286,9 +292,8 @@ export function buildSheetBudget(rows: Cell[][], key: BudgetSheetKey): SheetBudg
   if (skipped) warnings.push(`${skipped} linha(s) sem item, insumo, quantidade, coeficiente ou preço foram ignoradas.`)
   if (zeroRows.length) {
     const list = zeroRows.slice(0, 20).join(', ') + (zeroRows.length > 20 ? ` e mais ${zeroRows.length - 20}` : '')
-    warnings.push(`${zeroRows.length} linha(s) vieram com valor zero na planilha (preço ou coeficiente zerado na UAU). Linhas da aba: ${list}.`)
+    warnings.push(`${zeroRows.length} linha(s) vieram com valor zero (preço ou coeficiente zerado na UAU). Linhas da aba: ${list}.`)
   }
-  if (cols.package < 0) warnings.push('A planilha não tem coluna de Vínculo PL: cada linha fica vinculada ao próprio item do orçamento (Item_pla).')
 
   // Ordem pelos códigos e chave estável por linha (reimportar não perde vínculos com QCs)
   pending.sort((a, b) => compareItemCodes(a.activityWbs, b.activityWbs) || a.sortKey.localeCompare(b.sortKey) || a.sourceRow - b.sourceRow)
@@ -302,8 +307,7 @@ export function buildSheetBudget(rows: Cell[][], key: BudgetSheetKey): SheetBudg
 
   const acts = [...activities.values()].sort((a, b) => compareItemCodes(a.wbs, b.wbs))
   const groupCodes = [...new Set(acts.flatMap((a) => parentsOf(a.wbs)))].filter((g) => !activities.has(g)).sort(compareItemCodes)
-  // A planilha não traz o nome dos grupos: usa o código
-  const groups: ImportedGroup[] = groupCodes.map((wbs) => ({ wbs, description: `Item ${wbs}` }))
+  const groups: ImportedGroup[] = groupCodes.map((wbs) => ({ wbs, description: genericItemName(wbs) }))
 
   const packages = new Map<string, { packageCode: string; description: string; total: Decimal; lines: number }>()
   for (const l of lines) {
@@ -317,6 +321,7 @@ export function buildSheetBudget(rows: Cell[][], key: BudgetSheetKey): SheetBudg
   return {
     layout: 'bd-orcamentos',
     key,
+    planningFromSheet: cols.package >= 0,
     sheetHeaderRow: 1,
     groups,
     activities: acts.map(({ sum, ...a }) => ({

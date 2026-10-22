@@ -11,6 +11,7 @@ import { currentAllocations, suggestAllocations } from '../../../shared/domain/c
 import * as qc from '../../application/use-cases/competitions'
 import { buildQcMap } from '../../../shared/domain/competition/qc-map'
 import { syncFromErp } from '../../application/use-cases/erp-sync'
+import budgetFixture from '../erp/fixtures/budget-sample.json'
 import { MockERPProvider } from '../erp/mock-erp-provider'
 import { type MemoryDb, uid } from './memory-db'
 import { createMemoryRepositories } from './memory-repositories'
@@ -111,6 +112,12 @@ async function seed(db: MemoryDb) {
   {
     const { repos, ctx } = await load(DEMO_USERS[0].id, 'erp_sync')
     await syncFromErp(repos, new MockERPProvider(), ctx, { scope: 'all' })
+  }
+  // De-para dos Itens com os nomes do orçamento de exemplo (no Supabase começa vazio: tela De-para)
+  {
+    const { repos } = ctxFor(DEMO_USERS[0].id)
+    const names: [string, string][] = [['01', 'SERVIÇOS PRELIMINARES'], ...budgetFixture.groups.map((g): [string, string] => [g.wbs, g.description])]
+    for (const [wbs, description] of names) await repos.budgetMappings.setItem(wbs, { description, planning: null }, DEMO_USERS[0].id)
   }
   // "Sem Fornecedor" para quadros internos (no Supabase vem da migration 018)
   db.put('suppliers', {

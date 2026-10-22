@@ -29,6 +29,7 @@ import type { Actor } from '../../application/context'
 import type { AggregatedInput, CompetitionData, NewLink, Repositories } from '../../application/ports'
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
 import { createSupabaseAttachments, createSupabaseStorage } from './supabase-attachments'
+import { createSupabaseBudgetMappings, createSupabaseIndirect } from './supabase-budget-mappings'
 import { createSupabaseContracts } from './supabase-contracts'
 
 type Json = Record<string, unknown>
@@ -276,6 +277,8 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
     contracts: createSupabaseContracts(db),
     attachments: createSupabaseAttachments(db),
     storage: createSupabaseStorage(db),
+    budgetMappings: createSupabaseBudgetMappings(service),
+    indirect: createSupabaseIndirect(service),
 
     // ------------------------------------------------------------------ identidade
     identity: {

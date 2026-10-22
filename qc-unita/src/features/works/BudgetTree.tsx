@@ -449,7 +449,7 @@ function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning, onRenam
         <span className={cn(cell, 'text-xs')}>{r.unit ?? ''}</span>
         <span className={cn(cell, 'text-right')}>{r.quantity ? formatQuantity(r.quantity) : ''}</span>
         <span className={cn(cell, 'text-right')}>{r.unitCost ? formatDecimal(r.unitCost, 2) : ''}</span>
-        <span className={cn(cell, 'text-right', diverges && 'text-warning')} title={diverges ? `Na planilha (quant. × custo unit.): ${formatBRL(r.sheetTotal)}` : undefined}>{formatBRL(r.total)}</span>
+        <span className={cn(cell, 'text-right', diverges && 'text-warning')} title={diverges ? `No orçamento de origem (quant. × custo unit.): ${formatBRL(r.sheetTotal)}` : undefined}>{formatBRL(r.total)}</span>
         <span />
         <span />
         <Aggregate total={r.total} committed={r.committed} />
@@ -639,7 +639,7 @@ function LinePlanningDialog({ line, planning, onClose }: { line: BudgetLineUsage
       footer={
         <>
           {line.packageManual && (
-            <Button variant="ghost" className="mr-auto" disabled={saving} onClick={() => save(null)}>Voltar ao IP da planilha</Button>
+            <Button variant="ghost" className="mr-auto" disabled={saving} onClick={() => save(null)}>Voltar ao IP do orçamento</Button>
           )}
           <Button variant="ghost" className={line.packageManual ? undefined : 'mr-auto'} onClick={onClose}>Cancelar</Button>
           <Button
@@ -660,7 +660,7 @@ function LinePlanningDialog({ line, planning, onClose }: { line: BudgetLineUsage
   )
 }
 
-/** Nome de um Item da EAP editável no lugar: lápis para editar, Enter salva, Esc cancela; vazio volta ao nome da planilha */
+/** Nome de um Item da EAP editável no lugar: lápis para editar, Enter salva, Esc cancela; vazio volta ao nome do de-para */
 function GroupName({ wbs, name, onRename }: { wbs: string; name: string; onRename: (wbs: string, description: string | null) => Promise<unknown> }) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(name)
@@ -684,7 +684,7 @@ function GroupName({ wbs, name, onRename }: { wbs: string; name: string; onRenam
           aria-label={`Nome do item ${wbs}`}
           value={text}
           disabled={saving}
-          placeholder="Vazio = nome da planilha"
+          placeholder="Vazio = nome do de-para"
           onChange={(e) => setText(e.target.value)}
           onBlur={save}
           onKeyDown={(e) => {

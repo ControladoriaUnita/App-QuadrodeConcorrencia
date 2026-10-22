@@ -58,7 +58,7 @@ describe('Orçamentos da aba BD_Orcamento', () => {
     expect(b.lines[3]!.aux).toBeNull()
     // Sem coluna de Vínculo PL: o item do orçamento é o vínculo
     expect(cimento.packageCode).toBe('01.02')
-    expect(b.warnings.join()).toContain('Vínculo PL')
+    expect(b.planningFromSheet).toBe(false)
   })
 
   it('custo do serviço = soma das linhas por unidade', () => {

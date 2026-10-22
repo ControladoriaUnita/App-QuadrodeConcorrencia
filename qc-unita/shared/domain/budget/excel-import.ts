@@ -240,11 +240,11 @@ export function parseBudgetSheet(rows: Cell[][]): BudgetImportResult {
 
   if (!lines.length) throw new Error('Nenhuma linha de insumo encontrada abaixo do cabeçalho.')
   if (cols.package < 0) {
-    warnings.push('A planilha não tem a coluna Vínculo PL: as linhas entram sem IP de planejamento.')
+    warnings.push('O arquivo não tem a coluna Vínculo PL: as linhas entram sem IP de planejamento.')
   } else if (noPackage) {
     warnings.push(`${noPackage} linha(s) de insumo sem Vínculo PL — não poderão ser vinculadas a um IP de planejamento.`)
   }
-  if (totalMismatch) warnings.push(`${totalMismatch} linha(s) com Custo Total diferente de Quantidade × Custo Unit. — mantido o Custo Total da planilha.`)
+  if (totalMismatch) warnings.push(`${totalMismatch} linha(s) com Custo Total diferente de Quantidade × Custo Unit. — mantido o Custo Total do arquivo.`)
 
   const lineTotal = (l: ImportedLine) => Decimal.from(l.total)
   const pk = new Map<string, { packageCode: string; description: string; total: Decimal; lines: number }>()
@@ -261,7 +261,7 @@ export function parseBudgetSheet(rows: Cell[][]): BudgetImportResult {
   const reference = declared ?? (layout === 'orc-analitico' ? compositionsTotal : null)
   if (reference && !reference.minus(total).abs().lte('1')) {
     warnings.push(
-      `Σ dos insumos (R$ ${total.toFixed(2)}) difere do ${declared ? 'custo raso da planilha' : 'total das composições'} (R$ ${reference.toFixed(2)}).`,
+      `Σ dos insumos (R$ ${total.toFixed(2)}) difere do ${declared ? 'custo raso do arquivo' : 'total das composições'} (R$ ${reference.toFixed(2)}).`,
     )
   }
 
