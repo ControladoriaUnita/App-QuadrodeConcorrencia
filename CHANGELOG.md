@@ -20,10 +20,14 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v03 |
-| dev | v03 |
+| produção | v04 |
+| dev | v04 |
 
-## v03 — produção (2026-10-22)
+## v04 — produção (2026-10-22)
+
+- Testes de regras e API isolados do ambiente: no build da Vercel (VERCEL_ENV=production) o modo demonstração era bloqueado e 27 testes falhavam, impedindo a publicação da v03.
+
+## v03 — (2026-10-22, build da Vercel falhou; publicada junto com a v04)
 
 - Atalho `Abrir QC local.bat` para subir o app local.
 - Portão de regressão: `npm run verificar`, hook pre-push e build da Vercel.
