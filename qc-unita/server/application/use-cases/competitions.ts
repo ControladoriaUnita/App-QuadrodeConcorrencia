@@ -16,6 +16,7 @@ import type {
   UpsertPricesInput,
 } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
+import { budgetReadiness, missingSummary } from '../../../shared/domain/budget/readiness'
 import { buildApprovalPlan, decide, type ApprovalInstance } from '../../../shared/domain/approval/approval-flow'
 import { lineTotal } from '../../../shared/domain/competition/best-condition'
 import { buildQcMap, type QcMap } from '../../../shared/domain/competition/qc-map'
@@ -31,6 +32,7 @@ import { buildSnapshot } from '../../../shared/domain/competition/snapshot'
 import { groupBudgetLines, lineBalances, linkFromQuantity, linkFromShare, type GroupedItem } from '../../../shared/domain/planning/links'
 import { AppError, can, notFound, requirePermission, roleIdsFor, type RequestContext } from '../context'
 import type { AggregatedInput, CompetitionData, ComputedPersistence, NewQcItem, Repositories } from '../ports'
+import { namedBudgetStructure } from './works'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 
@@ -97,7 +99,17 @@ export async function createCompetition(repos: Repositories, ctx: RequestContext
     throw new AppError('BUDGET_MISSING', 'A obra não possui orçamento vigente. Sincronize com o ERP.', 409)
   }
 
-  const lines = await repos.catalog.listBudgetLines(work.currentBudgetId)
+  const [lines, structure] = await Promise.all([repos.catalog.listBudgetLines(work.currentBudgetId), namedBudgetStructure(repos, work.currentBudgetId)])
+  // Só com o orçamento 100% completo: toda linha com IP e todo Item com nome
+  const readiness = budgetReadiness(structure.groups, lines)
+  if (!readiness.ready) {
+    throw new AppError(
+      'BUDGET_INCOMPLETE',
+      `Para criar uma concorrência, o orçamento precisa estar 100% com vínculos de planejamento e nomes dos Itens. Falta(m): ${missingSummary(readiness)}. Complete no orçamento da obra ou no De-para e use "Atualizar dados".`,
+      409,
+      readiness,
+    )
+  }
   const pkgs = new Set(input.packageCodes ?? [])
   const lineIdSet = new Set(input.lineIds ?? [])
   const codes = new Set(input.materialCodes ?? [])

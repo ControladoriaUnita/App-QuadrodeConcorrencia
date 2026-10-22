@@ -67,10 +67,10 @@ describe('de-para dos Itens', () => {
     await call('PUT', `/works/${beta.id}/budget-lines/planning`, { lineKey: manual.lineKey, code: 'IP00104', description: 'Terraplenagem' })
 
     const r = await call<SheetBudgetImportResult>('POST', `/works/${beta.id}/budget-sheet/refresh`, {})
-    expect(r.data.warnings).toContain('9 linha(s) sem IP no de-para dos Itens: ficam vinculadas ao próprio item do orçamento até o planejamento escolher o IP.')
+    expect(r.data.warnings).toContain('9 linha(s) sem IP no de-para dos Itens: ficam sem IP até o planejamento escolher.')
     const after = await lines(beta.id)
     const ip = (wbs: string) => [...new Set(after.filter((l) => l.activityWbs === wbs).map((l) => l.packageCode))]
-    expect([ip('02.01.02'), ip('02.02.01'), ip('01.01')]).toEqual([['IP00349'], ['IP00302'], ['01.01']])
+    expect([ip('02.01.02'), ip('02.02.01'), ip('01.01')]).toEqual([['IP00349'], ['IP00302'], [null]])
     expect(after.find((l) => l.lineKey === manual.lineKey)).toMatchObject({ packageCode: 'IP00104', packageManual: true })
     // Tirar do de-para (sem nome e sem IP)
     expect((await call('PUT', '/budget-mappings/items', { wbs: '02.02', description: null, planningCode: null })).status).toBe(200)
@@ -95,7 +95,7 @@ describe('indireto aberto', () => {
       ['Locação de pick-up', '1.0000', '150.0000'],
     ])
     expect(indirect.find((l) => l.description === 'Almoxarife')!.packageCode).toBe('IP00302')
-    expect(indirect.find((l) => l.description === 'Engenheiro Pleno')!.packageCode).toBe('16.06')
+    expect(indirect.find((l) => l.description === 'Engenheiro Pleno')!.packageCode).toBeNull()
 
     const stored = (await call<{ indirect: WorkIndirectDTO }>('GET', `/works/${beta.id}/indirect`)).data.indirect
     expect(stored).toMatchObject({ fileName: 'INDIRETO - 2070.xlsx', total: '31050.0000' })
@@ -122,5 +122,36 @@ describe('indireto aberto', () => {
     expect((await call<ErrorBody>('POST', `/works/${alpha.id}/indirect`, indirectFile())).data.error.code).toBe('SHEET_BUDGET_REQUIRED')
     // Gerente de obra vê o orçamento, mas não importa
     expect((await call('POST', `/works/${beta.id}/indirect`, indirectFile(), MANAGER)).status).toBe(403)
+  })
+})
+
+describe('concorrência só com o orçamento 100% completo', () => {
+  type Created = { competitionId: string }
+  const create = async (user = ADMIN) => {
+    const line = (await lines(beta.id))[0]!
+    return call<Created & ErrorBody & { error: { details: { linesWithoutPlanning: number; unnamedItems: string[] } } }>(
+      'POST', '/competitions', { workId: beta.id, title: 'Teste de bloqueio', lineIds: [line.id] }, user,
+    )
+  }
+
+  it('com linhas sem IP ou Itens sem nome, recusa e diz o que falta', async () => {
+    const r = await create()
+    expect([r.status, r.data.error.code]).toEqual([409, 'BUDGET_INCOMPLETE'])
+    // 02.01 nunca esteve no de-para; 02.02 saiu dele no teste acima
+    expect(r.data.error.details.unnamedItems).toEqual(['02.01', '02.02'])
+    expect(r.data.error.details.linesWithoutPlanning).toBeGreaterThan(0)
+    expect(r.data.error.message).toContain('2 Item(ns) sem nome (02.01, 02.02)')
+  })
+
+  it('completando nome e IPs pelo de-para e atualizando os dados, cria', async () => {
+    await call('PUT', '/budget-mappings/items', { wbs: '01', description: 'SERVIÇOS PRELIMINARES', planningCode: 'IP00104', planningDescription: 'Terraplenagem' })
+    await call('PUT', '/budget-mappings/items', { wbs: '02.01', description: 'PISOS', planningCode: null })
+    await call('PUT', '/budget-mappings/items', { wbs: '02.02', description: 'TERRAPLENAGEM', planningCode: null })
+    await call('PUT', '/budget-mappings/items', { wbs: '16', description: 'INDIRETO', planningCode: 'IP00349', planningDescription: 'Oficial' })
+    await call('POST', `/works/${beta.id}/budget-sheet/refresh`, {})
+    expect((await lines(beta.id)).filter((l) => !l.packageCode?.startsWith('IP'))).toEqual([])
+    const r = await create()
+    expect(r.status).toBe(201)
+    expect(r.data.competitionId).toBeTruthy()
   })
 })

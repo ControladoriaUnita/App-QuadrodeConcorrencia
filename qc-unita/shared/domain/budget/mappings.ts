@@ -82,8 +82,8 @@ interface PlannedLine {
 }
 
 /**
- * IP das linhas pelo de-para dos Itens. Linhas sem Item no de-para ficam como estão (vinculadas ao
- * próprio item do orçamento); `skip` deixa linhas de fora (ex.: o indireto aberto, que já tem o IP).
+ * IP das linhas pelo de-para dos Itens. Linhas sem Item no de-para ficam como estão (sem IP, até o
+ * planejamento escolher); `skip` deixa linhas de fora (ex.: o indireto aberto, que já tem o IP).
  * Retorna as linhas novas e quantas ficaram sem IP no de-para.
  */
 export function applyItemPlanning<L extends PlannedLine>(lines: L[], resolver: MappingResolver, skip?: (line: L) => boolean): { lines: L[]; unmapped: number } {

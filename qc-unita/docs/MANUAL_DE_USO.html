@@ -260,12 +260,12 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
       <ol class="steps">
         <li><div>
           <h3>Conferir o orçamento da obra</h3>
-          <p>Atualize o orçamento pelo SharePoint quando houver versão nova, importe o indireto aberto da obra e, se preciso, escolha o IP de alguma linha.</p>
+          <p>Atualize o orçamento pelo SharePoint quando houver versão nova e importe o indireto aberto da obra. Para criar concorrências o orçamento precisa estar 100% completo: toda linha com IP e todo Item com nome.</p>
           <span class="path"><b>Orçamento</b> › Atualizar dados</span>
         </div></li>
         <li><div>
           <h3>Criar a concorrência</h3>
-          <p>Dê o objeto, marque no orçamento os insumos desta contratação e o % de cada linha a consumir.</p>
+          <p>Com o orçamento completo, dê o objeto, marque no orçamento os insumos desta contratação e o % de cada linha a consumir.</p>
           <span class="path"><b>Orçamento</b> › Nova concorrência</span>
         </div></li>
         <li><div>
@@ -317,7 +317,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
         </div>
         <div class="card">
           <h3>IP manual da linha</h3>
-          <p>Clique no <b>Vínculo PL</b> de uma linha para escolher o IP entre todos os IPs do cadastro da UAU. A linha fica marcada com <span class="badge b-pri">M</span>. A escolha vale para as próximas versões do orçamento e para os QCs em rascunho; <b>Voltar ao IP do orçamento</b> desfaz.</p>
+          <p>Clique no <b>Vínculo PL</b> de uma linha para escolher o IP entre todos os IPs do cadastro da UAU. A linha fica marcada com <span class="badge b-pri">M</span>. A escolha vale para as próximas versões do orçamento e para os QCs em rascunho; <b>Voltar ao IP do orçamento</b> desfaz. Linha sem IP (nem no SharePoint, nem no De-para) aparece com <b>—</b>: o código do item do orçamento não é usado como IP.</p>
         </div>
         <div class="card">
           <h3>Nome dos Itens</h3>
@@ -328,8 +328,12 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
           <p>Em <b>De-para</b> (quem mantém o cadastro) ficam o nome e o IP de cada Item da EAP e o IP de cada insumo do indireto. É a primeira visão de toda obra: o IP de um Item vai para todas as linhas abaixo dele, e o do insumo do indireto vale em todas as obras. A lista já mostra os Itens e insumos das obras que ainda faltam. Os IPs entram na obra no próximo <b>Atualizar dados</b>; depois, o planejamento revisa e ajusta o IP das linhas.</p>
         </div>
         <div class="card">
+          <h3>Orçamento completo para concorrência</h3>
+          <p>Só é possível criar concorrência quando o orçamento vigente está 100% completo: <b>toda linha com IP</b> (código do cadastro de IPs da UAU) e <b>todo Item com nome</b> (não “Item 02”). Enquanto faltar algo, o orçamento mostra o aviso <b>Orçamento incompleto</b> com o número de linhas sem IP e os Itens sem nome, e o botão <b>Nova concorrência</b> fica bloqueado. Para completar: escolha o IP no <b>Vínculo PL</b> das linhas, renomeie os Itens ou complete o <b>De-para</b> e use <b>Atualizar dados</b>.</p>
+        </div>
+        <div class="card">
           <h3>Indireto aberto</h3>
-          <p>O SharePoint traz o indireto fechado (um valor por item). Em <b>Importar indireto (Excel)</b>, envie o arquivo de custo indireto da obra (aba “Total Indiretos” e uma aba por item). Cada item entra aberto, insumo a insumo, no lugar do valor fechado; a prévia mostra o valor de cada item no arquivo e no orçamento. O indireto fica guardado e volta a cada <b>Atualizar dados</b>.</p>
+          <p>O SharePoint traz o indireto fechado (um valor por item). Em <b>Importar indireto (Excel)</b>, envie o arquivo de custo indireto da obra. São lidas as abas Equipamentos, Instalação da Obra, Servs. Terceirizados, Consumos Permanentes, M.O.I. (separada em CLT e PJ), M.O.D., Tarifas e Ligações e Habite-se, com a aba “Total Indiretos” como resumo; cada insumo soma as fases (FASE 01, FASE 02, Instaladora). Cada aba vai para o item do orçamento com o mesmo tipo de custo na descrição da UAU (ex.: M.O.I (PJ) - (INDIRETO)) e entra aberta, insumo a insumo, no lugar do valor fechado; a prévia mostra o valor de cada item no arquivo e no orçamento. Os insumos com IP no De-para entram vinculados; os demais ficam sem IP. O indireto fica guardado e volta a cada <b>Atualizar dados</b>.</p>
         </div>
       </div>
     </section>
@@ -340,7 +344,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
       <ol class="steps">
         <li><div>
           <h3>Informar o objeto e a data</h3>
-          <p>Ex.: “Fornecimento e instalação de esquadrias de alumínio”.</p>
+          <p>Ex.: “Fornecimento e instalação de esquadrias de alumínio”. Se o orçamento não estiver 100% com IP e nomes dos Itens, a tela mostra o que falta e não cria a concorrência.</p>
         </div></li>
         <li><div>
           <h3>Marcar os insumos no orçamento</h3>
@@ -549,7 +553,8 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
             <tr><td>A lista vem do orçamento importado</td><td>A obra não tem a chave da UAU ou a UAU não respondeu; os IPs e insumos saem do orçamento importado.</td></tr>
             <tr><td>Para ver todos os IPs, sincronize os insumos da UAU</td><td>O cadastro de insumos ainda não foi sincronizado. Use Atualizar da UAU na Consulta UAU ou Integração ERP › Insumos.</td></tr>
             <tr><td>N linha(s) vieram com valor zero</td><td>O preço ou o coeficiente está zerado na UAU. Corrija na origem e use Atualizar dados.</td></tr>
-            <tr><td>N linha(s) sem IP no de-para</td><td>O Item (ou o insumo do indireto) ainda não tem IP no De-para. Complete o De-para e use Atualizar dados, ou escolha o IP na linha.</td></tr>
+            <tr><td>N linha(s) sem IP no de-para</td><td>O Item (ou o insumo do indireto) ainda não tem IP no De-para: as linhas ficam sem IP. Complete o De-para e use Atualizar dados, ou escolha o IP na linha.</td></tr>
+            <tr><td>Orçamento incompleto: ainda não é possível criar concorrência</td><td>Há linhas sem IP ou Itens sem nome. O aviso diz quantas linhas e quais Itens; complete no orçamento ou no De-para e use Atualizar dados.</td></tr>
             <tr><td>Nenhum item do indireto existe no orçamento da obra</td><td>O arquivo de indireto é de outra obra ou usa outro número de item. Confira o arquivo.</td></tr>
           </tbody>
         </table>

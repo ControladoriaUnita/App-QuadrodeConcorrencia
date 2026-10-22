@@ -12,6 +12,7 @@ import { formatBRL } from '@/utils/format'
 import { freeShare, pulledValue } from '@/features/works/BudgetLinesTable'
 import { BudgetTree } from '@/features/works/BudgetTree'
 import { useBudgetLines, useBudgetStructure } from '@/features/works/api'
+import { BudgetIncompleteAlert, useBudgetReadiness } from '@/features/works/BudgetReadiness'
 import { workPath } from '@/features/works/currentWork'
 import { useWorkModel, WorkHeader, WorkPageSkeleton } from '@/features/works/WorkHeader'
 import { useCreateCompetition } from './api'
@@ -23,6 +24,8 @@ export function NewCompetitionPage() {
   const lines = useBudgetLines(workId, {}, !!data?.work.currentBudgetId)
   const structure = useBudgetStructure(workId, !!data?.work.currentBudgetId)
   const create = useCreateCompetition()
+  const readiness = useBudgetReadiness(structure.data, lines.data)
+  const blocked = !readiness?.ready
   const [title, setTitle] = useState('')
   const [requestedOn, setRequestedOn] = useState(new Date().toISOString().slice(0, 10))
   const [selection, setSelection] = useState<Map<string, string>>(new Map())
@@ -52,7 +55,7 @@ export function NewCompetitionPage() {
 
   const submit = async () => {
     setTouched(true)
-    if (title.trim().length < 3 || !selection.size || over.length || zero.length) return
+    if (blocked || title.trim().length < 3 || !selection.size || over.length || zero.length) return
     const r = await create.mutateAsync({
       workId,
       title: title.trim(),
@@ -67,6 +70,7 @@ export function NewCompetitionPage() {
   return (
     <div className="pb-16">
       <WorkHeader section="Nova concorrência" data={data} ov={ov} strip={false} />
+      {readiness && !readiness.ready && <BudgetIncompleteAlert readiness={readiness} className="mb-3" />}
 
       <Card className="mb-3">
         <div className="grid gap-4 px-4 py-3 sm:grid-cols-[1fr_11rem]">
@@ -117,7 +121,7 @@ export function NewCompetitionPage() {
           </span>
           <div className="ml-auto flex gap-2">
             <Button variant="ghost" onClick={() => navigate(workPath.competitions(workId))}>Cancelar</Button>
-            <Button variant="primary" icon={<Check className="size-4" />} loading={create.isPending} disabled={!!selection.size && (over.length > 0 || zero.length > 0)} onClick={submit}>
+            <Button variant="primary" icon={<Check className="size-4" />} loading={create.isPending} disabled={blocked || (!!selection.size && (over.length > 0 || zero.length > 0))} onClick={submit}>
               Criar concorrência
             </Button>
           </div>

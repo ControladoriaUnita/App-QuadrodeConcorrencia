@@ -35,6 +35,12 @@ test('de-para: nome e IP por Item; a obra nova do SharePoint já vem com eles', 
   await expect(tabela(page).getByRole('row', { name: /16 Item INDIRETO/ })).toBeVisible()
   const contrapiso = tabela(page).getByRole('row', { name: /Serviço de contra piso/ })
   await expect(contrapiso.getByRole('button', { name: 'IP00349' })).toBeVisible()
+
+  // Linhas sem IP (o código do item não vira IP) e Item sem nome: não dá para criar concorrência
+  await expect(tabela(page).getByRole('row', { name: /LOCAÇÃO DA OBRA/ }).first()).toBeVisible()
+  await expect(page.getByText('Orçamento incompleto: ainda não é possível criar concorrência')).toBeVisible()
+  await expect(page.getByText(/Item\(ns\) sem nome \(02\.01\)/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Nova concorrência' })).toBeDisabled()
 })
 
 test('importar o indireto abre o item 16 insumo a insumo e alimenta o de-para do indireto', async ({ page }) => {

@@ -56,8 +56,8 @@ describe('Orçamentos da aba BD_Orcamento', () => {
     expect([cimento.quantity, cimento.unitCost, cimento.total]).toEqual(['2852.8025', '0.5800', '1654.6254'])
     expect(cimento.aux).toEqual({ code: 'CPU00312', description: 'CONCRETO NÃO ESTRUTURAL', unit: 'm³', coefficient: '0.02545', unitCost: '664.1175' })
     expect(b.lines[3]!.aux).toBeNull()
-    // Sem coluna de Vínculo PL: o item do orçamento é o vínculo
-    expect(cimento.packageCode).toBe('01.02')
+    // Sem coluna de Vínculo PL: a linha fica sem IP (o código do item não é IP)
+    expect([cimento.packageCode, cimento.packageDescription]).toEqual([null, null])
     expect(b.planningFromSheet).toBe(false)
   })
 

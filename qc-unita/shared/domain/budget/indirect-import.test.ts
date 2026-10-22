@@ -92,11 +92,11 @@ describe('abrir o indireto no orçamento', () => {
       'Item 16.05 MÃO DE OBRA INDIRETA - CLT: o indireto aberto soma R$ 9.000,00; o orçamento fechado trazia R$ 5.000,00.',
       'Item 16.06 MÃO DE OBRA INDIRETA - PJ não existia no orçamento: entrou com o indireto.',
       'Item 16.09 LIGAÇÕES não existia no orçamento: entrou com o indireto.',
-      '7 insumo(s) do indireto sem IP no de-para: ficam vinculados ao próprio item até o planejamento escolher o IP.',
+      '7 insumo(s) do indireto sem IP no de-para: ficam sem IP até o planejamento escolher.',
     ])
   })
 
-  it('IP do insumo: de-para do indireto, depois o do Item; sem nenhum, o próprio item', () => {
+  it('IP do insumo: de-para do indireto, depois o do Item; sem nenhum, fica sem IP', () => {
     const resolver = mappingResolver({
       items: [{ wbs: '16', description: null, planning: { code: 'IP00500', description: 'Indiretos' } }],
       indirect: [{ description: 'ALMOXARIFE', planning: { code: 'IP00510', description: 'Almoxarifado' } }],
@@ -107,7 +107,7 @@ describe('abrir o indireto no orçamento', () => {
       return out.lines.find((l) => l.materialCode === code)!.packageCode
     }
     expect([ip('Almoxarife'), ip('Engenheiro Pleno')]).toEqual(['IP00510', 'IP00500'])
-    expect(openIndirect(budget(), indirect, mappingResolver(EMPTY_MAPPINGS)).budget.lines.find((l) => l.activityWbs === '16.06')!.packageCode).toBe('16.06')
+    expect(openIndirect(budget(), indirect, mappingResolver(EMPTY_MAPPINGS)).budget.lines.find((l) => l.activityWbs === '16.06')!.packageCode).toBeNull()
   })
 
   it('o item que era grupo com serviços abaixo vira uma composição só com o indireto', () => {

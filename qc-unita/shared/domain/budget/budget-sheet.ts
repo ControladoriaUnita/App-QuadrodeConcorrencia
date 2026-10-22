@@ -22,9 +22,9 @@
  *  - Linhas que ainda assim ficam com valor zero são avisadas com o nº da linha na aba.
  *  - A EAP vem do Item_pla: 02.06.01.03 é o serviço; 02, 02.06 e 02.06.01 viram grupos.
  *  - Tudo ordenado pelos códigos (itens numericamente; dentro do serviço, insumos e auxiliares por código).
- *  - Vínculo de planejamento: coluna "Vínculo PL"/"IP" quando existir; sem ela, o próprio item do
- *    orçamento (Item_pla), que é a chave que a UAU usa para vincular contratos ao orçamento. O de-para
- *    dos Itens (mappings.ts) troca esse vínculo pelo IP do Item ao gravar a versão.
+ *  - Vínculo de planejamento: coluna "Vínculo PL"/"IP" quando existir; sem ela, a linha fica sem IP
+ *    e o de-para dos Itens (mappings.ts) dá o IP ao gravar a versão. O código do item nunca é usado
+ *    como IP: linha sem IP fica vazia até o planejamento escolher.
  */
 import { Decimal } from '../decimal'
 import type { BudgetImportResult, Cell, ImportedActivity, ImportedGroup, ImportedLine, ImportedMaterial } from './excel-import'
@@ -259,8 +259,8 @@ export function buildSheetBudget(rows: Cell[][], key: BudgetSheetKey): SheetBudg
     act.sum = act.sum.plus(total)
     activities.set(wbs, act)
 
-    const packageCode = (cols.package >= 0 && text(r[cols.package])) || wbs
-    const packageDescription = cols.package >= 0 && text(r[cols.package]) ? text(r[cols.packageDescription]) || packageCode : act.description
+    const packageCode = (cols.package >= 0 && text(r[cols.package])) || null
+    const packageDescription = packageCode ? text(r[cols.packageDescription]) || packageCode : null
 
     pending.push({
       lineKey: '',
@@ -311,10 +311,11 @@ export function buildSheetBudget(rows: Cell[][], key: BudgetSheetKey): SheetBudg
 
   const packages = new Map<string, { packageCode: string; description: string; total: Decimal; lines: number }>()
   for (const l of lines) {
-    const p = packages.get(l.packageCode!) ?? { packageCode: l.packageCode!, description: l.packageDescription ?? l.packageCode!, total: Decimal.ZERO, lines: 0 }
+    if (!l.packageCode) continue
+    const p = packages.get(l.packageCode) ?? { packageCode: l.packageCode, description: l.packageDescription ?? l.packageCode, total: Decimal.ZERO, lines: 0 }
     p.total = p.total.plus(l.total)
     p.lines++
-    packages.set(l.packageCode!, p)
+    packages.set(l.packageCode, p)
   }
 
   const total = Decimal.sum(lines.map((l) => l.total))

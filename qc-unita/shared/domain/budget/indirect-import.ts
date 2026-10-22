@@ -243,8 +243,8 @@ const parentsOf = (wbs: string) => {
  * Troca as linhas fechadas de cada item do indireto pelos insumos abertos (o item do orçamento é
  * achado pelo tipo de custo da descrição; ver targetItems). O item passa a ser uma
  * composição com os insumos do arquivo (o que havia abaixo dele no orçamento sai). O IP de cada
- * insumo vem do de-para do indireto (pela descrição); sem ele, do de-para do Item; sem os dois, o
- * próprio item do orçamento.
+ * insumo vem do de-para do indireto (pela descrição); sem ele, do de-para do Item; sem os dois, a
+ * linha fica sem IP até o planejamento escolher.
  */
 export function openIndirect(budget: BudgetParts, indirect: IndirectBudget, resolver: MappingResolver): { budget: BudgetParts; warnings: string[] } {
   const targets = targetItems(budget, indirect.items.filter((i) => i.lines.length))
@@ -294,13 +294,13 @@ export function openIndirect(budget: BudgetParts, indirect: IndirectBudget, reso
         quantity: l.quantity,
         unitCost: quantity.isPositive() ? Decimal.from(l.total).div(quantity, 4).toDb() : l.total,
         total: l.total,
-        packageCode: planning?.code ?? item.wbs,
-        packageDescription: planning ? (planning.description ?? planning.code) : description,
+        packageCode: planning?.code ?? null,
+        packageDescription: planning ? (planning.description ?? planning.code) : null,
         aux: null,
       })
     }
   }
-  if (unmapped) warnings.push(`${unmapped} insumo(s) do indireto sem IP no de-para: ficam vinculados ao próprio item até o planejamento escolher o IP.`)
+  if (unmapped) warnings.push(`${unmapped} insumo(s) do indireto sem IP no de-para: ficam sem IP até o planejamento escolher.`)
 
   const byCode = <T extends { wbs: string }>(xs: T[]) => [...xs].sort((a, b) => compareItemCodes(a.wbs, b.wbs))
   const order = new Map(byCode(activities).map((a, i) => [a.wbs, i]))

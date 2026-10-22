@@ -278,7 +278,7 @@ async function composeVersion(
     const isOpened = (wbs: string) => opened.some((o) => wbs === o || wbs.startsWith(`${o}.`))
     const r = applyItemPlanning(parts.lines, resolver, (l) => isOpened(l.activityWbs))
     parts = { ...parts, lines: r.lines }
-    if (r.unmapped) warnings.push(`${r.unmapped} linha(s) sem IP no de-para dos Itens: ficam vinculadas ao próprio item do orçamento até o planejamento escolher o IP.`)
+    if (r.unmapped) warnings.push(`${r.unmapped} linha(s) sem IP no de-para dos Itens: ficam sem IP até o planejamento escolher.`)
   }
 
   return {

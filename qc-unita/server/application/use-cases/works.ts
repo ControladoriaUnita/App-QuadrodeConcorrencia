@@ -86,8 +86,12 @@ export async function getBudgetStructure(repos: Repositories, ctx: RequestContex
   requirePermission(ctx, 'budget.read', workId)
   const work = await repos.catalog.getWork(workId)
   if (!work) throw notFound('Obra')
-  if (!work.currentBudgetId) return null
-  const [structure, mappings] = await Promise.all([repos.catalog.getBudgetStructure(work.currentBudgetId), repos.budgetMappings.list()])
+  return work.currentBudgetId ? namedBudgetStructure(repos, work.currentBudgetId) : null
+}
+
+/** Estrutura de uma versão do orçamento com os nomes do de-para (sem conferir permissão) */
+export async function namedBudgetStructure(repos: Repositories, budgetId: string): Promise<BudgetStructureDTO> {
+  const [structure, mappings] = await Promise.all([repos.catalog.getBudgetStructure(budgetId), repos.budgetMappings.list()])
   return { ...structure, groups: nameGroups(structure.groups, mappingResolver(mappings)) }
 }
 

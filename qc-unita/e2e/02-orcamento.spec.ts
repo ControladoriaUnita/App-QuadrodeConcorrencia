@@ -14,6 +14,9 @@ test('o orçamento mostra os totais da obra e a árvore Item → composição �
   await expect(tabela(page).getByRole('row', { name: /02 Item INFRAESTRUTURA R\$ 345\.603,42/ })).toBeVisible()
   await expect(tabela(page).getByRole('row', { name: /02\.02 Item TERRAPLENAGEM R\$ 294\.614,68/ })).toBeVisible()
   await expect(insumos(page).first()).toBeVisible()
+  // Orçamento 100% com IP e nomes: concorrência liberada
+  await expect(page.getByText(/Orçamento incompleto/)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Nova concorrência' })).toBeEnabled()
 })
 
 test('busca e filtro de Vínculo PL mostram só as linhas que batem', async ({ page }) => {

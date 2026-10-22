@@ -20,10 +20,16 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v04 |
-| dev | v05 |
+| produção | v05 |
+| dev | v06 |
 
-## v05 — dev (2026-10-22)
+## v06 — dev (2026-10-22)
+
+- Concorrência só com o orçamento 100% completo: toda linha com vínculo de planejamento (IP do cadastro da UAU) e todo Item com nome. Enquanto faltar algo, o orçamento e a nova concorrência mostram o aviso "Orçamento incompleto" (quantas linhas sem IP e quais Itens sem nome), o botão Nova concorrência fica bloqueado e o servidor recusa a criação.
+- O IP não é mais preenchido com o código do item: linha sem IP no SharePoint, no de-para ou escolhido na obra fica sem IP (inclusive no indireto aberto).
+- Manual de uso atualizado (de-para, indireto aberto, orçamento completo para concorrência).
+
+## v05 — produção (2026-10-22)
 
 - Orçamento com mais de 1.000 linhas: a leitura das linhas no Supabase agora vem em páginas. Antes, só as 1.000 primeiras apareciam e o resto (na U050C, o item 16 com o indireto aberto e parte do item 15) ficava sem insumos na tela.
 - Indireto: cada aba vai para o item do orçamento com o mesmo tipo de custo na descrição da UAU (M.O.I (PJ), M.O.I (CLT), M.O.D…), e não só pelo código da aba "Total Indiretos". Na U050C o arquivo trazia CLT e PJ trocados entre 16.05 e 16.06.

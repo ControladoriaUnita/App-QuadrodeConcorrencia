@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth'
 import { useBudgetLines, useBudgetStructure, usePlanningCodes, useSetBudgetGroupName, useSetLinePlanning, type SheetBudgetImportResult } from './api'
 import { ArchiveWorkButton } from './ArchiveWorkButton'
 import { BudgetImportDialog } from './BudgetImportDialog'
+import { BudgetIncompleteAlert, useBudgetReadiness } from './BudgetReadiness'
 import { BudgetTree } from './BudgetTree'
 import { workPath } from './currentWork'
 import { IndirectImportDialog } from './IndirectImportDialog'
@@ -40,6 +41,7 @@ export function BudgetPage() {
   const planningCodes = usePlanningCodes(workId, hasBudget && canPlan)
   const setPlanning = useSetLinePlanning(workId)
   const renameGroup = useSetBudgetGroupName(workId)
+  const readiness = useBudgetReadiness(structure.data, lines.data)
 
   // Obra recém-criada (cadastro manual): abre a importação do orçamento
   useEffect(() => {
@@ -92,7 +94,13 @@ export function BudgetPage() {
             {refreshButton}
             {importButton}
             {can('competition.create') && hasBudget && (
-              <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => navigate(workPath.newCompetition(workId))}>
+              <Button
+                variant="primary"
+                icon={<Plus className="size-4" />}
+                disabled={!readiness?.ready}
+                title={readiness && !readiness.ready ? 'Complete os vínculos de planejamento e os nomes dos Itens do orçamento' : undefined}
+                onClick={() => navigate(workPath.newCompetition(workId))}
+              >
                 Nova concorrência
               </Button>
             )}
@@ -101,6 +109,7 @@ export function BudgetPage() {
       />
 
       {sheetImport && <SheetImportNotice result={sheetImport} onDismiss={() => setSheetImport(null)} />}
+      {hasBudget && readiness && !readiness.ready && <BudgetIncompleteAlert readiness={readiness} className="mb-3" />}
 
       {!hasBudget ? (
         <Card>
