@@ -30,8 +30,8 @@ const formSchema = z
   .object({
     serviceStartOn: z.string(),
     serviceEndOn: z.string(),
-    engineeringOwnerId: z.string(),
-    procurementOwnerId: z.string(),
+    engineeringOwnerName: z.string().max(200),
+    procurementOwnerName: z.string().max(200),
     budgetUsedAmount: moneyBR,
     budgetAdjustmentAmount: moneyBR,
     contractTypeId: z.string(),
@@ -58,8 +58,8 @@ export function RevisionForm({ detail, map, saving, onSave }: { detail: Competit
   const defaults: FormValues = {
     serviceStartOn: r.serviceStartOn ?? '',
     serviceEndOn: r.serviceEndOn ?? '',
-    engineeringOwnerId: c.engineeringOwner?.id ?? '',
-    procurementOwnerId: c.procurementOwner?.id ?? '',
+    engineeringOwnerName: c.engineeringOwnerName ?? '',
+    procurementOwnerName: c.procurementOwnerName ?? '',
     budgetUsedAmount: toBR(r.budgetUsedAmount),
     budgetAdjustmentAmount: toBR(r.budgetAdjustmentAmount),
     contractTypeId: r.contractTypeId ?? '',
@@ -76,8 +76,8 @@ export function RevisionForm({ detail, map, saving, onSave }: { detail: Competit
     onSave({
       serviceStartOn: nul(v.serviceStartOn),
       serviceEndOn: nul(v.serviceEndOn),
-      engineeringOwnerId: nul(v.engineeringOwnerId),
-      procurementOwnerId: nul(v.procurementOwnerId),
+      engineeringOwnerName: nul(v.engineeringOwnerName.trim()),
+      procurementOwnerName: nul(v.procurementOwnerName.trim()),
       budgetUsedAmount: fromBR(v.budgetUsedAmount),
       budgetAdjustmentAmount: fromBR(v.budgetAdjustmentAmount),
       contractTypeId: nul(v.contractTypeId),
@@ -110,21 +110,11 @@ export function RevisionForm({ detail, map, saving, onSave }: { detail: Competit
           <Field label="Término do serviço" error={e.serviceEndOn?.message}>
             <Input type="date" disabled={disabled} {...register('serviceEndOn')} />
           </Field>
-          <Field label="Engenheiro responsável">
-            <Select disabled={disabled} {...register('engineeringOwnerId')}>
-              <option value="">Selecione…</option>
-              {detail.people.map((p) => (
-                <option key={p.id} value={p.id}>{p.fullName}</option>
-              ))}
-            </Select>
+          <Field label="Engenheiro responsável" error={e.engineeringOwnerName?.message}>
+            <Input disabled={disabled} placeholder="Nome do engenheiro" autoComplete="off" {...register('engineeringOwnerName')} />
           </Field>
-          <Field label="Suprimentos responsável">
-            <Select disabled={disabled} {...register('procurementOwnerId')}>
-              <option value="">Selecione…</option>
-              {detail.people.map((p) => (
-                <option key={p.id} value={p.id}>{p.fullName}</option>
-              ))}
-            </Select>
+          <Field label="Suprimentos responsável" error={e.procurementOwnerName?.message}>
+            <Input disabled={disabled} placeholder="Nome do responsável" autoComplete="off" {...register('procurementOwnerName')} />
           </Field>
           <Field label="Tipo de contrato" className="sm:col-span-2">
             <Select disabled={disabled} {...register('contractTypeId')}>

@@ -7,6 +7,7 @@ import type { CompetitionDetailDTO } from '../../contracts'
 import { Decimal } from '../decimal'
 import { bestMixTotal, computeBestConditions, computeSupplierSummaries, lineTotal } from './best-condition'
 import { availableBudget, compareWithBudget, type BudgetComparison } from './budget-comparison'
+import { computeChosenQuotation, type ChosenQuotation } from './chosen-quotation'
 import { validateForSubmission, type ValidationIssue } from './revision'
 import type { BestCondition, BudgetEnvelope, QcItem, QcPrice, QcSupplier, SupplierSummary } from './types'
 import { awardedTotal, awardedUnitPrices, type PlanningLink } from '../planning/links'
@@ -57,6 +58,8 @@ export interface QcMap {
   contractedByItem: Map<string, Decimal | null>
   /** IPs de cada insumo do mapa (manual ou herdado das referências) */
   allocationsByItem: Map<string, PlanningAllocation[]>
+  /** Cenário montado à mão: fornecedor escolhido em cada insumo */
+  chosen: ChosenQuotation
 }
 
 export type QcMapSource = Omit<CompetitionDetailDTO, 'can' | 'budgetLines' | 'otherCommitments'>
@@ -154,8 +157,8 @@ export function buildQcMap(d: QcMapSource, opts: { today?: string } = {}): QcMap
         requestedOn: d.competition.requestedOn,
         serviceStartOn: d.revision.serviceStartOn,
         serviceEndOn: d.revision.serviceEndOn,
-        engineeringOwnerId: d.competition.engineeringOwner?.id ?? null,
-        procurementOwnerId: d.competition.procurementOwner?.id ?? null,
+        engineeringOwnerName: d.competition.engineeringOwnerName,
+        procurementOwnerName: d.competition.procurementOwnerName,
         contractTypeId: d.revision.contractTypeId,
         winnerSupplierId: d.revision.winnerSupplierId,
         winnerJustification: d.revision.winnerJustification,
@@ -205,5 +208,12 @@ export function buildQcMap(d: QcMapSource, opts: { today?: string } = {}): QcMap
     winner: winnerSummary ? { summary: winnerSummary, comparison: compareWithBudget(envelope, winnerSummary.total) } : null,
     lowestComplete: summaries.find((s) => s.rank === 1) ?? null,
     issues,
+    chosen: computeChosenQuotation(
+      items,
+      prices,
+      new Map(d.items.map((i) => [i.id, i.chosenSupplierId ?? null])),
+      envelope,
+      [...suppliers].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.id),
+    ),
   }
 }

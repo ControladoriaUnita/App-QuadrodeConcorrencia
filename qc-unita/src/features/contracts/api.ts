@@ -43,7 +43,7 @@ function useInvalidate() {
 export function useCreateContract() {
   const invalidate = useInvalidate()
   return useMutation({
-    mutationFn: (competitionId: string) => api<{ id: string; code: string; excluded: number }>('/contracts', { method: 'POST', body: { competitionId } }),
+    mutationFn: (competitionId: string) => api<{ id: string; code: string; excluded: number; created: { id: string; code: string; excluded: number }[] }>('/contracts', { method: 'POST', body: { competitionId } }),
     onSuccess: invalidate,
   })
 }

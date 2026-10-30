@@ -83,7 +83,20 @@ export function useQcMutations(competitionId: string, revisionId: string) {
     updateRevision: useMutation({ mutationFn: (b: UpdateRevisionInput) => api(base, { method: 'PATCH', body: b }), ...opts }),
     updateItem: useMutation({
       mutationFn: ({ itemId, ...b }: UpdateItemInput & { itemId: string }) => api(`${base}/items/${itemId}`, { method: 'PATCH', body: b }),
-      ...opts,
+      // Cotação escolhida: marca a caixa na hora (mesmo padrão otimista dos preços)
+      onMutate: async ({ itemId, chosenSupplierId }) => {
+        if (chosenSupplierId === undefined) return { snapshots: [] }
+        const key = ['competition', competitionId]
+        await qc.cancelQueries({ queryKey: key })
+        const snapshots = qc.getQueriesData<CompetitionDetailDTO>({ queryKey: key })
+        for (const [k, d] of snapshots) {
+          if (!d || d.revision.id !== revisionId) continue
+          qc.setQueryData(k, { ...d, items: d.items.map((i) => (i.id === itemId ? { ...i, chosenSupplierId } : i)) })
+        }
+        return { snapshots }
+      },
+      onError: (_e, _b, ctx) => ctx?.snapshots.forEach(([k, d]) => qc.setQueryData(k, d)),
+      onSettled: invalidate,
     }),
     addSupplier: useMutation({ mutationFn: (supplierId: string) => api(`${base}/suppliers`, { method: 'POST', body: { supplierId } }), ...opts }),
     updateSupplier: useMutation({

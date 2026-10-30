@@ -3,6 +3,8 @@
  *
  * Regras
  *  - A solicitação nasce da revisão APROVADA do QC, com a empresa vencedora indicada.
+ *  - Com cotação escolhida (empresa escolhida por insumo no mapa), nasce uma solicitação por empresa
+ *    escolhida, só com os insumos escolhidos para ela; a vencedora indicada não é usada.
  *  - Entram os itens com quantidade > 0 que a vencedora cotou, ao preço dela (R$ TOTAL = quant. × unit., 4 casas).
  *    Itens que a vencedora não cotou ficam de fora e são informados (exigiriam outro contrato).
  *  - Vínculos (IP · Qtd · Valor): IP manual do item ou herdados das linhas dos insumos referência
@@ -51,6 +53,8 @@ export interface DraftReference {
 
 export interface ContractDraft {
   winnerCompetitionSupplierId: string
+  /** Fornecedor do cadastro (o contratado) */
+  supplierId: string
   items: DraftContractItem[]
   /** Itens com quantidade que a vencedora não cotou */
   excluded: { itemId: string; code: string; description: string }[]
@@ -62,6 +66,36 @@ export interface ContractDraft {
 export function buildContractDraft(source: QcMapSource, map: QcMap): ContractDraft {
   const winner = source.suppliers.find((s) => s.supplierId === source.revision.winnerSupplierId)
   if (!winner) throw new Error('A revisão não possui empresa vencedora participante.')
+  return draftFor(source, map, winner, () => true)
+}
+
+/** A revisão tem cotação escolhida (ao menos um insumo com empresa escolhida)? */
+export function hasChosenQuotation(source: Pick<QcMapSource, 'items'>): boolean {
+  return source.items.some((i) => !!i.chosenSupplierId)
+}
+
+/** Cotação escolhida: uma solicitação por empresa escolhida, na ordem do mapa, com os insumos dela. */
+export function buildChosenContractDrafts(source: QcMapSource, map: QcMap): ContractDraft[] {
+  const chosenOf = new Map(source.items.map((i) => [i.id, i.chosenSupplierId]))
+  const chosen = new Set(source.items.map((i) => i.chosenSupplierId).filter(Boolean))
+  return [...source.suppliers]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .filter((s) => chosen.has(s.id))
+    .map((s) => draftFor(source, map, s, (itemId) => chosenOf.get(itemId) === s.id))
+}
+
+/** Insumos com quantidade sem empresa escolhida (ficam fora das solicitações da cotação escolhida). */
+export function unchosenItems(source: Pick<QcMapSource, 'items'>, map: QcMap): { itemId: string; code: string }[] {
+  const chosen = new Set(source.items.filter((i) => i.chosenSupplierId).map((i) => i.id))
+  return map.items.filter((i) => i.quantity.isPositive() && !chosen.has(i.id)).map((i) => ({ itemId: i.id, code: i.code }))
+}
+
+function draftFor(
+  source: QcMapSource,
+  map: QcMap,
+  winner: QcMapSource['suppliers'][number],
+  includes: (itemId: string) => boolean,
+): ContractDraft {
   const priceOf = new Map(
     map.prices
       .filter((p) => p.competitionSupplierId === winner.id && p.unitPrice?.isPositive())
@@ -75,7 +109,7 @@ export function buildContractDraft(source: QcMapSource, map: QcMap): ContractDra
   const excluded: ContractDraft['excluded'] = []
 
   for (const i of map.items) {
-    if (!i.quantity.isPositive()) continue
+    if (!i.quantity.isPositive() || !includes(i.id)) continue
     const unitPrice = priceOf.get(i.id)
     if (!unitPrice) {
       excluded.push({ itemId: i.id, code: i.code, description: i.description })
@@ -110,6 +144,7 @@ export function buildContractDraft(source: QcMapSource, map: QcMap): ContractDra
 
   return {
     winnerCompetitionSupplierId: winner.id,
+    supplierId: winner.supplierId,
     items,
     excluded,
     total: Decimal.sum(items.map((i) => i.totalPrice)),

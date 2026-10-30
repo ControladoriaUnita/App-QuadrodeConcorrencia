@@ -186,7 +186,7 @@ export interface CompetitionRepository {
   create(data: NewCompetition, actorId: string): Promise<{ competitionId: string; revisionId: string; referenceIds: string[] }>
   getData(competitionId: string, revisionId?: string): Promise<CompetitionData | null>
   getRevisionRef(revisionId: string): Promise<{ competitionId: string; workId: string; status: RevisionStatus; number: number; frozenAt: string | null } | null>
-  updateCompetition(id: string, patch: { engineeringOwnerId?: string | null; procurementOwnerId?: string | null; status?: CompetitionStatus; currentRevisionId?: string }): Promise<void>
+  updateCompetition(id: string, patch: { engineeringOwnerId?: string | null; procurementOwnerId?: string | null; engineeringOwnerName?: string | null; procurementOwnerName?: string | null; status?: CompetitionStatus; currentRevisionId?: string }): Promise<void>
   updateRevision(revisionId: string, patch: Record<string, unknown>): Promise<void>
   updateItem(itemId: string, patch: UpdateItemInput): Promise<void>
   addSupplier(revisionId: string, supplier: SupplierDTO, sortOrder: number): Promise<string>

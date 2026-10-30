@@ -23,7 +23,7 @@ const PARTY = 'id, legal_name, trade_name, tax_id, contact_name, phone, email, c
 const HEADER = `id, code, status, start_on, end_on, total_amount::text, pct_material::text, pct_equipment::text, pct_service::text,
   budget_amount::text, available_amount::text, erp_contract_id, projects, scope_definitions, direct_billing_materials,
   measurement_criteria, notes, submitted_at, submitted_by, sent_to_erp_at, signed_on, cancel_reason, created_at, created_by,
-  competitions(id, code, title, requested_on, procurement_owner_id, works(id, code, name, erp_id)),
+  competitions(id, code, title, requested_on, procurement_owner_id, procurement_owner_name, works(id, code, name, erp_id)),
   competition_revisions(id, number, frozen_at, snapshot_hash),
   contract_types(id, code, name, direct_billing),
   supplier:suppliers!supplier_id(${PARTY}),
@@ -78,7 +78,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
     async list(filter) {
       let q = db
         .from('contract_requests')
-        .select(`id, code, status, start_on, end_on, total_amount::text, erp_contract_id, updated_at,
+        .select(`id, code, status, supplier_id, start_on, end_on, total_amount::text, erp_contract_id, updated_at,
           competitions!inner(id, code, title, work_id), competition_revisions(number),
           supplier:suppliers!supplier_id(legal_name, trade_name), contract_addenda(status, total_delta::text)`)
         .order('updated_at', { ascending: false })
@@ -98,6 +98,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
           competitionCode: comp.code as string,
           competitionTitle: comp.title as string,
           revisionNumber: ((r.competition_revisions as Json | null)?.number as number) ?? 0,
+          supplierId: r.supplier_id as string,
           supplierName: (sup?.trade_name as string) || (sup?.legal_name as string) || '—',
           totalAmount: r.total_amount as string,
           addendaTotal: Decimal.sum(add.filter((a) => a.status === 'approved').map((a) => a.total_delta)).toDb(),
@@ -187,7 +188,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
         work: { id: work.id as string, code: work.code as string, name: work.name as string, erpId: (work.erp_id as string) ?? null },
         competition: {
           id: comp.id as string, code: comp.code as string, title: comp.title as string, requestedOn: comp.requested_on as string,
-          procurementOwnerName: who.get(comp.procurement_owner_id as string) ?? null,
+          procurementOwnerName: (comp.procurement_owner_name as string) ?? who.get(comp.procurement_owner_id as string) ?? null,
         },
         revision: { id: rev.id as string, number: rev.number as number, frozenAt: (rev.frozen_at as string) ?? null, snapshotHash: (rev.snapshot_hash as string) ?? null },
         supplier: party(cr.supplier as Json)!,

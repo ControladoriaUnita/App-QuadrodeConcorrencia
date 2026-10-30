@@ -33,8 +33,8 @@ export interface RevisionHeader {
   requestedOn: string | null
   serviceStartOn: string | null
   serviceEndOn: string | null
-  engineeringOwnerId: string | null
-  procurementOwnerId: string | null
+  engineeringOwnerName: string | null
+  procurementOwnerName: string | null
   contractTypeId: string | null
   winnerSupplierId: string | null
   winnerJustification: string | null
@@ -104,8 +104,8 @@ export function validateForSubmission(input: {
   if (r.serviceStartOn && r.serviceEndOn && r.serviceEndOn < r.serviceStartOn) {
     issues.push({ field: 'serviceEndOn', message: 'O término deve ser posterior ao início.' })
   }
-  req(r.engineeringOwnerId, 'engineeringOwnerId', 'Informe o engenheiro responsável.')
-  req(r.procurementOwnerId, 'procurementOwnerId', 'Informe o responsável de suprimentos.')
+  req(r.engineeringOwnerName?.trim(), 'engineeringOwnerName', 'Informe o engenheiro responsável.')
+  req(r.procurementOwnerName?.trim(), 'procurementOwnerName', 'Informe o responsável de suprimentos.')
   req(r.contractTypeId, 'contractTypeId', 'Selecione o tipo de contrato.')
   req(r.winnerSupplierId, 'winnerSupplierId', 'Indique a empresa vencedora.')
   req(r.winnerJustification?.trim(), 'winnerJustification', 'Justifique a escolha da empresa vencedora.')

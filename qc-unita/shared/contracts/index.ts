@@ -139,6 +139,8 @@ export interface QcItemDTO {
   planningDescription: string | null
   /** Insumos referência usados para comparar este item */
   referenceIds: string[]
+  /** Fornecedor escolhido para contratar o item (cenário "Cotação escolhida"); null = sem escolha */
+  chosenSupplierId: string | null
 }
 
 /** Insumo referência: insumo do orçamento puxado pelo QC (suas linhas e % ficam nos vínculos) */
@@ -351,6 +353,9 @@ export interface CompetitionDetailDTO {
     budgetId: string
     engineeringOwner: ProfileRefDTO | null
     procurementOwner: ProfileRefDTO | null
+    /** Engenheiro e suprimentos responsáveis, digitados por extenso */
+    engineeringOwnerName: string | null
+    procurementOwnerName: string | null
   }
   revision: RevisionDTO
   revisions: Pick<RevisionDTO, 'id' | 'number' | 'status' | 'decidedAt' | 'createdAt' | 'reason'>[]
@@ -371,7 +376,15 @@ export interface CompetitionDetailDTO {
   contractTypes: ContractTypeDTO[]
   people: ProfileRefDTO[]
   /** O usuário atual pode editar/enviar/decidir nesta revisão */
-  can: { edit: boolean; editPrices: boolean; submit: boolean; decide: boolean; createRevision: boolean }
+  can: {
+    edit: boolean
+    editPrices: boolean
+    submit: boolean
+    decide: boolean
+    createRevision: boolean
+    /** Gerar solicitação de contrato: QC aprovado sem solicitação, ou empresa escolhida ainda sem a dela */
+    createContract: boolean
+  }
 }
 
 export interface AuditLogDTO {
@@ -439,6 +452,8 @@ export const updateRevisionSchema = z
     winnerJustification: z.string().max(4000).nullable(),
     engineeringOwnerId: uuid.nullable(),
     procurementOwnerId: uuid.nullable(),
+    engineeringOwnerName: z.string().trim().max(200).nullable(),
+    procurementOwnerName: z.string().trim().max(200).nullable(),
   })
   .partial()
 export type UpdateRevisionInput = z.infer<typeof updateRevisionSchema>
@@ -458,6 +473,8 @@ export const updateItemSchema = z
     /** IP manual; null volta a herdar das referências */
     planningCode: z.string().trim().min(1).max(30).nullable(),
     planningDescription: z.string().trim().max(300).nullable(),
+    /** Fornecedor (competition_supplier) escolhido para contratar o item; null desmarca */
+    chosenSupplierId: uuid.nullable(),
   })
   .partial()
 export type UpdateItemInput = z.infer<typeof updateItemSchema>
@@ -950,6 +967,7 @@ export interface ContractListItemDTO {
   competitionCode: string
   competitionTitle: string
   revisionNumber: number
+  supplierId: string
   supplierName: string
   totalAmount: string
   /** Σ aditivos aprovados */

@@ -441,6 +441,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
             origin: i.origin ?? 'reference',
             planningCode: i.planningCode ?? null,
             planningDescription: i.planningDescription ?? null,
+            chosenSupplierId: i.chosenSupplierId ?? null,
             referenceIds: itemRefs.filter((x) => x.itemId === i.id).map((x) => x.referenceId as string),
           }) as QcItemDTO)
         const references = db
@@ -486,6 +487,8 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
             budgetId: c.budgetId as string,
             engineeringOwner: profileRef(c.engineeringOwnerId),
             procurementOwner: profileRef(c.procurementOwnerId),
+            engineeringOwnerName: (c.engineeringOwnerName as string) ?? profileRef(c.engineeringOwnerId)?.fullName ?? null,
+            procurementOwnerName: (c.procurementOwnerName as string) ?? profileRef(c.procurementOwnerId)?.fullName ?? null,
           },
           revision: revision as unknown as RevisionDTO,
           revisions,
@@ -565,6 +568,8 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         if (!s) return
         const workId = workOfRevision(s.revisionId as string)
         for (const p of db.find('prices', (p) => p.competitionSupplierId === id)) db.remove('prices', p.id, audit, { workId })
+        // Como o "on delete set null" do banco: os insumos escolhidos com ele ficam sem escolha
+        for (const i of db.find('competition_items', (i) => i.chosenSupplierId === id)) db.update('competition_items', i.id, { chosenSupplierId: null }, audit, { workId })
         db.remove('competition_suppliers', id, audit, { workId })
       },
 
@@ -707,6 +712,11 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         for (const s of db.find('competition_suppliers', (x) => x.revisionId === revisionId)) {
           const { id, createdAt: _a, updatedAt: _b, ...r } = s
           supMap.set(id, db.insert('competition_suppliers', { ...r, revisionId: newRev.id }, audit, { workId }).id)
+        }
+        // A escolha de cada insumo acompanha o fornecedor copiado
+        for (const [oldId, newId] of itemMap) {
+          const chosen = db.get('competition_items', oldId)?.chosenSupplierId as string | undefined
+          if (chosen) db.update('competition_items', newId, { chosenSupplierId: supMap.get(chosen) ?? null }, audit, { workId })
         }
         for (const p of db.find('prices', (x) => x.revisionId === revisionId)) {
           const { id: _id, createdAt: _a, updatedAt: _b, ...r } = p

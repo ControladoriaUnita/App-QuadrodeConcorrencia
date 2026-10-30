@@ -99,6 +99,56 @@ describe('solicitação de contrato', () => {
     expect((await call('POST', `/contracts/${id}/cancel`, { reason: 'Fornecedor desistiu' })).status).toBe(200)
     expect((await comps()).find((x) => x.id === contrapiso.id)!.status).toBe('approved')
   })
+
+  it('cotação escolhida: gera uma solicitação por empresa escolhida, só as que faltam', async () => {
+    const contrapiso = (await comps()).find((c) => c.title.startsWith('Contrapiso'))!
+    const detail = async () => (await call<CompetitionDetailDTO>('GET', `/competitions/${contrapiso.id}`)).data
+    const { data: rev } = await call<{ revisionId: string }>('POST', `/competitions/${contrapiso.id}/revisions`, { reason: 'Dividir entre duas empresas' }, ENG)
+    const d = await detail()
+    expect(d.revision.id).toBe(rev.revisionId)
+    // Duas empresas com CND válida (para poder enviar as solicitações)
+    const hoje = new Date().toISOString().slice(0, 10)
+    const [a, b] = d.suppliers.filter((s) => !s.cndValidUntil || s.cndValidUntil >= hoje)
+    const items = d.items.filter((i) => Number(i.quantity) > 0)
+    // 1º insumo com a 2ª empresa, os demais com a 1ª; o último fica sem escolha
+    for (const [n, item] of items.slice(0, -1).entries()) {
+      const chosenSupplierId = (n === 0 ? b : a)!.id
+      expect((await call('PATCH', `/revisions/${rev.revisionId}/items/${item.id}`, { chosenSupplierId })).status).toBe(200)
+    }
+    expect((await call('POST', `/revisions/${rev.revisionId}/submit`)).status).toBe(200)
+    for (const [user, stepOrder] of [[PROC, 1], [ENG, 2], [MGR, 3]] as const) {
+      expect((await call('POST', `/revisions/${rev.revisionId}/approvals`, { stepOrder, decision: 'approved', comment: 'De acordo.' }, user)).status).toBe(200)
+    }
+    expect((await detail()).can.createContract).toBe(true)
+
+    const created = await call<{ created: { id: string }[] }>('POST', '/contracts', { competitionId: contrapiso.id })
+    expect(created.status).toBe(201)
+    expect(created.data.created).toHaveLength(2)
+    const made = await Promise.all(created.data.created.map(async (x) => (await call<ContractRequestDTO>('GET', `/contracts/${x.id}`)).data))
+    expect(made.map((c) => c.supplier.id)).toEqual([a!.supplierId, b!.supplierId])
+    expect(made[1]!.items.map((i) => i.code)).toEqual([items[0]!.code])
+    expect(made[0]!.items.map((i) => i.code)).toEqual(items.slice(1, -1).map((i) => i.code))
+    expect(made[0]!.notes).toContain(`Itens sem empresa escolhida (fora das solicitações): ${items.at(-1)!.code}.`)
+    expect((await detail()).can.createContract).toBe(false)
+    const dup = await call<{ error: { code: string } }>('POST', '/contracts', { competitionId: contrapiso.id })
+    expect(dup.data.error.code).toBe('CONTRACT_EXISTS')
+
+    // Cancelada a de uma empresa, gera de novo só a dela
+    expect((await call('POST', `/contracts/${made[1]!.id}/cancel`, { reason: 'Refazer' })).status).toBe(200)
+    expect((await detail()).can.createContract).toBe(true)
+    const again = await call<{ created: { id: string }[] }>('POST', '/contracts', { competitionId: contrapiso.id })
+    expect(again.data.created).toHaveLength(1)
+    expect((await call<ContractRequestDTO>('GET', `/contracts/${again.data.created[0]!.id}`)).data.supplier.id).toBe(b!.supplierId)
+
+    // Com as duas enviadas, cancelar uma mantém a concorrência contratada
+    for (const id of [made[0]!.id, again.data.created[0]!.id]) {
+      await call('PATCH', `/contracts/${id}`, { measurementCriteria: 'Medição mensal por m² executado.' })
+      const sub = await call('POST', `/contracts/${id}/submit`)
+      expect(sub.status, JSON.stringify(sub.data)).toBe(200)
+    }
+    expect((await call('POST', `/contracts/${made[0]!.id}/cancel`, { reason: 'Fornecedor desistiu' })).status).toBe(200)
+    expect((await comps()).find((x) => x.id === contrapiso.id)!.status).toBe('contracted')
+  })
 })
 
 describe('aditivos', () => {

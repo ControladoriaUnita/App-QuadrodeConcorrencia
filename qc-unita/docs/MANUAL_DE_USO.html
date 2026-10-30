@@ -397,13 +397,14 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
           </tbody>
         </table>
       </div>
-      <p>A coluna <b>IP</b> mostra o IP herdado das referências (passe o mouse para ver a divisão) ou o IP manual, marcado como <span class="badge">manual</span>. A coluna <b>Orçado (referências)</b> mostra a verba que cabe a cada insumo; com <span class="badge b-info">rateio · N insumos</span>, a verba da referência foi dividida entre vários insumos (ver <a href="#calculo">Como o sistema calcula</a>).</p>
+      <p>Os IPs de cada insumo (herdados das referências ou manual) ficam no diálogo de referências do insumo e na solicitação de contrato; o mapa não tem coluna de IP, porque um insumo pode ter vários vínculos. A coluna <b>Orçado (referências)</b> mostra a verba que cabe a cada insumo; com <span class="badge b-info">rateio · N insumos</span>, a verba da referência foi dividida entre vários insumos (ver <a href="#calculo">Como o sistema calcula</a>).</p>
       <div class="legend">
         <span><span class="sw c-iss"></span>Melhor preço do insumo</span>
         <span><span class="sw" style="background:var(--error-soft)"></span>Preço acima do orçado (texto vermelho)</span>
         <span><span class="sw c-cur"></span>1º menor preço entre as propostas completas</span>
       </div>
       <p>No rodapé: <b>Total equalizado</b> de cada fornecedor (e quantos insumos cotou) e o <b>Resultado QC / Orçamento</b> (verba disponível − total), em valor e em % do orçado.</p>
+      <p><b>Cotação escolhida.</b> Cada preço tem uma caixa de seleção: marque com qual fornecedor o insumo será contratado. É um fornecedor por insumo (marcar outro troca a escolha; desmarcar tira o insumo), e cada insumo pode ficar com uma empresa diferente, então a concorrência pode ter mais de uma vencedora. A célula escolhida fica azul, e a coluna <b>Cotação escolhida</b>, à direita da Melhor condição, mostra o fornecedor, o preço e a variação contra o orçado de cada insumo. No rodapé aparecem o total, quantos itens e quantas empresas, e o resultado contra a verba quando todos os insumos tiverem escolha. A escolha não muda a melhor condição, a vencedora indicada nem a aprovação, e passa para a próxima revisão. No QC aprovado, ela gera uma solicitação de contrato por empresa escolhida (veja Solicitação de contrato).</p>
     </section>
 
     <!-- ───────────────────────────── FORNECEDORES -->
@@ -420,7 +421,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
     <!-- ───────────────────────────── DADOS -->
     <section id="dados">
       <div class="lede"><p class="eyebrow">QC · 4ª aba</p><h2>Dados do QC e envio</h2></div>
-      <p>Preencha as datas do serviço, o engenheiro responsável, o responsável de suprimentos, o tipo de contrato, a <b>verba já utilizada</b> e os <b>acréscimos/reduções</b> (que mudam a verba disponível), a empresa vencedora e a justificativa da escolha. Depois clique em <b>Enviar para aprovação</b>.</p>
+      <p>Preencha as datas do serviço, o engenheiro responsável e o responsável de suprimentos (digite o nome de cada um), o tipo de contrato, a <b>verba já utilizada</b> e os <b>acréscimos/reduções</b> (que mudam a verba disponível), a empresa vencedora e a justificativa da escolha. Depois clique em <b>Enviar para aprovação</b>.</p>
       <div class="tbl">
         <table>
           <thead><tr><th>Pendência para o envio</th><th>Como resolver</th></tr></thead>
@@ -465,6 +466,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
       <p>No QC aprovado, <b>Gerar solicitação de contrato</b> monta o formulário da aba “Solic. Contrato” do modelo em Excel.</p>
       <div class="grid2">
         <div class="card"><h3>O que entra</h3><p>Os insumos com quantidade que a vencedora cotou, ao preço dela. Insumos que ela não cotou ficam de fora e são listados (exigiriam outro contrato).</p></div>
+        <div class="card"><h3>Com cotação escolhida</h3><p>Se a revisão aprovada tem insumos com empresa escolhida no mapa, nasce <b>uma solicitação por empresa escolhida</b>, cada uma só com os insumos dela, ao preço dela. Insumos sem escolha ficam de fora e são anotados nas observações. O QC mostra um botão para cada solicitação; se uma for cancelada, <b>Gerar solicitação de contrato</b> volta e gera só a que falta.</p></div>
         <div class="card"><h3>Vínculos por insumo</h3><p>Cada insumo leva os vínculos <b>IP · Qtd · Valor</b>: herdados das referências (pela verba das linhas) ou o IP manual. Abaixo de cada insumo aparecem as referências usadas, com IP e verba.</p></div>
         <div class="card"><h3>Distribuição</h3><p>% material, % equipamento e % MDO/serviço do contrato, ponderados pelo valor de cada insumo.</p></div>
         <div class="card"><h3>Envio</h3><p>Complete tipo, vigência, critérios de medição e, com faturamento direto, os materiais faturados à contratante. <b>Enviar a Contratos</b>; depois, registre a assinatura.</p></div>

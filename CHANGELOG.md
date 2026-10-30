@@ -20,10 +20,18 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v06 |
-| dev | v07 |
+| produção | v07 |
+| dev | v08 |
 
-## v07 — dev (2026-10-22)
+## v08 — dev (2026-10-30)
+
+- **Cotação escolhida** no mapa de cotação: cada preço tem uma caixa de seleção para escolher com qual fornecedor o insumo será contratado (um fornecedor por insumo; marcar outro troca a escolha, desmarcar tira o insumo). Assim a mesma concorrência pode ter mais de uma empresa vencedora. A nova coluna "Cotação escolhida", à direita da Melhor condição, mostra fornecedor, R$ unit., R$ total e vs. orçado de cada insumo; no rodapé, o total, quantos itens e quantas empresas, e o resultado contra a verba quando todos os insumos tiverem escolha. A escolha não muda a melhor condição, a vencedora indicada nem a aprovação, e acompanha a nova revisão.
+- **Uma solicitação de contrato por empresa escolhida**: no QC aprovado com cotação escolhida, "Gerar solicitação de contrato" cria uma solicitação para cada empresa, só com os insumos escolhidos para ela (insumos sem escolha ficam de fora e são anotados nas observações). Se uma for cancelada, o botão volta e gera só a que falta. A tela do QC mostra um botão para cada solicitação ativa. Sem cotação escolhida nada muda: uma solicitação com a vencedora indicada. Cancelar uma solicitação enviada não tira a concorrência de "contratada" enquanto houver outra enviada.
+- **Engenheiro e suprimentos responsáveis** em Dados do QC passam a ser digitados (não são mais escolhidos numa lista de usuários). Os QCs existentes ficam com o nome de quem estava indicado.
+- A coluna **IP** (vínculo PL) saiu do mapa de cotação, porque um insumo pode ter vários vínculos. Os IPs continuam no diálogo de referências do insumo e na solicitação de contrato.
+- Banco: migration `023_item_choice_owner_names.sql` (rodar no Supabase antes de liberar). Ela também troca a regra "uma solicitação ativa por concorrência" por "uma por concorrência e empresa".
+
+## v07 — produção (2026-10-22)
 
 - Botão **Tela cheia** no topo, no mesmo esquema da apresentação de obras (`toggleFullscreen`): o app ocupa a tela inteira; o mesmo botão (ou Esc) sai. Em telas menores aparece só o ícone, para as abas continuarem cabendo.
 - Manual: tela cheia e a aba De-para no mapa das telas.

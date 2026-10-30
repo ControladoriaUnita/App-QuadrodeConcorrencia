@@ -72,7 +72,7 @@ export function toAppError(err: unknown): AppError {
   if (/works_code_key/.test(msg)) return new AppError('WORK_CODE_EXISTS', 'Já existe uma obra com este número.', 409)
   if (/works_uau_key_idx|works_erp_id_key/.test(msg)) return new AppError('WORK_EXISTS', 'Já existe uma obra com esta chave da UAU.', 409)
   if (/contract_requests_one_active/.test(msg)) {
-    return new AppError('CONTRACT_EXISTS', 'Já existe uma solicitação de contrato ativa para esta concorrência.', 409)
+    return new AppError('CONTRACT_EXISTS', 'Já existe uma solicitação de contrato ativa desta empresa para esta concorrência.', 409)
   }
   if (/row-level security|permission denied/i.test(msg)) {
     return new AppError('FORBIDDEN', 'Operação bloqueada pelas regras de acesso.', 403)

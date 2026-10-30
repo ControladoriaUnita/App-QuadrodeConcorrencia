@@ -14,7 +14,15 @@ import type {
 import { Decimal } from '../../../shared/domain/decimal'
 import { buildQcMap } from '../../../shared/domain/competition/qc-map'
 import { DomainError } from '../../../shared/domain/competition/revision'
-import { buildContractDraft, contractDistribution, validateContractRequest } from '../../../shared/domain/contract/contract-request'
+import {
+  buildChosenContractDrafts,
+  buildContractDraft,
+  contractDistribution,
+  hasChosenQuotation,
+  unchosenItems,
+  validateContractRequest,
+  type ContractDraft,
+} from '../../../shared/domain/contract/contract-request'
 import { erpSupports, type ERPProvider } from '../../infrastructure/erp/erp-provider'
 import { AppError, can, notFound, requirePermission, type Actor, type RequestContext } from '../context'
 import type { ContractData, Repositories } from '../ports'
@@ -84,6 +92,12 @@ export async function getContract(repos: Repositories, erp: ERPProvider, ctx: Re
 }
 
 // ----------------------------------------------------------------------------- criação
+/**
+ * Gera a solicitação a partir da revisão aprovada.
+ *  - Sem cotação escolhida: uma solicitação com a empresa vencedora indicada.
+ *  - Com cotação escolhida: uma por empresa escolhida, com os insumos escolhidos para ela. As empresas
+ *    que já têm solicitação ativa nesta concorrência ficam de fora (gera só as que faltam).
+ */
 export async function createContractRequest(repos: Repositories, ctx: RequestContext, competitionId: string) {
   const current = await repos.competitions.getData(competitionId)
   if (!current) throw notFound('Concorrência')
@@ -92,58 +106,94 @@ export async function createContractRequest(repos: Repositories, ctx: RequestCon
 
   const approved = current.revisions.find((r) => r.status === 'approved')
   if (!approved) throw new DomainError('CONTRACT_NO_APPROVED_REVISION', 'A concorrência não possui revisão aprovada para gerar o contrato.')
-  const existing = (await repos.contracts.list({ competitionId })).find((c) => c.status !== 'cancelled')
-  if (existing) throw new AppError('CONTRACT_EXISTS', `Já existe a solicitação ${existing.code} para esta concorrência.`, 409, { id: existing.id })
+  const active = (await repos.contracts.list({ competitionId })).filter((c) => c.status !== 'cancelled')
 
   const data = (await repos.competitions.getData(competitionId, approved.id))!
   const r = data.revision
-  if (!r.winnerSupplierId || !r.contractTypeId || !r.serviceStartOn || !r.serviceEndOn) {
+  const chosen = hasChosenQuotation(data)
+  if (!chosen && active[0]) throw new AppError('CONTRACT_EXISTS', `Já existe a solicitação ${active[0].code} para esta concorrência.`, 409, { id: active[0].id })
+  if ((!chosen && !r.winnerSupplierId) || !r.contractTypeId || !r.serviceStartOn || !r.serviceEndOn) {
     throw new DomainError('CONTRACT_REVISION_INCOMPLETE', 'A revisão aprovada não tem vencedora, tipo de contrato ou datas do serviço.')
   }
   const map = buildQcMap(data)
-  const draft = buildContractDraft(data, map)
-  if (!draft.items.length) throw new DomainError('CONTRACT_NO_ITEMS', 'A empresa vencedora não cotou nenhum item com quantidade.')
+
+  let drafts: ContractDraft[]
+  let unchosen = ''
+  if (chosen) {
+    const contracted = new Set(active.map((c) => c.supplierId))
+    const all = buildChosenContractDrafts(data, map)
+    drafts = all.filter((d) => !contracted.has(d.supplierId) && d.items.length)
+    if (!drafts.length) {
+      const existing = active.find((c) => all.some((d) => d.supplierId === c.supplierId))
+      if (existing) throw new AppError('CONTRACT_EXISTS', 'Todas as empresas da cotação escolhida já têm solicitação de contrato.', 409, { id: existing.id })
+      throw new DomainError('CONTRACT_NO_ITEMS', 'Nenhuma empresa escolhida cotou os insumos escolhidos para ela.')
+    }
+    const missing = unchosenItems(data, map)
+    if (missing.length) unchosen = ` Itens sem empresa escolhida (fora das solicitações): ${missing.map((m) => m.code).join(', ')}.`
+  } else {
+    drafts = [buildContractDraft(data, map)]
+    if (!drafts[0]!.items.length) throw new DomainError('CONTRACT_NO_ITEMS', 'A empresa vencedora não cotou nenhum item com quantidade.')
+  }
 
   const work = (await repos.catalog.getWork(workId))!
-  const code = await repos.contracts.nextCode(workId, work.code)
-  const id = await repos.contracts.create(
-    {
-      competitionId,
-      revisionId: approved.id,
-      supplierId: r.winnerSupplierId,
-      contractTypeId: r.contractTypeId,
-      code,
-      startOn: r.serviceStartOn,
-      endOn: r.serviceEndOn,
-      totalAmount: draft.total.toDb(),
-      pctMaterial: draft.distribution.pctMaterial.toFixed(6),
-      pctEquipment: draft.distribution.pctEquipment.toFixed(6),
-      pctService: draft.distribution.pctService.toFixed(6),
-      budgetAmount: map.budgetTotal.toDb(),
-      availableAmount: map.available.toDb(),
-      scopeDefinitions: r.engineeringNotes,
-      notes: draft.excluded.length
-        ? `Itens não cotados pela vencedora (fora deste contrato): ${draft.excluded.map((e) => e.code).join(', ')}.`
-        : null,
-      items: draft.items.map((i) => ({
-        competitionItemId: i.competitionItemId,
-        materialId: i.materialId,
-        code: i.code,
-        description: i.description,
-        specification: i.specification,
-        unit: i.unit,
-        quantity: i.quantity.toDb(),
-        unitPrice: i.unitPrice.toDb(),
-        pctRetention: i.pctRetention.toFixed(6),
-        pctMaterial: i.pctMaterial.toFixed(6),
-        pctEquipment: i.pctEquipment.toFixed(6),
-        allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: a.quantity.toDb() })),
-        references: i.references.map((r) => ({ ...r, budget: r.budget.toDb() })),
-      })),
-    },
-    ctx.actor.id,
-  )
-  return { id, code, excluded: draft.excluded.length }
+  const created: { id: string; code: string; excluded: number }[] = []
+  for (const draft of drafts) {
+    const code = await repos.contracts.nextCode(workId, work.code)
+    const notes = (
+      (draft.excluded.length
+        ? `Itens não cotados pela ${chosen ? 'empresa escolhida' : 'vencedora'} (fora deste contrato): ${draft.excluded.map((e) => e.code).join(', ')}.`
+        : '') + unchosen
+    ).trim()
+    const id = await repos.contracts.create(
+      {
+        competitionId,
+        revisionId: approved.id,
+        supplierId: draft.supplierId,
+        contractTypeId: r.contractTypeId,
+        code,
+        startOn: r.serviceStartOn,
+        endOn: r.serviceEndOn,
+        totalAmount: draft.total.toDb(),
+        pctMaterial: draft.distribution.pctMaterial.toFixed(6),
+        pctEquipment: draft.distribution.pctEquipment.toFixed(6),
+        pctService: draft.distribution.pctService.toFixed(6),
+        budgetAmount: map.budgetTotal.toDb(),
+        availableAmount: map.available.toDb(),
+        scopeDefinitions: r.engineeringNotes,
+        notes: notes || null,
+        items: draft.items.map((i) => ({
+          competitionItemId: i.competitionItemId,
+          materialId: i.materialId,
+          code: i.code,
+          description: i.description,
+          specification: i.specification,
+          unit: i.unit,
+          quantity: i.quantity.toDb(),
+          unitPrice: i.unitPrice.toDb(),
+          pctRetention: i.pctRetention.toFixed(6),
+          pctMaterial: i.pctMaterial.toFixed(6),
+          pctEquipment: i.pctEquipment.toFixed(6),
+          allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: a.quantity.toDb() })),
+          references: i.references.map((r) => ({ ...r, budget: r.budget.toDb() })),
+        })),
+      },
+      ctx.actor.id,
+    )
+    created.push({ id, code, excluded: draft.excluded.length })
+  }
+  // id/code/excluded: a primeira (compatível com a solicitação única); created: todas as geradas
+  return { ...created[0]!, created }
+}
+
+/** Ainda há solicitação a gerar? (QC aprovado sem solicitação ativa, ou empresa escolhida ainda sem a dela) */
+export async function contractPending(repos: Repositories, competitionId: string, revisions: { id: string; status: string }[]) {
+  const approved = revisions.find((r) => r.status === 'approved')
+  if (!approved) return false
+  const active = (await repos.contracts.list({ competitionId })).filter((c) => c.status !== 'cancelled')
+  const data = await repos.competitions.getData(competitionId, approved.id)
+  if (!data || !hasChosenQuotation(data)) return active.length === 0
+  const contracted = new Set(active.map((c) => c.supplierId))
+  return buildChosenContractDrafts(data, buildQcMap(data)).some((d) => d.items.length && !contracted.has(d.supplierId))
 }
 
 // ----------------------------------------------------------------------------- edição do rascunho
@@ -186,7 +236,8 @@ export async function cancelContractRequest(repos: Repositories, ctx: RequestCon
   const c = await loadContract(repos, ctx, id, 'contract.manage')
   assertStatus(c, ['draft', 'submitted'], 'Somente solicitações em rascunho ou enviadas (antes do ERP) podem ser canceladas.')
   await repos.contracts.update(id, { status: 'cancelled', cancelReason: reason })
-  if (c.status === 'submitted') {
+  const others = (await repos.contracts.list({ competitionId: c.competition.id })).filter((x) => x.id !== id && x.status !== 'cancelled' && x.status !== 'draft')
+  if (c.status === 'submitted' && !others.length) {
     // Sem contrato, a concorrência volta a refletir a revisão corrente
     const comp = await repos.competitions.getData(c.competition.id)
     const rev = comp?.revision.status

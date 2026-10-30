@@ -123,6 +123,7 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
             competitionCode: comp.code as string,
             competitionTitle: comp.title as string,
             revisionNumber: (db.get('competition_revisions', cr.qcRevisionId as string)?.number as number) ?? 0,
+            supplierId: cr.supplierId as string,
             supplierName: s?.tradeName || s?.legalName || '—',
             totalAmount: cr.totalAmount as string,
             addendaTotal: approvedTotal(cr.id).toDb(),
@@ -149,7 +150,7 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
         work: { id: work.id, code: work.code as string, name: work.name as string, erpId: (work.erpId as string) ?? null },
         competition: {
           id: comp.id, code: comp.code as string, title: comp.title as string, requestedOn: comp.requestedOn as string,
-          procurementOwnerName: name(comp.procurementOwnerId),
+          procurementOwnerName: (comp.procurementOwnerName as string) ?? name(comp.procurementOwnerId),
         },
         revision: { id: rev.id, number: rev.number as number, frozenAt: (rev.frozenAt as string) ?? null, snapshotHash: (rev.snapshotHash as string) ?? null },
         supplier: party(cr.supplierId)!,

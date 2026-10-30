@@ -58,6 +58,8 @@ export const fieldLabel: Record<string, string> = {
   pctMaterial: '% Material', pct_material: '% Material', pctEquipment: '% Equipamento', pct_equipment: '% Equipamento',
   pctRetention: '% Retenção', pct_retention: '% Retenção', scopeDescription: 'Escopo', scope_description: 'Escopo',
   engineeringOwnerId: 'Eng. responsável', engineering_owner_id: 'Eng. responsável', procurementOwnerId: 'Suprimentos', procurement_owner_id: 'Suprimentos',
+  engineeringOwnerName: 'Eng. responsável', engineering_owner_name: 'Eng. responsável', procurementOwnerName: 'Suprimentos', procurement_owner_name: 'Suprimentos',
+  chosenSupplierId: 'Cotação escolhida', chosen_supplier_id: 'Cotação escolhida',
   currentRevisionId: 'Revisão corrente', current_revision_id: 'Revisão corrente',
   proposalReceivedOn: 'Proposta recebida em', received_on: 'Proposta recebida em', proposalValidUntil: 'Validade da proposta',
   valid_until: 'Validade da proposta', proposalRef: 'Nº da proposta', proposal_ref: 'Nº da proposta', notes: 'Observações',

@@ -123,6 +123,48 @@ describe('API modo memória', () => {
   })
 })
 
+describe('cotação escolhida e responsáveis por extenso', () => {
+  it('escolhe um fornecedor por insumo (mais de uma vencedora) sem mexer na melhor condição', async () => {
+    const draft = list.find((c) => c.title.startsWith('Pavimentação'))!
+    const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    const quoted = (itemId: string) => d.suppliers.filter((s) => d.prices.some((p) => p.itemId === itemId && p.competitionSupplierId === s.id && Number(p.unitPrice) > 0))
+    const [i1, i2] = d.items.filter((i) => quoted(i.id).length >= 2)
+    const before = buildQcMap(d)
+    const s1 = quoted(i1!.id)[0]!
+    const s2 = quoted(i2!.id)[1]!
+
+    expect((await call('PATCH', `/revisions/${d.revision.id}/items/${i1!.id}`, { chosenSupplierId: s1.id })).status).toBe(200)
+    expect((await call('PATCH', `/revisions/${d.revision.id}/items/${i2!.id}`, { chosenSupplierId: s2.id })).status).toBe(200)
+    // Fornecedor de outra revisão/inexistente é recusado
+    expect((await call('PATCH', `/revisions/${d.revision.id}/items/${i1!.id}`, { chosenSupplierId: crypto.randomUUID() })).status).toBe(409)
+
+    const { data: after } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    expect(after.items.find((i) => i.id === i1!.id)!.chosenSupplierId).toBe(s1.id)
+    const map = buildQcMap(after)
+    expect(map.chosen.suppliers.map((s) => s.competitionSupplierId).sort()).toEqual([s1.id, s2.id].sort())
+    expect(map.mixTotal.toDb()).toBe(before.mixTotal.toDb())
+    expect(after.revision.winnerSupplierId).toBe(d.revision.winnerSupplierId)
+
+    expect((await call('PATCH', `/revisions/${d.revision.id}/items/${i1!.id}`, { chosenSupplierId: null })).status).toBe(200)
+    const { data: cleared } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    expect(cleared.items.find((i) => i.id === i1!.id)!.chosenSupplierId).toBeNull()
+  })
+
+  it('engenheiro e suprimentos digitados; apagar o nome não volta ao usuário anterior', async () => {
+    const draft = list.find((c) => c.title.startsWith('Pavimentação'))!
+    const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    await call('PATCH', `/revisions/${d.revision.id}`, { engineeringOwnerName: '  Eng. Fulano de Tal ', procurementOwnerName: 'Ciclana' })
+    const { data: named } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    expect(named.competition.engineeringOwnerName).toBe('Eng. Fulano de Tal')
+    expect(named.competition.procurementOwnerName).toBe('Ciclana')
+
+    await call('PATCH', `/revisions/${d.revision.id}`, { engineeringOwnerName: '' })
+    const { data: cleared } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    expect(cleared.competition.engineeringOwnerName).toBeNull()
+    expect(buildQcMap(cleared).issues.map((i) => i.field)).toContain('engineeringOwnerName')
+  })
+})
+
 describe('obra e vínculos de planejamento', () => {
   it('lista obras com resumo de consumo e visão por tipo de serviço', async () => {
     const works = await call<{ id: string; code: string; summary: { budgetTotal: string; contracted: string; competitions: number } }[]>('GET', '/works')

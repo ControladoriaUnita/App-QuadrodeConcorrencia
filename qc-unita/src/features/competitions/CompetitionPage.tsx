@@ -40,7 +40,8 @@ export function CompetitionPage() {
   const { can } = useAuth()
   const contracts = useContracts({ competitionId: id }, can('contract.read'))
   const createContract = useCreateContract()
-  const activeContract = contracts.data?.find((x) => x.status !== 'cancelled')
+  // Com cotação escolhida pode haver uma solicitação por empresa
+  const activeContracts = contracts.data?.filter((x) => x.status !== 'cancelled') ?? []
 
   const [confirmSubmit, setConfirmSubmit] = useState(false)
   const [revisionDialog, setRevisionDialog] = useState(false)
@@ -103,29 +104,29 @@ export function CompetitionPage() {
                 ))}
               </Select>
             </label>
-            {activeContract ? (
+            {activeContracts.map((ac) => (
               <Button
+                key={ac.id}
                 icon={<FileSignature className="size-4" />}
-                title={contractStatus[activeContract.status].label}
-                onClick={() => navigate(`/obras/${c.workId}/contratos/${activeContract.id}`)}
+                title={`${contractStatus[ac.status].label} · ${ac.supplierName}`}
+                onClick={() => navigate(`/obras/${c.workId}/contratos/${ac.id}`)}
               >
-                Solicitação {activeContract.code}
+                Solicitação {ac.code}
               </Button>
-            ) : (
-              can('contract.manage') &&
-              detail.revisions.some((x) => x.status === 'approved') && (
-                <Button
-                  variant={detail.can.submit ? 'secondary' : 'primary'}
-                  icon={<FileSignature className="size-4" />}
-                  loading={createContract.isPending}
-                  onClick={async () => {
-                    const r = await createContract.mutateAsync(c.id)
-                    navigate(`/obras/${c.workId}/contratos/${r.id}`)
-                  }}
-                >
-                  Gerar solicitação de contrato
-                </Button>
-              )
+            ))}
+            {detail.can.createContract && (
+              <Button
+                variant={detail.can.submit ? 'secondary' : 'primary'}
+                icon={<FileSignature className="size-4" />}
+                loading={createContract.isPending}
+                onClick={async () => {
+                  const r = await createContract.mutateAsync(c.id)
+                  // Várias empresas escolhidas: abre a lista de solicitações da obra
+                  navigate(r.created.length > 1 ? `/obras/${c.workId}/contratos` : `/obras/${c.workId}/contratos/${r.id}`)
+                }}
+              >
+                Gerar solicitação de contrato
+              </Button>
             )}
             {detail.can.createRevision && (
               <Button icon={<FilePlus2 className="size-4" />} onClick={() => setRevisionDialog(true)}>

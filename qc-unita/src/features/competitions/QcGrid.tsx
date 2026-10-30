@@ -1,10 +1,12 @@
 /**
  * Mapa de cotação — grade estilo planilha (DESIGN_SYSTEM §8).
  * Insumos do mapa (reais, de contrato) no eixo Y, fornecedores no eixo X (R$ unit. / R$ total),
- * melhor condição e comparação com o orçado das referências à direita; totais no rodapé.
+ * melhor condição, cotação escolhida e comparação com o orçado das referências à direita; totais no rodapé.
  *
  * Os insumos são criados aqui ("Adicionar insumo") ou preenchidos a partir dos insumos referência.
- * Cada insumo mostra as referências ligadas (verba usada na comparação) e o IP (herdado ou manual).
+ * Cada insumo mostra as referências ligadas (verba usada na comparação); os IPs ficam no diálogo do insumo.
+ * A caixa de seleção em cada preço escolhe com qual fornecedor o insumo será contratado (cenário
+ * "Cotação escolhida", que permite mais de uma empresa vencedora).
  * As colunas de distribuição (% material, % equipamento, % retenção, especificação e observações)
  * alimentam a Solicitação de Contrato e podem ser recolhidas.
  */
@@ -63,8 +65,9 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
     () => computeDistribution(map.items.map((i) => ({ total: map.bestByItem.get(i.id)?.totalPrice ?? Decimal.ZERO, pctMaterial: i.pctMaterial, pctEquipment: i.pctEquipment }))),
     [map],
   )
-  /** Colunas antes do orçado: insumo, unidade, quantidade, distribuição (se aberta) e IP */
-  const lead = 4 + (showDist ? 5 : 0)
+  const chosen = map.chosen
+  /** Colunas antes do orçado: insumo, unidade, quantidade e distribuição (se aberta) */
+  const lead = 3 + (showDist ? 5 : 0)
 
   return (
     <div className="grid gap-2">
@@ -89,7 +92,9 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
           {showDist ? 'Recolher distribuição' : 'Mostrar distribuição'}
         </Button>
         <span className="tabular ml-auto text-xs text-text-muted">
-          Distribuição pela melhor condição: Material {formatPercent(dist.pctMaterial, 1)} · Equipamento {formatPercent(dist.pctEquipment, 1)} · MDO/Serviço {formatPercent(dist.pctService, 1)}
+          Cotação escolhida: {chosen.chosenItems}/{chosen.activeItems} insumos · {formatBRL(chosen.total)}
+          {chosen.suppliers.length > 1 && ` · ${chosen.suppliers.length} empresas`}
+          {' · '}Distribuição pela melhor condição: Material {formatPercent(dist.pctMaterial, 1)} · Equipamento {formatPercent(dist.pctEquipment, 1)} · MDO/Serviço {formatPercent(dist.pctService, 1)}
         </span>
       </div>
 
@@ -103,7 +108,6 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
               <th rowSpan={2} className={cn(th, 'text-left')}>Un</th>
               <th rowSpan={2} className={cn(th, 'min-w-28')}>Quant.</th>
               {showDist && <th colSpan={5} className={cn(th, 'border-l text-center')}>Distribuição e escopo</th>}
-              <th rowSpan={2} className={cn(th, 'border-l text-left')}>IP</th>
               <th colSpan={2} className={cn(th, 'border-l text-center')}>Orçado (referências)</th>
               {suppliers.map((s) => {
                 const sum = map.summaryBySupplier.get(s.id)
@@ -124,6 +128,9 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                 )
               })}
               <th colSpan={4} className={cn(th, 'border-l bg-success-soft text-center text-success')}>Melhor condição</th>
+              <th colSpan={4} className={cn(th, 'border-l bg-info-soft text-center text-info')} title="Fornecedor marcado em cada insumo para contratação">
+                Cotação escolhida
+              </th>
             </tr>
             {/* Linha 2: subcolunas */}
             <tr>
@@ -142,6 +149,10 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                   <th className={cn(th, 'min-w-32')}>R$ total</th>
                 </Fragment>
               ))}
+              <th className={cn(th, 'border-l min-w-32 text-left')}>Fornecedor</th>
+              <th className={cn(th, 'min-w-28')}>R$ unit.</th>
+              <th className={cn(th, 'min-w-32')}>R$ total</th>
+              <th className={cn(th, 'min-w-24')}>vs. orçado</th>
               <th className={cn(th, 'border-l min-w-32 text-left')}>Fornecedor</th>
               <th className={cn(th, 'min-w-28')}>R$ unit.</th>
               <th className={cn(th, 'min-w-32')}>R$ total</th>
@@ -165,8 +176,7 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
               const budgetUnit = qty.isPositive() ? budgetTotal.div(qty, 4) : Decimal.ZERO
               const group = map.groupOfItem.get(item.id)
               const shared = (group?.itemIds.length ?? 0) > 1
-              const allocations = map.allocationsByItem.get(item.id) ?? []
-              const ips = allocations.map((a) => a.packageCode).filter((p): p is string => !!p)
+              const pick = chosen.byItem.get(item.id)
               const pending = qty.isPositive() && !item.referenceIds.length && !item.planningCode
               return (
                 <tr key={item.id} className="group">
@@ -245,20 +255,6 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                     </>
                   )}
 
-                  <td className={cn(td, 'border-l text-left group-hover:bg-ink-50')}>
-                    {item.planningCode ? (
-                      <span className="inline-flex items-center gap-1" title={item.planningDescription ?? undefined}>
-                        {item.planningCode}
-                        <Badge tone="neutral" className="px-1.5 py-0 text-[10px]">manual</Badge>
-                      </span>
-                    ) : ips.length ? (
-                      <span title={allocations.map((a) => `${a.packageCode ?? 'Sem IP'}: ${formatPercent(a.share, 1)}`).join('\n')}>
-                        {ips[0]}{ips.length > 1 && <span className="text-text-muted"> +{ips.length - 1}</span>}
-                      </span>
-                    ) : (
-                      <span className={pending ? 'text-warning' : 'text-text-muted'}>{EMPTY}</span>
-                    )}
-                  </td>
                   <td className={cn(td, 'border-l text-text-muted group-hover:bg-ink-50')}>{budgetTotal.isZero() ? EMPTY : formatDecimal(budgetUnit)}</td>
                   <td className={cn(td, 'text-text-muted group-hover:bg-ink-50')}>
                     {budgetTotal.isZero() ? EMPTY : formatDecimal(budgetTotal)}
@@ -274,10 +270,21 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                     const isBest = best?.competitionSupplierId === s.id
                     const total = unit !== null && Decimal.from(unit).isPositive() ? lineTotal(Decimal.from(unit), qty) : null
                     const aboveBudget = unit !== null && budgetUnit.isPositive() && Decimal.from(unit).gt(budgetUnit)
-                    const cellBg = isBest ? 'bg-cell-issued' : 'group-hover:bg-ink-50'
+                    const isChosen = item.chosenSupplierId === s.id
+                    const cellBg = isChosen ? 'bg-info-soft' : isBest ? 'bg-cell-issued' : 'group-hover:bg-ink-50'
                     return (
                       <Fragment key={s.id}>
                         <td className={cn(td, 'border-l px-1', cellBg)}>
+                          <div className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            className="size-3.5 shrink-0 accent-info disabled:opacity-30"
+                            checked={isChosen}
+                            disabled={!can.edit || (!total && !isChosen)}
+                            aria-label={`Escolher ${shortName(s)} para ${item.code}`}
+                            title={isChosen ? 'Cotação escolhida — clique para desmarcar' : total ? 'Escolher este fornecedor para contratar o insumo' : 'Sem preço neste insumo'}
+                            onChange={() => onUpdateItem(item.id, { chosenSupplierId: isChosen ? null : s.id })}
+                          />
                           {can.editPrices ? (
                             <DecimalInput
                               value={unit}
@@ -287,10 +294,11 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                               className={cn(isBest && 'font-semibold text-success', aboveBudget && !isBest && 'text-error')}
                             />
                           ) : (
-                            <span className={cn('px-2', isBest && 'font-semibold text-success', aboveBudget && !isBest && 'text-error')}>
+                            <span className={cn('flex-1 px-2', isBest && 'font-semibold text-success', aboveBudget && !isBest && 'text-error')}>
                               {unit === null ? EMPTY : formatDecimal(unit)}
                             </span>
                           )}
+                          </div>
                         </td>
                         <td className={cn(td, cellBg, isBest ? 'font-semibold text-success' : 'text-ink-700')}>{total ? formatDecimal(total) : EMPTY}</td>
                       </Fragment>
@@ -322,6 +330,28 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                       EMPTY
                     )}
                   </td>
+
+                  <td className={cn(td, 'border-l text-left group-hover:bg-ink-50')}>
+                    {pick?.competitionSupplierId ? (
+                      <span className={cn('inline-flex items-center gap-1 font-medium', pick.missingPrice ? 'text-error' : 'text-text')}>
+                        {shortName(supplierById.get(pick.competitionSupplierId)!)}
+                        {pick.missingPrice && <AlertTriangle className="size-3" aria-label="Fornecedor escolhido sem preço neste insumo" />}
+                      </span>
+                    ) : (
+                      <span className="text-text-muted">{qty.isPositive() ? 'Não escolhido' : EMPTY}</span>
+                    )}
+                  </td>
+                  <td className={cn(td, 'group-hover:bg-ink-50')}>{pick?.unitPrice ? formatDecimal(pick.unitPrice) : EMPTY}</td>
+                  <td className={cn(td, 'font-medium group-hover:bg-ink-50')}>{pick?.totalPrice ? formatDecimal(pick.totalPrice) : EMPTY}</td>
+                  <td className={cn(td, 'group-hover:bg-ink-50')}>
+                    {pick?.varianceRatio ? (
+                      <span className={cn('text-xs font-medium', pick.varianceRatio.isNegative() ? 'text-error' : 'text-success')}>
+                        {formatVariation(pick.varianceRatio.neg())}
+                      </span>
+                    ) : (
+                      EMPTY
+                    )}
+                  </td>
                 </tr>
               )
             })}
@@ -342,6 +372,14 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                 )
               })}
               best={<td colSpan={4} className={cn(td, 'border-l bg-success-soft text-success')}>{formatBRL(map.mixTotal)}</td>}
+              chosen={
+                <>
+                  <td colSpan={2} className={cn(td, 'border-l bg-info-soft text-left text-xs font-medium text-text-muted')}>
+                    {chosen.chosenItems}/{chosen.activeItems} itens · {chosen.suppliers.length} {chosen.suppliers.length === 1 ? 'empresa' : 'empresas'}
+                  </td>
+                  <td colSpan={2} className={cn(td, 'bg-info-soft text-info')}>{formatBRL(chosen.total)}</td>
+                </>
+              }
             />
             <FooterRow
               label="Resultado QC / Orçamento"
@@ -362,6 +400,18 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                 <td colSpan={4} className={cn(td, 'border-l bg-success-soft', map.mixComparison.result.isNegative() ? 'text-error' : 'text-success')}>
                   {formatBRL(map.mixComparison.result)} · {formatPercent(map.mixComparison.resultRatio, 1)}
                 </td>
+              }
+              chosen={
+                // Com a escolha incompleta o resultado contra a verba inteira engana: só aparece com todos os insumos escolhidos
+                chosen.chosenItems < chosen.activeItems ? (
+                  <td colSpan={4} className={cn(td, 'border-l bg-info-soft text-xs font-medium text-text-muted')}>
+                    Falta escolher {chosen.activeItems - chosen.chosenItems} de {chosen.activeItems} insumos
+                  </td>
+                ) : (
+                  <td colSpan={4} className={cn(td, 'border-l bg-info-soft', chosen.comparison.result.isNegative() ? 'text-error' : 'text-success')}>
+                    {formatBRL(chosen.comparison.result)} · {formatPercent(chosen.comparison.resultRatio, 1)}
+                  </td>
+                )
               }
             />
           </tfoot>
@@ -391,7 +441,7 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
   )
 }
 
-function FooterRow({ label, hint, before, budget, cells, best }: { label: string; hint?: string; before: number; budget: string; cells: React.ReactNode; best: React.ReactNode }) {
+function FooterRow({ label, hint, before, budget, cells, best, chosen }: { label: string; hint?: string; before: number; budget: string; cells: React.ReactNode; best: React.ReactNode; chosen: React.ReactNode }) {
   return (
     <tr>
       <td className={cn(td, stickyFirst, 'bg-ink-50 text-left')}>
@@ -402,6 +452,7 @@ function FooterRow({ label, hint, before, budget, cells, best }: { label: string
       <td className={cn(td, 'border-l bg-ink-50')} colSpan={2}>{budget}</td>
       {cells}
       {best}
+      {chosen}
     </tr>
   )
 }

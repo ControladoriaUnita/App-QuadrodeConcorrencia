@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Decimal } from '../decimal'
 import { buildQcMap, type QcMapSource } from '../competition/qc-map'
-import { buildContractDraft, validateContractRequest } from './contract-request'
+import { buildChosenContractDrafts, buildContractDraft, hasChosenQuotation, unchosenItems, validateContractRequest } from './contract-request'
 
 const D = Decimal.from
 
@@ -9,7 +9,7 @@ function source(): QcMapSource {
   const item = (id: string, code: string, quantity: string, pctMaterial = '0') => ({
     id, sortOrder: 1, materialId: `m-${id}`, code, description: `Insumo ${code}`, unit: 'm³',
     quantity, scopeDescription: `Escopo ${code}`, contractNotes: null, pctMaterial, pctEquipment: '0', pctRetention: '0.05',
-    origin: 'reference' as const, planningCode: null, planningDescription: null, referenceIds: id === 'i1' ? ['r1'] : [],
+    origin: 'reference' as const, planningCode: null, planningDescription: null, referenceIds: id === 'i1' ? ['r1'] : [], chosenSupplierId: null,
   })
   const sup = (id: string, supplierId: string) => ({
     id, supplierId, sortOrder: 1, status: 'responded' as const, legalName: supplierId, tradeName: null, taxId: '1', contactName: null, phone: null,
@@ -19,7 +19,7 @@ function source(): QcMapSource {
   return {
     competition: {
       id: 'c', code: 'QC-1', title: 'T', description: null, status: 'approved', packageCode: null, requestedOn: '2026-09-01', workId: 'w',
-      workCode: '1', workName: 'W', budgetId: 'b', engineeringOwner: null, procurementOwner: null,
+      workCode: '1', workName: 'W', budgetId: 'b', engineeringOwner: null, procurementOwner: null, engineeringOwnerName: null, procurementOwnerName: null,
     },
     revision: {
       id: 'r', number: 0, status: 'approved', reason: null, serviceStartOn: '2026-10-01', serviceEndOn: '2026-12-31', budgetAmount: '3000.0000',
@@ -63,6 +63,26 @@ describe('Solicitação de contrato', () => {
     // Distribuição ponderada pelo valor contratado: 950 de material em 1.550
     expect(draft.distribution.pctMaterial.toFixed(6)).toBe('0.612903')
     expect(draft.distribution.pctService.toFixed(6)).toBe('0.387097')
+  })
+
+  it('cotação escolhida: uma solicitação por empresa, só com os insumos escolhidos para ela', () => {
+    const src = source()
+    expect(hasChosenQuotation(src)).toBe(false)
+    const choose = (itemId: string, cs: string) => (src.items.find((i) => i.id === itemId)!.chosenSupplierId = cs)
+    choose('i1', 'cs1')
+    choose('i4', 'cs2')
+    choose('i2', 'cs2') // escolhida sem preço: fica de fora e é informada
+    expect(hasChosenQuotation(src)).toBe(true)
+    src.revision.winnerSupplierId = null // a vencedora indicada não é usada
+    const map = buildQcMap(src)
+    const drafts = buildChosenContractDrafts(src, map)
+    expect(drafts.map((d) => [d.supplierId, d.items.map((i) => i.code), d.excluded.map((e) => e.code), d.total.toDb()])).toEqual([
+      ['S1', ['IM1'], [], '950.0000'],
+      ['S2', ['IM4'], ['IS2'], '80.0000'],
+    ])
+    expect(unchosenItems(src, map)).toEqual([])
+    src.items.find((i) => i.id === 'i2')!.chosenSupplierId = null
+    expect(unchosenItems(src, buildQcMap(src)).map((i) => i.code)).toEqual(['IS2']) // IS3 não tem quantidade
   })
 
   it('exige vencedora participante', () => {

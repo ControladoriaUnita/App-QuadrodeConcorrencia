@@ -56,7 +56,7 @@ const REVISION_COLS = `id, number, status, reason, serviceStartOn:service_start_
 const ITEM_COLS = `id, sortOrder:sort_order, materialId:material_id, code, description, unit, quantity:quantity::text,
   scopeDescription:scope_description, contractNotes:contract_notes, pctMaterial:pct_material::text,
   pctEquipment:pct_equipment::text, pctRetention:pct_retention::text, origin, planningCode:planning_code,
-  planningDescription:planning_description, competition_item_references(reference_id)`
+  planningDescription:planning_description, chosenSupplierId:chosen_supplier_id, competition_item_references(reference_id)`
 const REF_COLS = 'id, sortOrder:sort_order, materialId:material_id, code, description, unit'
 const CS_COLS = `id, supplierId:supplier_id, sortOrder:sort_order, status, legalName:legal_name, tradeName:trade_name, taxId:tax_id,
   contactName:contact_name, phone, email, cndValidUntil:cnd_valid_until, deliveryTerms:delivery_terms,
@@ -507,7 +507,8 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
             .from('competitions')
             .select(`id, code, title, description, status, packageCode:package_code, requestedOn:requested_on, workId:work_id,
               budgetId:budget_id, currentRevisionId:current_revision_id, engineeringOwnerId:engineering_owner_id,
-              procurementOwnerId:procurement_owner_id, works(code, name)`)
+              procurementOwnerId:procurement_owner_id, engineeringOwnerName:engineering_owner_name,
+              procurementOwnerName:procurement_owner_name, works(code, name)`)
             .eq('id', competitionId)
             .maybeSingle(),
         ) as unknown as (Json & { works: { code: string; name: string } }) | null
@@ -570,6 +571,8 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
             budgetId: c.budgetId as string,
             engineeringOwner: ref(c.engineeringOwnerId),
             procurementOwner: ref(c.procurementOwnerId),
+            engineeringOwnerName: (c.engineeringOwnerName as string) ?? ref(c.engineeringOwnerId)?.fullName ?? null,
+            procurementOwnerName: (c.procurementOwnerName as string) ?? ref(c.procurementOwnerId)?.fullName ?? null,
           },
           revision: revisionDto,
           revisions: must(revisions) as unknown as CompetitionData['revisions'],

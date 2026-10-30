@@ -33,6 +33,7 @@ import { groupBudgetLines, lineBalances, linkFromQuantity, linkFromShare, type G
 import { AppError, can, notFound, requirePermission, roleIdsFor, type RequestContext } from '../context'
 import type { AggregatedInput, CompetitionData, ComputedPersistence, NewQcItem, Repositories } from '../ports'
 import { namedBudgetStructure } from './works'
+import { contractPending } from './contracts'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 
@@ -61,14 +62,20 @@ export async function getCompetition(
   const pkgs = new Set(data.links.map((l) => l.packageCode).filter(Boolean))
   const mats = new Set(data.links.map((l) => l.materialId))
   const keys = new Set(data.links.map((l) => l.lineKey))
+  const base = withCapabilities(ctx, data)
+  const manage = can(ctx.actor, 'contract.manage', data.competition.workId)
   return {
-    ...withCapabilities(ctx, data),
+    ...base,
+    can: { ...base.can, createContract: manage && (await contractPending(repos, competitionId, data.revisions)) },
     budgetLines: allLines.filter((l) => pkgs.has(l.packageCode) || mats.has(l.materialId) || keys.has(l.lineKey)),
     otherCommitments: commitments.links.filter((l) => l.competitionId !== competitionId),
   }
 }
 
-function withCapabilities(ctx: RequestContext, data: CompetitionData): Omit<CompetitionDetailDTO, 'budgetLines' | 'otherCommitments'> {
+function withCapabilities(
+  ctx: RequestContext,
+  data: CompetitionData,
+): Omit<CompetitionDetailDTO, 'budgetLines' | 'otherCommitments' | 'can'> & { can: Omit<CompetitionDetailDTO['can'], 'createContract'> } {
   const workId = data.competition.workId
   const editable = isEditable(data.revision)
   const roles = roleIdsFor(ctx.actor, workId)
@@ -222,9 +229,19 @@ export async function recompute(repos: Repositories, competitionId: string, revi
 
 export async function updateRevision(repos: Repositories, ctx: RequestContext, revisionId: string, input: UpdateRevisionInput) {
   const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
-  const { engineeringOwnerId, procurementOwnerId, ...revisionPatch } = input
-  if (engineeringOwnerId !== undefined || procurementOwnerId !== undefined) {
-    await repos.competitions.updateCompetition(ref.competitionId, { engineeringOwnerId, procurementOwnerId })
+  const { engineeringOwnerId, procurementOwnerId, engineeringOwnerName, procurementOwnerName, ...revisionPatch } = input
+  // Responsáveis digitados por extenso; apagar o nome também desfaz o usuário indicado antes (senão o nome dele voltaria)
+  const text = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null)
+  const owners = {
+    engineeringOwnerId,
+    procurementOwnerId,
+    engineeringOwnerName: text(engineeringOwnerName),
+    procurementOwnerName: text(procurementOwnerName),
+    ...(engineeringOwnerName !== undefined && !text(engineeringOwnerName) ? { engineeringOwnerId: null } : {}),
+    ...(procurementOwnerName !== undefined && !text(procurementOwnerName) ? { procurementOwnerId: null } : {}),
+  }
+  if (Object.values(owners).some((v) => v !== undefined)) {
+    await repos.competitions.updateCompetition(ref.competitionId, owners)
   }
   if (Object.keys(revisionPatch).length) await repos.competitions.updateRevision(revisionId, revisionPatch)
   await recompute(repos, ref.competitionId, revisionId)
@@ -241,6 +258,9 @@ export async function updateItem(repos: Repositories, ctx: RequestContext, revis
     if (data.items.find((i) => i.id === itemId)?.origin !== 'manual') {
       throw new DomainError('ITEM_FROM_REFERENCE', 'Código, descrição e unidade só podem ser alterados em insumos criados no mapa.')
     }
+  }
+  if (input.chosenSupplierId && !data.suppliers.some((s) => s.id === input.chosenSupplierId)) {
+    throw new DomainError('CHOSEN_SUPPLIER_INVALID', 'O fornecedor escolhido não participa desta revisão.')
   }
   await repos.competitions.updateItem(itemId, input)
   await recompute(repos, ref.competitionId, revisionId)
