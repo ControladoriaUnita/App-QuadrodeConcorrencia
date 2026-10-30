@@ -52,6 +52,14 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<QcItemDTO | null>(null)
   const [removing, setRemoving] = useState<QcItemDTO | null>(null)
+  // Escolha marcada na hora do clique: o cache otimista chega um instante depois e, sem isto, a caixa
+  // controlada volta ao estado anterior nesse intervalo (pisca). Vale até os itens mudarem.
+  const [picked, setPicked] = useState<{ items: QcItemDTO[]; byItem: Record<string, string | null> }>({ items, byItem: {} })
+  const chosenOf = (i: QcItemDTO) => (picked.items === items && i.id in picked.byItem ? picked.byItem[i.id] : i.chosenSupplierId)
+  const choose = (itemId: string, chosenSupplierId: string | null) => {
+    setPicked({ items, byItem: { ...(picked.items === items ? picked.byItem : {}), [itemId]: chosenSupplierId } })
+    onUpdateItem(itemId, { chosenSupplierId })
+  }
   const priceOf = useMemo(() => {
     const m = new Map(detail.prices.map((p) => [`${p.itemId}::${p.competitionSupplierId}`, p.unitPrice]))
     return (itemId: string, supplierId: string) => m.get(`${itemId}::${supplierId}`) ?? null
@@ -270,7 +278,7 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                     const isBest = best?.competitionSupplierId === s.id
                     const total = unit !== null && Decimal.from(unit).isPositive() ? lineTotal(Decimal.from(unit), qty) : null
                     const aboveBudget = unit !== null && budgetUnit.isPositive() && Decimal.from(unit).gt(budgetUnit)
-                    const isChosen = item.chosenSupplierId === s.id
+                    const isChosen = chosenOf(item) === s.id
                     const cellBg = isChosen ? 'bg-info-soft' : isBest ? 'bg-cell-issued' : 'group-hover:bg-ink-50'
                     return (
                       <Fragment key={s.id}>
@@ -283,7 +291,7 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                             disabled={!can.edit || (!total && !isChosen)}
                             aria-label={`Escolher ${shortName(s)} para ${item.code}`}
                             title={isChosen ? 'Cotação escolhida — clique para desmarcar' : total ? 'Escolher este fornecedor para contratar o insumo' : 'Sem preço neste insumo'}
-                            onChange={() => onUpdateItem(item.id, { chosenSupplierId: isChosen ? null : s.id })}
+                            onChange={() => choose(item.id, isChosen ? null : s.id)}
                           />
                           {can.editPrices ? (
                             <DecimalInput
