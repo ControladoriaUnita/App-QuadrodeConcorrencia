@@ -131,11 +131,7 @@ export async function runScenario(repos: Repositories, ctx: RequestContext, work
   if (!work.currentBudgetId) throw new AppError('BUDGET_MISSING', 'A obra não possui orçamento vigente.', 409)
 
   const today = ctx.now().toISOString().slice(0, 10)
-  // Fornecedores com CND válida (ou sem CND informada); "Sem Fornecedor" fica de fora
-  const suppliers = (await repos.catalog.listSuppliers())
-    .filter((s) => !s.isPlaceholder && (!s.cndValidUntil || s.cndValidUntil >= today))
-    .sort((a, b) => (a.tradeName || a.legalName).localeCompare(b.tradeName || b.legalName))
-    .slice(0, 3)
+  const suppliers = pickSuppliers(await repos.catalog.listSuppliers(), today)
   if (suppliers.length < 2) throw new DomainError('SIM_SUPPLIERS', 'O simulado precisa de ao menos 2 fornecedores com CND válida no cadastro.')
   const types = await repos.catalog.listContractTypes()
   const type = types.find((t) => !t.directBilling) ?? types[0]
@@ -156,6 +152,20 @@ export async function runScenario(repos: Repositories, ctx: RequestContext, work
   const created = await build(sim, scenario, title)
   const detail = (await repos.competitions.getData(created.competitionId))!
   return { key, competitionId: created.competitionId, code: detail.competition.code, title, contracts: created.contracts ?? 0 }
+}
+
+/** Termos de empresa de obra: o cadastro da UAU traz de tudo (cartórios, filtros...) */
+const CONSTRUCTION = /constru|engenh|obra|concret|terraplen|paviment|funda[cç]|estaca|edifica|incorpora|empreit|montage|instala|el[eé]tric|hidr[aá]ul|pintura|esquadr|impermeab|locac|loca[cç][aã]o|materia/i
+
+/**
+ * Três fornecedores do simulado: com CND válida (ou sem CND), sem o "Sem Fornecedor" e de preferência
+ * com nome de empresa de obra; dentro disso, ordem alfabética (o mesmo resultado a cada geração).
+ */
+export function pickSuppliers<T extends { legalName: string; tradeName: string | null; cndValidUntil: string | null; isPlaceholder?: boolean }>(all: T[], today: string): T[] {
+  const name = (s: T) => s.tradeName || s.legalName
+  const valid = all.filter((s) => !s.isPlaceholder && (!s.cndValidUntil || s.cndValidUntil >= today) && /[A-Za-zÀ-ú]{3}/.test(name(s)))
+  const score = (s: T) => (CONSTRUCTION.test(`${s.legalName} ${s.tradeName ?? ''}`) ? 0 : 1)
+  return [...valid].sort((a, b) => score(a) - score(b) || name(a).localeCompare(name(b))).slice(0, 3)
 }
 
 async function build(sim: Sim, s: Scenario, title: string): Promise<{ competitionId: string; contracts?: number }> {

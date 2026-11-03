@@ -20,10 +20,14 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v09 |
-| dev | v10 |
+| produção | v10 |
+| dev | v11 |
 
-## v10 — dev (2026-11-03)
+## v11 — dev (2026-11-03)
+
+- Simulado: os fornecedores passam a ser escolhidos entre empresas de obra (construtora, engenharia, concreto, terraplenagem, materiais de construção…), com CND válida. Em ordem alfabética pura, o cadastro da UAU fazia o simulado usar cartórios ("1 TABELIAO DE PROTESTO…") e lojas de filtros.
+
+## v10 — produção (2026-11-03)
 
 - **Excluir obra (administrador):** botão no orçamento da obra e na lista de arquivadas. Apaga a obra de vez, com orçamentos, concorrências, contratos, aditivos e anexos (também os arquivos). Para confirmar, digita-se o número da obra; o botão só libera com o número certo. Fica um registro da exclusão na auditoria. As travas de revisão congelada e de contrato enviado não impedem a exclusão, mas continuam valendo para o uso normal.
 - **Gerar simulado (administrador):** no orçamento da obra. Apaga as concorrências, contratos e anexos da obra (a obra e o orçamento ficam) e cria uma concorrência em cada estágio, a partir do orçamento dela: em cotação (convite; propostas com cotação escolhida em andamento), em aprovação parada em cada alçada ativa, reprovada, aprovada, cotação escolhida com uma solicitação por empresa, solicitação enviada, contrato assinado, aditivo aguardando e aprovado, distrato, solicitação cancelada e contratado com nova revisão. Cada cenário passa pelas mesmas regras das telas; o andamento aparece cenário a cenário, com o link de cada QC.
