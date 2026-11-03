@@ -32,6 +32,15 @@ export function can(actor: Actor, permission: string, workId?: string | null): b
   return actor.permissions.some((p) => p.key === permission && (p.workId === null || (workId != null && p.workId === workId)))
 }
 
+/** Administrador global (papel admin sem obra): exclusões definitivas e o simulado */
+export function isGlobalAdmin(actor: Actor): boolean {
+  return actor.roles.some((r) => r.roleKey === 'admin' && r.workId === null)
+}
+
+export function requireGlobalAdmin(ctx: RequestContext): void {
+  if (!isGlobalAdmin(ctx.actor)) throw new AppError('FORBIDDEN', 'Somente o administrador pode fazer esta operação.', 403)
+}
+
 export function roleIdsFor(actor: Actor, workId: string): string[] {
   return actor.roles.filter((r) => r.workId === null || r.workId === workId).map((r) => r.roleId)
 }

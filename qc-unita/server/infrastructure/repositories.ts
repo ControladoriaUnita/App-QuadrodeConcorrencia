@@ -18,6 +18,11 @@ export function dataSource(): DataSource {
 export interface Session {
   repos: Repositories
   actor: Actor
+  /**
+   * Repositórios sem as regras de acesso por linha (service_role no Supabase). Só para operações
+   * que o caso de uso já restringiu ao administrador global (ex.: o simulado decide todas as alçadas).
+   */
+  elevated: () => Repositories
 }
 
 /**
@@ -34,12 +39,10 @@ export async function openSession(
     if (!token) return null
     const userId = await verifyAccessToken(token)
     if (!userId) return null
-    const repos = createSupabaseRepositories(
-      createUserClient(token, ctx),
-      createServiceClient({ ...ctx, actorId: userId }),
-    )
+    const service = createServiceClient({ ...ctx, actorId: userId })
+    const repos = createSupabaseRepositories(createUserClient(token, ctx), service)
     const actor = await repos.identity.loadActor(userId)
-    return actor ? { repos, actor } : null
+    return actor ? { repos, actor, elevated: () => createSupabaseRepositories(service, service) } : null
   }
 
   const db = getMemoryDb()
@@ -47,5 +50,5 @@ export async function openSession(
   const userId = DEMO_USERS.some((u) => u.id === req.demoUser) ? req.demoUser! : DEMO_USERS[0].id
   const repos = createMemoryRepositories(db, { actorId: userId, origin: ctx.origin, correlationId: ctx.correlationId })
   const actor = await repos.identity.loadActor(userId)
-  return actor ? { repos, actor } : null
+  return actor ? { repos, actor, elevated: () => repos } : null
 }

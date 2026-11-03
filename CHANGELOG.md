@@ -20,10 +20,16 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v08 |
-| dev | v09 |
+| produção | v09 |
+| dev | v10 |
 
-## v09 — dev (2026-11-03)
+## v10 — dev (2026-11-03)
+
+- **Excluir obra (administrador):** botão no orçamento da obra e na lista de arquivadas. Apaga a obra de vez, com orçamentos, concorrências, contratos, aditivos e anexos (também os arquivos). Para confirmar, digita-se o número da obra; o botão só libera com o número certo. Fica um registro da exclusão na auditoria. As travas de revisão congelada e de contrato enviado não impedem a exclusão, mas continuam valendo para o uso normal.
+- **Gerar simulado (administrador):** no orçamento da obra. Apaga as concorrências, contratos e anexos da obra (a obra e o orçamento ficam) e cria uma concorrência em cada estágio, a partir do orçamento dela: em cotação (convite; propostas com cotação escolhida em andamento), em aprovação parada em cada alçada ativa, reprovada, aprovada, cotação escolhida com uma solicitação por empresa, solicitação enviada, contrato assinado, aditivo aguardando e aprovado, distrato, solicitação cancelada e contratado com nova revisão. Cada cenário passa pelas mesmas regras das telas; o andamento aparece cenário a cenário, com o link de cada QC.
+- Banco: migration `024_purge_work.sql` (função `qc_purge_work`, só para o servidor) — rodar no Supabase antes de liberar.
+
+## v09 — produção (2026-11-03)
 
 - **Segurança — edição só da revisão aberta:** as rotas de preço, item, fornecedor e escolha manual conferiam a permissão e a trava na revisão da URL, mas aceitavam ids de outra revisão. Com a URL de um rascunho dava para alterar preços de um QC em aprovação (ou já aprovado). Agora todo item ou fornecedor informado precisa ser da revisão da URL.
 - **Quantidade e preço negativos recusados pela API:** a tela já bloqueava, mas uma chamada direta gravava, por exemplo, quantidade −1000, baixando o total do fornecedor e a alçada de aprovação.

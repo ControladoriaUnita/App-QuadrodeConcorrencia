@@ -10,6 +10,8 @@ import { Alert, Button, Card, CardHeader, EmptyState, Skeleton } from '@/compone
 import { useAuth } from '@/lib/auth'
 import { useBudgetLines, useBudgetStructure, usePlanningCodes, useSetBudgetGroupName, useSetLinePlanning, type SheetBudgetImportResult } from './api'
 import { ArchiveWorkButton } from './ArchiveWorkButton'
+import { DeleteWorkButton } from './DeleteWorkButton'
+import { SimulationButton } from './SimulationButton'
 import { BudgetImportDialog } from './BudgetImportDialog'
 import { BudgetIncompleteAlert, useBudgetReadiness } from './BudgetReadiness'
 import { BudgetTree } from './BudgetTree'
@@ -90,7 +92,13 @@ export function BudgetPage() {
         strip={hasBudget}
         actions={
           <>
-            {can('work.manage') && <ArchiveWorkButton work={data.work} />}
+            {can('work.manage') && (
+              <>
+                {hasBudget && <SimulationButton work={data.work} />}
+                <DeleteWorkButton work={data.work} />
+                <ArchiveWorkButton work={data.work} />
+              </>
+            )}
             {refreshButton}
             {importButton}
             {can('competition.create') && hasBudget && (

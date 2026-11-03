@@ -5,7 +5,7 @@ import type { BudgetImportInput, BudgetLineDTO, BudgetLineUsageDTO, BudgetStruct
 import { Decimal } from '../../../shared/domain/decimal'
 import { summarizeWork } from '../../../shared/domain/work/overview'
 import { mappingResolver, nameGroups } from '../../../shared/domain/budget/mappings'
-import { AppError, can, notFound, requirePermission, type RequestContext } from '../context'
+import { AppError, can, notFound, requireGlobalAdmin, requirePermission, type RequestContext } from '../context'
 import type { BudgetSheetKey } from '../../../shared/domain/budget/budget-sheet'
 import type { BudgetImportSource, Repositories } from '../ports'
 import type { ERPProvider, ErpWorkMaterial } from '../../infrastructure/erp/erp-provider'
@@ -290,6 +290,28 @@ export async function setBudgetGroupName(repos: Repositories, ctx: RequestContex
     throw new AppError('GROUP_NOT_FOUND', `Item ${input.wbs} não encontrado no orçamento vigente.`, 404)
   }
   return { ok: true }
+}
+
+/**
+ * Exclui a obra de vez (administrador global), com orçamentos, concorrências, contratos, aditivos e
+ * anexos. Para confirmar, o número da obra precisa ser digitado. Não há como desfazer: fica só o
+ * registro da exclusão na auditoria.
+ */
+export async function deleteWork(repos: Repositories, ctx: RequestContext, workId: string, confirmCode: string) {
+  requireGlobalAdmin(ctx)
+  const work = await repos.catalog.getWork(workId)
+  if (!work) throw notFound('Obra')
+  if (confirmCode.trim() !== work.code) throw new AppError('CONFIRM_CODE', `Digite o número da obra (${work.code}) para confirmar a exclusão.`, 422)
+  return purgeWorkData(repos, ctx, workId, { keepWork: false })
+}
+
+/** Apaga os dados (e os arquivos dos anexos) da obra; com `keepWork`, só concorrências e contratos. */
+export async function purgeWorkData(repos: Repositories, ctx: RequestContext, workId: string, opts: { keepWork: boolean }) {
+  const files = (await repos.attachments.list({ workId })).map((a) => a.storagePath)
+  const result = await repos.catalog.purgeWork(workId, ctx.actor.id, opts)
+  // Arquivos depois do banco: se algum falhar, sobra só o binário órfão, nunca um anexo sem arquivo
+  await Promise.allSettled(files.map((path) => repos.storage.remove(path)))
+  return { ...result, attachments: files.length }
 }
 
 /** Arquiva (ou desarquiva) a obra: sai das listas, nada é apagado. Só quem gerencia obras. */

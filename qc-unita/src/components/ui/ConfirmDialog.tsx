@@ -59,12 +59,14 @@ interface ConfirmProps {
   confirmLabel: string
   tone?: 'primary' | 'danger'
   loading?: boolean
+  /** Confirmação bloqueada (ex.: falta digitar o número da obra) */
+  confirmDisabled?: boolean
   onConfirm: () => void
   onCancel: () => void
   children?: ReactNode
 }
 
-export function ConfirmDialog({ open, title, description, confirmLabel, tone = 'primary', loading, onConfirm, onCancel, children }: ConfirmProps) {
+export function ConfirmDialog({ open, title, description, confirmLabel, tone = 'primary', loading, confirmDisabled, onConfirm, onCancel, children }: ConfirmProps) {
   return (
     <Dialog
       open={open}
@@ -76,7 +78,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel, tone = '
           <Button variant="ghost" onClick={onCancel} className="mr-auto">
             Cancelar
           </Button>
-          <Button variant={tone === 'danger' ? 'danger' : 'primary'} loading={loading} onClick={onConfirm}>
+          <Button variant={tone === 'danger' ? 'danger' : 'primary'} loading={loading} disabled={confirmDisabled} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </>

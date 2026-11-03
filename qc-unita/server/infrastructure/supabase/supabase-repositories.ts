@@ -412,6 +412,13 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
       async setWorkArchived(id, archived, actorId) {
         must(await db.from('works').update(archived ? { archived_at: new Date().toISOString(), archived_by: actorId } : { archived_at: null, archived_by: null }).eq('id', id))
       },
+      async purgeWork(id, actorId, opts) {
+        // Função SQL só para a service_role: as travas de revisão/contrato são suspensas dentro dela
+        return must(await service.rpc('qc_purge_work', { p_work_id: id, p_actor: actorId, p_keep_work: opts.keepWork })) as {
+          competitions: number
+          contracts: number
+        }
+      },
       async findMaterialIdByCode(code) {
         const r = must(await db.from('materials').select('id').eq('code', code).maybeSingle()) as { id: string } | null
         return r?.id ?? null

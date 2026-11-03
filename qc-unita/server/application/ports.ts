@@ -153,6 +153,11 @@ export interface CatalogRepository {
   getWork(id: string): Promise<WorkDTO | null>
   /** Arquiva (ou desarquiva) a obra; não apaga nada */
   setWorkArchived(id: string, archived: boolean, actorId: string): Promise<void>
+  /**
+   * Apaga de vez concorrências, contratos, aditivos e anexos da obra; sem `keepWork`, também a obra
+   * com orçamentos e cadastros dela. Os binários dos anexos ficam por conta de quem chama.
+   */
+  purgeWork(id: string, actorId: string, opts: { keepWork: boolean }): Promise<{ competitions: number; contracts: number }>
   listSuppliers(search?: string): Promise<SupplierDTO[]>
   getSupplier(id: string): Promise<SupplierDTO | null>
   listContractTypes(): Promise<ContractTypeDTO[]>

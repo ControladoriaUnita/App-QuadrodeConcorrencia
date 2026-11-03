@@ -24,6 +24,8 @@ import {
   setLinePlanningSchema,
   setBudgetGroupNameSchema,
   archiveWorkSchema,
+  deleteWorkSchema,
+  runSimulationSchema,
   materialQuerySchema,
   updateItemSchema,
   updateRevisionSchema,
@@ -41,13 +43,14 @@ import {
   requestUploadSchema,
   type ApiErrorBody,
 } from '../../shared/contracts'
-import { AppError, toAppError, type RequestContext } from '../application/context'
+import { AppError, requireGlobalAdmin, toAppError, type RequestContext } from '../application/context'
 import type { Repositories } from '../application/ports'
 import * as addenda from '../application/use-cases/addenda'
 import * as attachments from '../application/use-cases/attachments'
 import * as budgetMappings from '../application/use-cases/budget-mappings'
 import * as catalog from '../application/use-cases/catalog'
 import * as contracts from '../application/use-cases/contracts'
+import * as simulation from '../application/use-cases/simulation'
 import * as qc from '../application/use-cases/competitions'
 import * as works from '../application/use-cases/works'
 import * as workSetup from '../application/use-cases/work-setup'
@@ -59,7 +62,16 @@ import { DEMO_USERS } from '../infrastructure/memory/seed'
 import { dataSource, openSession } from '../infrastructure/repositories'
 
 type Params = Record<string, string>
-type Handler = (a: { req: Request; url: URL; params: Params; repos: Repositories; ctx: RequestContext; body: () => Promise<unknown> }) => Promise<unknown>
+type Handler = (a: {
+  req: Request
+  url: URL
+  params: Params
+  repos: Repositories
+  /** Sem as regras de acesso por linha: só para casos de uso restritos ao administrador global */
+  elevated: () => Repositories
+  ctx: RequestContext
+  body: () => Promise<unknown>
+}) => Promise<unknown>
 
 interface Route {
   method: string
@@ -82,6 +94,19 @@ const uuidParam = z.string().uuid()
 // ----------------------------------------------------------------------------- rotas
 route('GET', '/me', async ({ ctx }) => ({ user: catalog.me(ctx), dataSource: dataSource() }))
 route('GET', '/works', async ({ repos, ctx, url }) => works.listWorksWithSummary(repos, ctx, { archived: url.searchParams.get('arquivadas') === '1' }))
+// Simulado (administrador global): a rota usa os repositórios sem as regras de acesso por linha,
+// depois de o caso de uso conferir o administrador (ele decide todas as alçadas)
+route('GET', '/works/:id/simulation', async ({ repos, ctx, params }) => simulation.listSimulation(repos, ctx, parse(uuidParam, params.id)))
+route('POST', '/works/:id/simulation/reset', async ({ elevated, ctx, params, body }) => {
+  requireGlobalAdmin(ctx)
+  return simulation.resetSimulation(elevated(), ctx, parse(uuidParam, params.id), parse(deleteWorkSchema, await body()).confirmCode)
+})
+route('POST', '/works/:id/simulation/run', async ({ elevated, ctx, params, body }) => {
+  requireGlobalAdmin(ctx)
+  return simulation.runScenario(elevated(), ctx, parse(uuidParam, params.id), parse(runSimulationSchema, await body()).scenario)
+}, 201)
+route('DELETE', '/works/:id', async ({ repos, ctx, params, body }) =>
+  works.deleteWork(repos, ctx, parse(uuidParam, params.id), parse(deleteWorkSchema, await body()).confirmCode))
 route('PUT', '/works/:id/archive', async ({ repos, ctx, params, body }) =>
   works.setWorkArchived(repos, ctx, parse(uuidParam, params.id), parse(archiveWorkSchema, await body()).archived))
 route('GET', '/works/:id/budget-lines', async ({ repos, ctx, params, url }) =>
@@ -315,7 +340,7 @@ export async function handle(req: Request): Promise<Response> {
         throw new AppError('INVALID_JSON', 'Corpo da requisição inválido.', 400)
       }
     }
-    const result = await match.r.handler({ req, url, params, repos: session.repos, ctx, body })
+    const result = await match.r.handler({ req, url, params, repos: session.repos, elevated: session.elevated, ctx, body })
     return json(result ?? { ok: true }, match.r.status ?? 200, correlationId)
   } catch (err) {
     if (err instanceof ZodError) {

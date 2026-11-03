@@ -334,6 +334,34 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
       async setWorkArchived(id, archived, actorId) {
         db.update('works', id, archived ? { archivedAt: new Date().toISOString(), archivedBy: actorId } : { archivedAt: null, archivedBy: null }, audit, { workId: id })
       },
+      async purgeWork(id, actorId, opts) {
+        // Como qc_purge_work: sem as travas de revisão congelada/contrato e com um registro único
+        const work = db.get('works', id)
+        if (!work) throw new Error(`QC_WORK_NOT_FOUND: obra ${id} não encontrada`)
+        const comps = new Set(db.find('competitions', (c) => c.workId === id).map((c) => c.id))
+        const contracts = new Set(db.find('contract_requests', (c) => comps.has(c.competitionId as string)).map((c) => c.id))
+        db.log(audit, opts.keepWork ? 'competitions' : 'works', id, 'delete', null, { workCode: work.code, keepWork: opts.keepWork, competitions: comps.size, contracts: contracts.size }, null, null, id)
+
+        const revisions = new Set(db.find('competition_revisions', (r) => comps.has(r.competitionId as string)).map((r) => r.id))
+        const contractItems = new Set(db.find('contract_request_items', (i) => contracts.has(i.contractRequestId as string)).map((i) => i.id))
+        const addenda = new Set(db.find('contract_addenda', (a) => contracts.has(a.contractRequestId as string)).map((a) => a.id))
+        const budgets = new Set(opts.keepWork ? [] : db.find('budgets', (b) => b.workId === id).map((b) => b.id))
+        const gone = (r: Row, table: string) =>
+          (table === 'competitions' && comps.has(r.id)) ||
+          (table === 'contract_requests' && contracts.has(r.id)) ||
+          (table === 'attachments' && r.workId === id) ||
+          revisions.has(r.revisionId as string) ||
+          (table === 'competition_revisions' && revisions.has(r.id)) ||
+          contracts.has(r.contractRequestId as string) ||
+          contractItems.has(r.contractRequestItemId as string) ||
+          addenda.has(r.addendumId as string) ||
+          (table === 'contract_addenda' && addenda.has(r.id)) ||
+          budgets.has(r.budgetId as string) ||
+          (!opts.keepWork && (r.workId === id || (table === 'budgets' && budgets.has(r.id)) || ((table === 'works' || table === 'work_indirect_costs') && r.id === id)))
+        for (const [table, rows] of db.tables) for (const r of [...rows.values()]) if (gone(r, table)) rows.delete(r.id)
+        void actorId
+        return { competitions: comps.size, contracts: contracts.size }
+      },
       async findMaterialIdByCode(code) {
         return db.find('materials', (m) => m.code === code)[0]?.id ?? null
       },

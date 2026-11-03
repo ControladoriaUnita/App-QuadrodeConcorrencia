@@ -87,6 +87,11 @@ Na obra, **Importar orçamento (Excel)** lê a planilha no navegador — formato
 - A aba é grande: um índice só com as colunas de chave/total é lido em blocos e fica 5 min em memória; o orçamento escolhido lê só as linhas dele. Sem credenciais do Graph, o modo demonstração usa orçamentos de exemplo (obras 2041, 2055, 1980 e a nova 2070).
 - Rotas: `GET /work-setup/options` (empresas → obras → orçamentos), `POST /works/from-uau`, `POST /works/:id/budget-sheet/refresh`. Variáveis em `.env.example` (`MS_GRAPH_*`, `BUDGET_SHEET_*`); migration `017_budget_sheet.sql`.
 
+### Excluir obra e simulado (administrador global)
+
+- **Excluir obra** (`DELETE /api/works/:id`, corpo `{ confirmCode }` = número da obra): apaga a obra de vez com orçamentos, concorrências, contratos, aditivos e anexos (e os arquivos no Storage). No Supabase é a função `qc_purge_work` (migration `024_purge_work.sql`), só para a service_role: suspende as travas de revisão/contrato e a auditoria linha a linha dentro da própria transação e deixa um registro único da exclusão em `audit_logs`.
+- **Simulado** (`/api/works/:id/simulation`): `reset` apaga concorrências e contratos da obra (`qc_purge_work` mantendo a obra) e `run` gera um cenário por chamada (cabe no tempo da função): cotação, aprovação parada em cada alçada ativa, reprovada, aprovada, cotação escolhida, solicitação enviada/assinada/cancelada, aditivo aguardando/aprovado, distrato e nova revisão. Usa os mesmos casos de uso das telas; como o administrador decide todas as alçadas, a rota usa os repositórios sem RLS (`session.elevated`) depois de conferir o administrador.
+
 ### Vínculos de planejamento (aba "Vínculos e insumos")
 
 **Um QC pode reunir vários IPs.** Na criação escolhem-se os IPs e depois as linhas do orçamento, uma a uma (pré-selecionadas as que têm saldo). No QC, **Adicionar linhas do orçamento** inclui linhas de qualquer IP; cada linha vinculada pode ser ajustada ou desvinculada; itens podem ser removidos.

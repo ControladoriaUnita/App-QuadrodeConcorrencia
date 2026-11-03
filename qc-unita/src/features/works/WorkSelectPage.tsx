@@ -14,6 +14,7 @@ import { formatBRL, formatPercent } from '@/utils/format'
 import { useWorks } from '@/features/competitions/api'
 import { useArchivedWorks } from './api'
 import { ArchiveWorkButton } from './ArchiveWorkButton'
+import { DeleteWorkButton } from './DeleteWorkButton'
 import { workPath } from './currentWork'
 import { NewWorkDialog } from './NewWorkDialog'
 import { NewWorkFromUauDialog } from './NewWorkFromUauDialog'
@@ -102,7 +103,10 @@ export function WorkSelectPage() {
             archived ? (
               <div key={w.id} className="flex flex-col gap-2">
                 <WorkCard w={w} />
-                <ArchiveWorkButton work={w} />
+                <div className="flex flex-wrap gap-2">
+                  <ArchiveWorkButton work={w} />
+                  <DeleteWorkButton work={w} />
+                </div>
               </div>
             ) : (
               <WorkCard key={w.id} w={w} />

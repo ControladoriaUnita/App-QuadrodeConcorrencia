@@ -7,10 +7,10 @@
  * Caminho: {work_id}/{entity_type}/{entity_id}/{uuid}-{arquivo} (as políticas do Storage leem o work_id).
  */
 import type { AttachmentDTO, AttachmentEntity, ConfirmUploadInput, RequestUploadInput, UploadTicketDTO } from '../../../shared/contracts'
-import { AppError, can, notFound, requirePermission, type RequestContext } from '../context'
+import { AppError, can, isGlobalAdmin, notFound, requirePermission, type RequestContext } from '../context'
 import type { AttachmentRecord, Repositories } from '../ports'
 
-const isAdmin = (ctx: RequestContext) => ctx.actor.roles.some((r) => r.roleKey === 'admin' && r.workId === null)
+const isAdmin = (ctx: RequestContext) => isGlobalAdmin(ctx.actor)
 
 /** Nome seguro para o caminho do Storage (sem acentos, barras ou espaços); o nome original fica nos metadados. */
 export function safeFileName(name: string): string {

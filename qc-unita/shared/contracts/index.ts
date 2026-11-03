@@ -523,6 +523,17 @@ export const addLinesSchema = z.object({
 export type AddLinesInput = z.infer<typeof addLinesSchema>
 
 /** Arquivar (true) ou desarquivar (false) uma obra */
+/** Simulado: um cenário (estágio do app) a gerar na obra */
+export interface SimulationScenarioDTO {
+  key: string
+  label: string
+}
+export const runSimulationSchema = z.object({ scenario: z.string().trim().min(1).max(60) })
+
+/** Exclusão definitiva de obra: o número da obra digitado confirma */
+export const deleteWorkSchema = z.object({ confirmCode: z.string().trim().min(1, 'Digite o número da obra').max(30) })
+export type DeleteWorkInput = z.infer<typeof deleteWorkSchema>
+
 export const archiveWorkSchema = z.object({ archived: z.boolean() })
 
 /** Nome de um Item da EAP do orçamento (null volta ao nome da planilha) */

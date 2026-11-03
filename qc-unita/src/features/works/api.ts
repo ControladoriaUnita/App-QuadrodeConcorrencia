@@ -10,6 +10,7 @@ import type {
   RefreshSheetBudgetInput,
   SetBudgetGroupNameInput,
   SetLinePlanningInput,
+  SimulationScenarioDTO,
   WorkDTO,
   WorkIndirectDTO,
   WorkListDTO,
@@ -178,3 +179,21 @@ export function useSetWorkArchived(workId: string) {
     },
   })
 }
+
+/** Exclusão definitiva da obra (administrador): o número da obra digitado confirma */
+export function useDeleteWork(workId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (confirmCode: string) =>
+      api<{ competitions: number; contracts: number; attachments: number }>(`/works/${workId}`, { method: 'DELETE', body: { confirmCode } }),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ['work-overview', workId] })
+      qc.invalidateQueries({ queryKey: ['works'] })
+      qc.invalidateQueries({ queryKey: ['competitions'] })
+      qc.invalidateQueries({ queryKey: ['contracts'] })
+    },
+  })
+}
+
+export const useSimulationScenarios = (workId: string, enabled: boolean) =>
+  useQuery({ queryKey: ['simulation', workId], queryFn: () => api<SimulationScenarioDTO[]>(`/works/${workId}/simulation`), enabled })
