@@ -7,21 +7,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { IndirectBudget } from '../../../shared/domain/budget/indirect-import'
 import { descriptionKey } from '../../../shared/domain/budget/mappings'
 import type { BudgetMappingRepository, IndirectRepository } from '../../application/ports'
+import { allPages } from './pages'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function must<T = any>(res: { data: unknown; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message)
   return res.data as T
-}
-
-/** PostgREST limita cada resposta (padrão 1.000 linhas): lê em páginas */
-async function allPages<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
-  const out: T[] = []
-  for (let from = 0; ; from += 1000) {
-    const rows = must<T[]>(await page(from, from + 999))
-    out.push(...rows)
-    if (rows.length < 1000) return out
-  }
 }
 
 export function createSupabaseBudgetMappings(service: SupabaseClient): BudgetMappingRepository {

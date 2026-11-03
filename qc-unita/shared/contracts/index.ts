@@ -9,7 +9,9 @@ export const decimalString = z
   .string()
   .trim()
   .regex(/^-?\d{1,14}(\.\d{1,6})?$/, 'Número inválido (use ponto como separador decimal)')
-export const ratioString = decimalString.refine((v) => Number(v) >= 0 && Number(v) <= 1, 'Percentual deve estar entre 0 e 1')
+/** Quantidade e preço: negativo baixaria o total do fornecedor (ranking e alçada de aprovação). */
+export const nonNegativeDecimal = (message: string) => decimalString.refine((v) => !v.startsWith('-'), message)
+export const ratioString = decimalString.refine((v) => Number(v) >= 0 && Number(v) <= 1, 'Percentual deve estar entre 0% e 100%')
 export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (aaaa-mm-dd)')
 export const uuid = z.string().uuid()
 
@@ -460,7 +462,7 @@ export type UpdateRevisionInput = z.infer<typeof updateRevisionSchema>
 
 export const updateItemSchema = z
   .object({
-    quantity: decimalString,
+    quantity: nonNegativeDecimal('Quantidade não pode ser negativa'),
     scopeDescription: z.string().max(4000).nullable(),
     contractNotes: z.string().max(4000).nullable(),
     pctMaterial: ratioString,
@@ -485,7 +487,7 @@ export const addQcItemSchema = z.object({
   code: z.string().trim().min(1, 'Informe o código').max(30),
   description: z.string().trim().min(2, 'Informe a descrição').max(300),
   unit: z.string().trim().min(1, 'Informe a unidade').max(10),
-  quantity: decimalString.refine((v) => !v.startsWith('-'), 'Quantidade não pode ser negativa'),
+  quantity: nonNegativeDecimal('Quantidade não pode ser negativa'),
   referenceIds: z.array(uuid).max(200).default([]),
   planningCode: z.string().trim().min(1).max(30).nullable().optional(),
   planningDescription: z.string().trim().max(300).nullable().optional(),
@@ -825,7 +827,7 @@ export const upsertPricesSchema = z.object({
       z.object({
         competitionSupplierId: uuid,
         itemId: uuid,
-        unitPrice: decimalString.nullable(),
+        unitPrice: nonNegativeDecimal('Preço não pode ser negativo').nullable(),
         notes: z.string().max(1000).nullable().optional(),
       }),
     )

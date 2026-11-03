@@ -161,8 +161,8 @@ export interface CatalogRepository {
   listBudgetLines(budgetId: string, packages?: string[]): Promise<BudgetLineDTO[]>
   /** Grupos (Item) e composições do orçamento, na ordem da planilha */
   getBudgetStructure(budgetId: string): Promise<BudgetStructureDTO>
-  /** Linhas por id (de qualquer versão do orçamento) */
-  getBudgetLines(ids: string[]): Promise<BudgetLineDTO[]>
+  /** Linhas por id, de qualquer versão do orçamento da obra (linhas de outra obra ficam de fora) */
+  getBudgetLines(ids: string[], workId: string): Promise<BudgetLineDTO[]>
   /** Insumo do cadastro pelo código (null se não existir) */
   findMaterialIdByCode(code: string): Promise<string | null>
   /** Cadastro de insumos: IPs (código "IP…") ou os demais, com busca por código ou descrição */

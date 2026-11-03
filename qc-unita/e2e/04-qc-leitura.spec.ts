@@ -35,7 +35,7 @@ test('fornecedores e dados do QC mostram condições e opções de vencedora', a
   await abrirQc(page, 'Pavimentação externa e passeio')
   await page.getByRole('tab', { name: /Fornecedores e condições/ }).click()
   await expect(page.getByRole('heading', { level: 3, name: /Pavimenta 1º menor preço/ })).toBeVisible()
-  await expect(page.getByRole('definition').filter({ hasText: /30\/09\/2026\s*Vencida/ })).toBeVisible()
+  await expect(page.getByRole('definition').filter({ hasText: /\d{2}\/\d{2}\/\d{4}\s*Vencida/ })).toBeVisible()
 
   await page.getByRole('tab', { name: 'Dados do QC' }).click()
   const vencedora = page.getByRole('combobox', { name: 'Empresa vencedora' })

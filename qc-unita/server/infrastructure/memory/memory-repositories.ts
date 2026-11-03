@@ -325,8 +325,11 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
             })),
         }
       },
-      async getBudgetLines(ids) {
-        return ids.map((id) => db.get('activity_items', id)).filter((x): x is Row => !!x).map(toLine)
+      async getBudgetLines(ids, workId) {
+        return ids
+          .map((id) => db.get('activity_items', id))
+          .filter((x): x is Row => !!x && db.get('budgets', x.budgetId as string)?.workId === workId)
+          .map(toLine)
       },
       async setWorkArchived(id, archived, actorId) {
         db.update('works', id, archived ? { archivedAt: new Date().toISOString(), archivedBy: actorId } : { archivedAt: null, archivedBy: null }, audit, { workId: id })

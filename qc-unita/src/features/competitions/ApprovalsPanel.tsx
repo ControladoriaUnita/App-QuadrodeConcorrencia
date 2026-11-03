@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Check, CircleDashed, MinusCircle, X } from 'lucide-react'
 import type { CompetitionDetailDTO, DecideApprovalInput } from '@shared/contracts'
+import type { QcMap } from '@shared/domain/competition/qc-map'
 import { Alert, Badge, Button, Card, CardBody, CardHeader, EmptyState, Field, Textarea } from '@/components/ui'
 import { cn } from '@/utils/cn'
-import { formatDateTime } from '@/utils/format'
+import { formatBRL, formatDateTime } from '@/utils/format'
 import { approvalStatus } from './status'
 
 const icons = { pending: CircleDashed, approved: Check, rejected: X, skipped: MinusCircle }
@@ -14,9 +15,20 @@ const iconTone = {
   skipped: 'bg-ink-100 text-ink-400',
 }
 
-export function ApprovalsPanel({ detail, deciding, onDecide }: { detail: CompetitionDetailDTO; deciding: boolean; onDecide: (d: DecideApprovalInput) => void }) {
+export function ApprovalsPanel({
+  detail,
+  map,
+  deciding,
+  onDecide,
+}: {
+  detail: CompetitionDetailDTO
+  map: QcMap
+  deciding: boolean
+  onDecide: (d: DecideApprovalInput) => void
+}) {
   const [comment, setComment] = useState('')
   const current = detail.approvals.find((a) => a.status === 'pending')
+  const nameOf = new Map(detail.suppliers.map((s) => [s.id, s.tradeName || s.legalName]))
 
   if (!detail.approvals.length) {
     return (
@@ -61,48 +73,83 @@ export function ApprovalsPanel({ detail, deciding, onDecide }: { detail: Competi
         </CardBody>
       </Card>
 
-      <Card>
-        <CardHeader title="Sua decisão" />
-        <CardBody className="grid gap-4">
-          {detail.can.decide && current ? (
-            <>
-              <p className="text-sm text-ink-600">
-                Etapa atual: <span className="font-semibold text-text">{current.stepName}</span>
-              </p>
-              <Field label="Comentário" hint="Obrigatório para reprovar.">
-                <Textarea rows={4} value={comment} onChange={(e) => setComment(e.target.value)} />
-              </Field>
-              <div className="flex gap-2">
-                <Button
-                  variant="danger"
-                  icon={<X className="size-4" />}
-                  disabled={!comment.trim()}
-                  loading={deciding}
-                  onClick={() => onDecide({ stepOrder: current.stepOrder, decision: 'rejected', comment })}
-                >
-                  Reprovar
-                </Button>
-                <Button
-                  variant="primary"
-                  icon={<Check className="size-4" />}
-                  loading={deciding}
-                  onClick={() => onDecide({ stepOrder: current.stepOrder, decision: 'approved', comment: comment || null })}
-                >
-                  Aprovar
-                </Button>
-              </div>
-            </>
-          ) : (
-            <Alert tone="info">
-              {current
-                ? `Aguardando decisão do papel “${current.roleName}”.`
-                : detail.revision.status === 'approved'
-                  ? 'Fluxo concluído. A revisão está congelada.'
-                  : 'Fluxo encerrado.'}
-            </Alert>
-          )}
-        </CardBody>
-      </Card>
+      <div className="grid content-start gap-3">
+        {map.chosen.suppliers.length > 0 && (
+          // Com cotação escolhida o que se aprova é a divisão: uma solicitação de contrato por empresa
+          <Card>
+            <CardHeader title="Cotação escolhida" description="Divisão aprovada: uma solicitação de contrato por empresa" />
+            <CardBody>
+              <table className="w-full text-sm" aria-label="Divisão da cotação escolhida">
+                <tbody>
+                  {map.chosen.suppliers.map((s) => (
+                    <tr key={s.competitionSupplierId} className="border-b border-border last:border-0">
+                      <td className="py-1.5 pr-2 text-text">{nameOf.get(s.competitionSupplierId) ?? '—'}</td>
+                      <td className="py-1.5 pr-2 text-right text-text-muted">{s.items} insumo(s)</td>
+                      <td className="py-1.5 text-right font-semibold tabular-nums">{formatBRL(s.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td className="pt-2 font-semibold" colSpan={2}>
+                      Total (base da alçada)
+                    </td>
+                    <td className="pt-2 text-right font-semibold tabular-nums">{formatBRL(map.chosen.total)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+              {map.chosen.chosenItems < map.chosen.activeItems && (
+                <Alert tone="warning" className="mt-3">
+                  Falta escolher {map.chosen.activeItems - map.chosen.chosenItems} de {map.chosen.activeItems} insumos.
+                </Alert>
+              )}
+            </CardBody>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader title="Sua decisão" />
+          <CardBody className="grid gap-4">
+            {detail.can.decide && current ? (
+              <>
+                <p className="text-sm text-ink-600">
+                  Etapa atual: <span className="font-semibold text-text">{current.stepName}</span>
+                </p>
+                <Field label="Comentário" hint="Obrigatório para reprovar.">
+                  <Textarea rows={4} value={comment} onChange={(e) => setComment(e.target.value)} />
+                </Field>
+                <div className="flex gap-2">
+                  <Button
+                    variant="danger"
+                    icon={<X className="size-4" />}
+                    disabled={!comment.trim()}
+                    loading={deciding}
+                    onClick={() => onDecide({ stepOrder: current.stepOrder, decision: 'rejected', comment })}
+                  >
+                    Reprovar
+                  </Button>
+                  <Button
+                    variant="primary"
+                    icon={<Check className="size-4" />}
+                    loading={deciding}
+                    onClick={() => onDecide({ stepOrder: current.stepOrder, decision: 'approved', comment: comment || null })}
+                  >
+                    Aprovar
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Alert tone="info">
+                {current
+                  ? `Aguardando decisão do papel “${current.roleName}”.`
+                  : detail.revision.status === 'approved'
+                    ? 'Fluxo concluído. A revisão está congelada.'
+                    : 'Fluxo encerrado.'}
+              </Alert>
+            )}
+          </CardBody>
+        </Card>
+      </div>
     </div>
   )
 }

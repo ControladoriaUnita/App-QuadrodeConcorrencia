@@ -261,7 +261,7 @@ export function CompetitionPage() {
           onRemove={(sid) => m.removeSupplier.mutateAsync(sid)}
         />
       )}
-      {tab === 'aprovacoes' && <ApprovalsPanel detail={detail} deciding={m.decide.isPending} onDecide={(d) => m.decide.mutate(d)} />}
+      {tab === 'aprovacoes' && <ApprovalsPanel detail={detail} map={map} deciding={m.decide.isPending} onDecide={(d) => m.decide.mutate(d)} />}
       {tab === 'historico' && <AuditPanel detail={detail} />}
 
       <ConfirmDialog

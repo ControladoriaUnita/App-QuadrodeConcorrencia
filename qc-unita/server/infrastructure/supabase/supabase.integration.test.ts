@@ -167,7 +167,7 @@ describe.runIf(RUN)('Supabase repositories (integração)', () => {
     expect(sync.steps.filter((x) => x.status === 'error')).toEqual([])
     const again = await qc.getCompetition(s.repos, s.ctx, competitionId)
     const ids = again.links.map((l) => l.activityItemId!)
-    expect((await s.repos.catalog.getBudgetLines(ids)).length).toBe(ids.length)
+    expect((await s.repos.catalog.getBudgetLines(ids, detail.competition.workId)).length).toBe(ids.length)
   })
 
   it.runIf(process.env.QC_XLSX)('importa a planilha real como nova versão do orçamento', async () => {

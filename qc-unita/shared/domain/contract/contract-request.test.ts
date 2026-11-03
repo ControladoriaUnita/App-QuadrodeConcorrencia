@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Decimal } from '../decimal'
 import { buildQcMap, type QcMapSource } from '../competition/qc-map'
-import { buildChosenContractDrafts, buildContractDraft, hasChosenQuotation, unchosenItems, validateContractRequest } from './contract-request'
+import { buildChosenContractDrafts, buildContractDraft, hasChosenQuotation, nextContractCode, unchosenItems, validateContractRequest } from './contract-request'
 
 const D = Decimal.from
 
@@ -103,5 +103,11 @@ describe('Solicitação de contrato', () => {
       '2026-10-06',
     ).map((i) => i.field)
     expect(issues).toEqual(['endOn', 'secondSupplierId', 'directBillingMaterials', 'measurementCriteria', 'supplier'])
+  })
+
+  it('número da solicitação: maior existente + 1 (não a contagem)', () => {
+    expect(nextContractCode('2041', [])).toBe('SC-2041-001')
+    // Com um número faltando na sequência, a contagem repetiria o SC-2041-003
+    expect(nextContractCode('2041', ['SC-2041-001', 'SC-2041-003'])).toBe('SC-2041-004')
   })
 })

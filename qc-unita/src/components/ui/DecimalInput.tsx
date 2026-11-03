@@ -39,34 +39,37 @@ export function DecimalInput({ value, onCommit, fractionDigits = 2, scale = 'pla
     return trimZeros ? s.replace(/(,\d{2}\d*?)0+$/, '$1') : s
   }
   const [text, setText] = useState(toDisplay(value))
-  const [invalid, setInvalid] = useState(false)
+  /** Motivo da recusa; enquanto houver, o texto digitado fica no campo (senão voltava calado ao valor anterior) */
+  const [error, setError] = useState<string | null>(null)
+  const invalid = error !== null
   const [focused, setFocused] = useState(false)
 
   useEffect(() => {
-    if (!focused) setText(toDisplay(value))
+    if (!focused && !invalid) setText(toDisplay(value))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, focused])
+  }, [value, focused, invalid])
 
   const commit = () => {
     const raw = text.trim()
     if (raw === '') {
-      setInvalid(false)
+      setError(null)
       if (!allowEmpty) return setText(toDisplay(value))
       if (value !== null) onCommit(null)
       return
     }
+    let d: Decimal
     try {
-      let d = Decimal.parseBR(raw)
-      if (d.isNegative() && !allowNegative) throw new Error('negativo')
-      if (scale === 'ratio') d = d.div(100, 6)
-      if (max !== undefined && d.gt(max)) throw new Error('acima do máximo')
-      setInvalid(false)
-      const canonical = d.round(scale === 'ratio' ? 6 : 4).toFixed()
-      if (value === null || !Decimal.from(value).eq(canonical)) onCommit(canonical)
-      setText(toDisplay(canonical))
+      d = Decimal.parseBR(raw)
     } catch {
-      setInvalid(true)
+      return setError('Valor inválido — use o formato 1.234,56')
     }
+    if (d.isNegative() && !allowNegative) return setError('Valor negativo não é aceito')
+    if (scale === 'ratio') d = d.div(100, 6)
+    if (max !== undefined && d.gt(max)) return setError(`Valor inválido — máximo ${toDisplay(max)}${suffix ?? ''}`)
+    setError(null)
+    const canonical = d.round(scale === 'ratio' ? 6 : 4).toFixed()
+    if (value === null || !Decimal.from(value).eq(canonical)) onCommit(canonical)
+    setText(toDisplay(canonical))
   }
 
   const move = (e: KeyboardEvent<HTMLInputElement>, dir: 1 | -1) => {
@@ -89,7 +92,7 @@ export function DecimalInput({ value, onCommit, fractionDigits = 2, scale = 'pla
       disabled={disabled}
       placeholder={placeholder}
       aria-invalid={invalid || undefined}
-      title={invalid ? (max !== undefined ? `Valor inválido — máximo ${toDisplay(max)}${suffix ?? ''}` : 'Valor inválido — use o formato 1.234,56') : undefined}
+      title={error ?? undefined}
       onFocus={(e) => {
         setFocused(true)
         e.currentTarget.select()
@@ -107,7 +110,7 @@ export function DecimalInput({ value, onCommit, fractionDigits = 2, scale = 'pla
         else if (e.key === 'ArrowUp') move(e, -1)
         else if (e.key === 'Escape') {
           setText(toDisplay(value))
-          setInvalid(false)
+          setError(null)
           e.currentTarget.blur()
         }
       }}

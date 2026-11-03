@@ -20,10 +20,23 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v07 |
-| dev | v08 |
+| produção | v08 |
+| dev | v09 |
 
-## v08 — dev (2026-10-30)
+## v09 — dev (2026-11-03)
+
+- **Segurança — edição só da revisão aberta:** as rotas de preço, item, fornecedor e escolha manual conferiam a permissão e a trava na revisão da URL, mas aceitavam ids de outra revisão. Com a URL de um rascunho dava para alterar preços de um QC em aprovação (ou já aprovado). Agora todo item ou fornecedor informado precisa ser da revisão da URL.
+- **Quantidade e preço negativos recusados pela API:** a tela já bloqueava, mas uma chamada direta gravava, por exemplo, quantidade −1000, baixando o total do fornecedor e a alçada de aprovação.
+- **Modo demonstração voltou a abrir:** as CNDs dos fornecedores de exemplo tinham data fixa; em 01/11/2026 a da vencedora do Contrapiso venceu, a carga dos exemplos falhava e, com ela, os testes (o `verificar` bloqueava qualquer envio). As datas agora são relativas a hoje. A produção (Supabase) não era afetada.
+- **Mapa acima de 1.000 linhas:** no Supabase, insumos, preços, vínculos e referências do QC eram lidos de uma vez e o PostgREST corta em 1.000; com, por exemplo, 200 insumos × 6 fornecedores os preços excedentes sumiam calados e o recálculo gravava totais errados. Agora vêm em páginas, assim como o comprometido da obra e a conferência de linhas na reimportação do orçamento (obra grande deixava linhas antigas para trás).
+- **Aprovação pela cotação escolhida:** com empresa escolhida por insumo, a vencedora única fica opcional; para enviar, todo insumo com quantidade precisa de empresa que cotou o preço e com CND válida (antes só a CND da vencedora era conferida). A alçada usa o total escolhido e a aba Aprovações mostra a divisão por empresa.
+- **Comprometido e verba pela cotação escolhida:** o valor contratado de cada insumo (comprometido da obra) passa a ser o da empresa escolhida. Cada solicitação de contrato gerada recebe a verba dos seus insumos — antes cada uma levava a verba do QC inteiro e a economia de cada contrato saía inflada.
+- **Linhas de outra obra:** puxar linhas para o QC aceitava linha do orçamento de outra obra (com o saldo calculado contra os compromissos errados). Agora só da mesma obra.
+- **Número da solicitação:** passa a ser o maior da obra + 1 (pela contagem, uma falha na sequência repetia um número) e, se dois pedidos simultâneos colidirem, tenta de novo com o próximo em vez de dar erro. Se a gravação dos itens falhar, o cabeçalho é desfeito para não bloquear a empresa.
+- Telas: erro de validação diz o motivo (ex.: "Percentual deve estar entre 0% e 100%", antes só "Dados inválidos."); valor recusado num campo numérico fica em vermelho com o motivo, em vez de voltar calado ao anterior; % no mapa limitado a 100%; remover fornecedor avisa quantos insumos da cotação escolhida ficam sem empresa; botão de remover com o nome do fornecedor.
+- README e manual atualizados. Testes de regressão para cada correção.
+
+## v08 — produção (2026-10-30)
 
 - **Cotação escolhida** no mapa de cotação: cada preço tem uma caixa de seleção para escolher com qual fornecedor o insumo será contratado (um fornecedor por insumo; marcar outro troca a escolha, desmarcar tira o insumo). Assim a mesma concorrência pode ter mais de uma empresa vencedora. A nova coluna "Cotação escolhida", à direita da Melhor condição, mostra fornecedor, R$ unit., R$ total e vs. orçado de cada insumo; no rodapé, o total, quantos itens e quantas empresas, e o resultado contra a verba quando todos os insumos tiverem escolha. A escolha não muda a melhor condição, a vencedora indicada nem a aprovação, e acompanha a nova revisão.
 - **Uma solicitação de contrato por empresa escolhida**: no QC aprovado com cotação escolhida, "Gerar solicitação de contrato" cria uma solicitação para cada empresa, só com os insumos escolhidos para ela (insumos sem escolha ficam de fora e são anotados nas observações). Se uma for cancelada, o botão volta e gera só a que falta. A tela do QC mostra um botão para cada solicitação ativa. Sem cotação escolhida nada muda: uma solicitação com a vencedora indicada. Cancelar uma solicitação enviada não tira a concorrência de "contratada" enquanto houver outra enviada.

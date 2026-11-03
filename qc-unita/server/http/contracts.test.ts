@@ -3,6 +3,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { CompetitionDetailDTO, CompetitionListItemDTO, ContractListItemDTO, ContractRequestDTO } from '../../shared/contracts'
+import { buildQcMap } from '../../shared/domain/competition/qc-map'
 import { Decimal } from '../../shared/domain/decimal'
 import { DEMO_USERS } from '../infrastructure/memory/seed'
 import { handle } from './router'
@@ -110,12 +111,19 @@ describe('solicitação de contrato', () => {
     const hoje = new Date().toISOString().slice(0, 10)
     const [a, b] = d.suppliers.filter((s) => !s.cndValidUntil || s.cndValidUntil >= hoje)
     const items = d.items.filter((i) => Number(i.quantity) > 0)
-    // 1º insumo com a 2ª empresa, os demais com a 1ª; o último fica sem escolha
-    for (const [n, item] of items.slice(0, -1).entries()) {
-      const chosenSupplierId = (n === 0 ? b : a)!.id
-      expect((await call('PATCH', `/revisions/${rev.revisionId}/items/${item.id}`, { chosenSupplierId })).status).toBe(200)
-    }
+    // 1º insumo com a 2ª empresa, os demais com a 1ª
+    const choose = (itemId: string, chosenSupplierId: string) => call('PATCH', `/revisions/${rev.revisionId}/items/${itemId}`, { chosenSupplierId })
+    for (const [n, item] of items.slice(0, -1).entries()) expect((await choose(item.id, (n === 0 ? b : a)!.id)).status).toBe(200)
+    // Com cotação escolhida, todo insumo com quantidade precisa de empresa (a vencedora única não é mais exigida)
+    const incomplete = await call<{ error: { details: { field: string; message: string }[] } }>('POST', `/revisions/${rev.revisionId}/submit`)
+    expect(incomplete.status).toBe(422)
+    expect(incomplete.data.error.details).toEqual([{ field: 'chosen', message: 'Cotação escolhida: 1 insumo(s) com quantidade sem empresa escolhida.' }])
+    expect((await choose(items.at(-1)!.id, a!.id)).status).toBe(200)
+    expect((await call('PATCH', `/revisions/${rev.revisionId}`, { winnerSupplierId: null })).status).toBe(200)
     expect((await call('POST', `/revisions/${rev.revisionId}/submit`)).status).toBe(200)
+    // A alçada usa o total da cotação escolhida
+    const sent = await detail()
+    expect(sent.revision.status).toBe('in_approval')
     for (const [user, stepOrder] of [[PROC, 1], [ENG, 2], [MGR, 3]] as const) {
       expect((await call('POST', `/revisions/${rev.revisionId}/approvals`, { stepOrder, decision: 'approved', comment: 'De acordo.' }, user)).status).toBe(200)
     }
@@ -127,8 +135,12 @@ describe('solicitação de contrato', () => {
     const made = await Promise.all(created.data.created.map(async (x) => (await call<ContractRequestDTO>('GET', `/contracts/${x.id}`)).data))
     expect(made.map((c) => c.supplier.id)).toEqual([a!.supplierId, b!.supplierId])
     expect(made[1]!.items.map((i) => i.code)).toEqual([items[0]!.code])
-    expect(made[0]!.items.map((i) => i.code)).toEqual(items.slice(1, -1).map((i) => i.code))
-    expect(made[0]!.notes).toContain(`Itens sem empresa escolhida (fora das solicitações): ${items.at(-1)!.code}.`)
+    expect(made[0]!.items.map((i) => i.code)).toEqual(items.slice(1).map((i) => i.code))
+    // Cada solicitação leva só a verba dos seus insumos: a soma volta à verba do QC
+    const { data: approved } = await call<CompetitionDetailDTO>('GET', `/competitions/${contrapiso.id}?revisionId=${rev.revisionId}`)
+    const qcBudget = buildQcMap(approved).budgetTotal
+    expect(made.every((c) => Decimal.from(c.budgetAmount).lt(qcBudget))).toBe(true)
+    expect(Decimal.sum(made.map((c) => c.budgetAmount)).toDb()).toBe(qcBudget.toDb())
     expect((await detail()).can.createContract).toBe(false)
     const dup = await call<{ error: { code: string } }>('POST', '/contracts', { competitionId: contrapiso.id })
     expect(dup.data.error.code).toBe('CONTRACT_EXISTS')

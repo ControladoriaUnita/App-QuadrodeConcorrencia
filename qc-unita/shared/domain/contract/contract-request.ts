@@ -4,7 +4,8 @@
  * Regras
  *  - A solicitação nasce da revisão APROVADA do QC, com a empresa vencedora indicada.
  *  - Com cotação escolhida (empresa escolhida por insumo no mapa), nasce uma solicitação por empresa
- *    escolhida, só com os insumos escolhidos para ela; a vencedora indicada não é usada.
+ *    escolhida, só com os insumos escolhidos para ela; a vencedora indicada não é usada. A verba de cada
+ *    uma é a dos seus insumos (não a do QC inteiro), para o resultado de cada contrato não sair inflado.
  *  - Entram os itens com quantidade > 0 que a vencedora cotou, ao preço dela (R$ TOTAL = quant. × unit., 4 casas).
  *    Itens que a vencedora não cotou ficam de fora e são informados (exigiriam outro contrato).
  *  - Vínculos (IP · Qtd · Valor): IP manual do item ou herdados das linhas dos insumos referência
@@ -59,6 +60,8 @@ export interface ContractDraft {
   /** Itens com quantidade que a vencedora não cotou */
   excluded: { itemId: string; code: string; description: string }[]
   total: Decimal
+  /** Orçado (verba) dos insumos que entraram nesta solicitação */
+  budgetTotal: Decimal
   distribution: ContractDistribution
 }
 
@@ -107,6 +110,7 @@ function draftFor(
   for (const l of source.links) if (l.packageCode) packagesOf.set(l.referenceId, (packagesOf.get(l.referenceId) ?? new Set()).add(l.packageCode))
   const items: DraftContractItem[] = []
   const excluded: ContractDraft['excluded'] = []
+  let budgetTotal = ZERO
 
   for (const i of map.items) {
     if (!i.quantity.isPositive() || !includes(i.id)) continue
@@ -115,6 +119,7 @@ function draftFor(
       excluded.push({ itemId: i.id, code: i.code, description: i.description })
       continue
     }
+    budgetTotal = budgetTotal.plus(i.budgetTotal)
     const allocations = (map.allocationsByItem.get(i.id) ?? []).map((a) => ({ packageCode: a.packageCode, quantity: a.quantity }))
     const raw = dto.get(i.id)!
     const references = raw.referenceIds.map((rid) => refById.get(rid)).filter((r): r is NonNullable<typeof r> => !!r).map((r) => ({
@@ -148,6 +153,7 @@ function draftFor(
     items,
     excluded,
     total: Decimal.sum(items.map((i) => i.totalPrice)),
+    budgetTotal,
     distribution: contractDistribution(items),
   }
 }
@@ -191,4 +197,19 @@ export function validateContractRequest(h: ContractHeader, items: { quantity: De
     issues.push({ field: 'supplier', message: `CND do contratado vencida em ${h.supplierCndValidUntil}.` })
   }
   return issues
+}
+
+/** Verba e disponível de uma solicitação da cotação escolhida: a parte do QC que cabe aos seus insumos. */
+export function contractBudgetShare(draft: Pick<ContractDraft, 'budgetTotal'>, map: Pick<QcMap, 'budgetTotal' | 'available'>) {
+  if (!map.budgetTotal.isPositive()) return { budgetAmount: draft.budgetTotal, availableAmount: map.available }
+  return { budgetAmount: draft.budgetTotal, availableAmount: map.available.times(draft.budgetTotal).div(map.budgetTotal, 4) }
+}
+
+/**
+ * Próximo número de solicitação da obra (SC-<obra>-NNN): o maior existente + 1. Pela contagem, um
+ * número que faltasse na sequência fazia o próximo repetir um já usado.
+ */
+export function nextContractCode(workCode: string, existing: string[]): string {
+  const n = existing.reduce((max, code) => Math.max(max, Number(/-(\d+)$/.exec(code)?.[1] ?? 0)), 0)
+  return `SC-${workCode}-${String(n + 1).padStart(3, '0')}`
 }

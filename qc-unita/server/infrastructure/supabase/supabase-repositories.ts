@@ -31,6 +31,7 @@ import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
 import { createSupabaseAttachments, createSupabaseStorage } from './supabase-attachments'
 import { createSupabaseBudgetMappings, createSupabaseIndirect } from './supabase-budget-mappings'
 import { createSupabaseContracts } from './supabase-contracts'
+import { allPages } from './pages'
 
 type Json = Record<string, unknown>
 
@@ -203,7 +204,8 @@ async function writeBudgetLines(
 
   // Remove linhas que saíram do orçamento — exceto as vinculadas a QCs
   const keep = new Set(rows.map((r) => r.line_key))
-  const existing = must(await service.from('activity_items').select('id, line_key').eq('budget_id', budgetId)) as { id: string; line_key: string }[]
+  // Em páginas: orçamento grande (U050C: 3.530 linhas) passava de 1.000 e as linhas excedentes nunca saíam
+  const existing = await allPages<{ id: string; line_key: string }>((a, b) => service.from('activity_items').select('id, line_key').eq('budget_id', budgetId).order('id').range(a, b))
   const removed = existing.filter((e) => !keep.has(e.line_key)).map((e) => e.id)
   for (const part of chunk(removed, 200)) {
     const used = new Set((must(await service.from('competition_item_links').select('activity_item_id').in('activity_item_id', part)) as { activity_item_id: string }[]).map((x) => x.activity_item_id))
@@ -395,11 +397,11 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           })),
         }
       },
-      async getBudgetLines(ids) {
+      async getBudgetLines(ids, workId) {
         const rows: Json[] = []
-        for (const part of chunk(ids, 150)) rows.push(...(must(await db.from('activity_items').select(LINE_SELECT).in('id', part)) as Json[]))
-        // IP manual da obra no lugar do IP da planilha (como em qc_budget_lines)
         const workOf = (r: Json) => (r.budgets as { work_id: string }).work_id
+        for (const part of chunk(ids, 150)) rows.push(...(must(await db.from('activity_items').select(LINE_SELECT).in('id', part)) as Json[]).filter((r) => workOf(r) === workId))
+        // IP manual da obra no lugar do IP da planilha (como em qc_budget_lines)
         const manual = await manualPlanning(rows.map(workOf))
         return rows.map((r) => {
           const line = toLine(r)
@@ -518,14 +520,15 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
         const [rev, revisions, items, sups, best, approvals, contractTypes, people, links, refs] = await Promise.all([
           db.from('competition_revisions').select(REVISION_COLS).eq('id', revId).eq('competition_id', competitionId).maybeSingle(),
           db.from('competition_revisions').select('id, number, status, decidedAt:decided_at, createdAt:created_at, reason').eq('competition_id', competitionId).order('number'),
-          db.from('competition_items').select(ITEM_COLS).eq('revision_id', revId).order('sort_order'),
+          // Insumos, vínculos, referências e preços em páginas: acima de 1.000 linhas o PostgREST cortava calado
+          allPages((a, b) => db.from('competition_items').select(ITEM_COLS).eq('revision_id', revId).order('sort_order').order('id').range(a, b)),
           db.from('competition_suppliers').select(CS_COLS).eq('revision_id', revId).order('sort_order'),
           db.from('best_conditions').select('itemId:competition_item_id, competitionSupplierId:competition_supplier_id, reason:override_reason').eq('revision_id', revId).eq('is_override', true),
           approvalsFor(revId),
           db.from('contract_types').select('id, code, name').eq('active', true).order('code'),
           db.from('profiles').select('id, fullName:full_name').eq('active', true).order('full_name'),
-          db.from('competition_item_links').select(LINK_COLS).eq('revision_id', revId).order('sort_order'),
-          db.from('competition_references').select(REF_COLS).eq('revision_id', revId).order('sort_order'),
+          allPages((a, b) => db.from('competition_item_links').select(LINK_COLS).eq('revision_id', revId).order('sort_order').order('id').range(a, b)),
+          allPages((a, b) => db.from('competition_references').select(REF_COLS).eq('revision_id', revId).order('sort_order').order('id').range(a, b)),
         ])
         const revision = must(rev) as unknown as (RevisionDTO & { competitionId: string }) | null
         if (!revision) return null
@@ -543,13 +546,16 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
             isPlaceholder: catalog?.is_placeholder === true,
           }
         })
+        type PriceRow = { itemId: string; unitPrice: string | null; notes: string | null; supplier_proposals: { competition_supplier_id: string } }
         const priceRows = proposalIds.length
-          ? (must(
-              await db
+          ? await allPages<PriceRow>((a, b) =>
+              db
                 .from('supplier_proposal_items')
                 .select('itemId:competition_item_id, unitPrice:unit_price::text, notes, supplier_proposals(competition_supplier_id)')
-                .in('proposal_id', proposalIds),
-            ) as unknown as { itemId: string; unitPrice: string | null; notes: string | null; supplier_proposals: { competition_supplier_id: string } }[])
+                .in('proposal_id', proposalIds)
+                .order('id')
+                .range(a, b),
+            )
           : []
 
         const people_ = must(people) as unknown as { id: string; fullName: string }[]
@@ -576,10 +582,10 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           },
           revision: revisionDto,
           revisions: must(revisions) as unknown as CompetitionData['revisions'],
-          items: (must(items) as unknown as (Omit<QcItemDTO, 'referenceIds'> & { competition_item_references: { reference_id: string }[] | null })[]).map(
+          items: (items as unknown as (Omit<QcItemDTO, 'referenceIds'> & { competition_item_references: { reference_id: string }[] | null })[]).map(
             ({ competition_item_references: refsOf, ...i }) => ({ ...i, referenceIds: (refsOf ?? []).map((x) => x.reference_id) }),
           ),
-          references: must(refs) as unknown as QcReferenceDTO[],
+          references: refs as unknown as QcReferenceDTO[],
           suppliers,
           prices: priceRows.map((p) => ({
             competitionSupplierId: p.supplier_proposals.competition_supplier_id,
@@ -589,7 +595,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           })),
           overrides: must(best) as unknown as CompetitionData['overrides'],
           approvals,
-          links: must(links) as unknown as QcLinkDTO[],
+          links: links as unknown as QcLinkDTO[],
           contractTypes: must(contractTypes) as { id: string; code: string; name: string }[],
           people: people_,
         }
@@ -744,13 +750,22 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
       async workCommitments(workId) {
         const [comps, links] = await Promise.all([
           db.rpc('qc_effective_revisions', { p_work_id: workId }),
-          db.rpc('qc_work_link_commitments', { p_work_id: workId }),
+          // Vínculos de todos os QCs da obra: em páginas, na ordem da chave do agrupamento
+          allPages((a, b) =>
+            db
+              .rpc('qc_work_link_commitments', { p_work_id: workId })
+              .order('competition_id')
+              .order('package_code', { nullsFirst: true })
+              .order('material_id')
+              .order('line_key', { nullsFirst: true })
+              .range(a, b),
+          ),
         ])
         return {
           competitions: (must(comps) as { competition_id: string; revision_id: string; revision_number: number; category: CommitmentCategory; awarded_total: string }[]).map((r) => ({
             competitionId: r.competition_id, revisionId: r.revision_id, revisionNumber: r.revision_number, category: r.category, awardedTotal: r.awarded_total,
           })),
-          links: (must(links) as { competition_id: string; category: CommitmentCategory; package_code: string | null; material_id: string; line_key: string | null; quantity: string; share: string; budget_value: string; amount: string }[]).map((r) => ({
+          links: (links as { competition_id: string; category: CommitmentCategory; package_code: string | null; material_id: string; line_key: string | null; quantity: string; share: string; budget_value: string; amount: string }[]).map((r) => ({
             competitionId: r.competition_id, category: r.category, packageCode: r.package_code, materialId: r.material_id, lineKey: r.line_key,
             quantity: r.quantity, share: r.share, budgetValue: r.budget_value, amount: r.amount,
           })),

@@ -101,6 +101,8 @@ export function buildQcMap(d: QcMapSource, opts: { today?: string } = {}): QcMap
   }
   const winnerSupplier = suppliers.find((s) => s.supplierId === d.revision.winnerSupplierId)
   const winnerCsId = winnerSupplier?.id ?? null
+  /** Cotação escolhida: empresa escolhida à mão em cada insumo */
+  const choices = new Map(d.items.map((i) => [i.id, i.chosenSupplierId ?? null] as const))
 
   // Insumos referência: linhas puxadas do orçamento e a verba de cada referência
   const planning: PlanningLink[] = d.links.map((l) => ({
@@ -128,9 +130,9 @@ export function buildQcMap(d: QcMapSource, opts: { today?: string } = {}): QcMap
   }))
   const { groups, groupOfItem, groupOfReference } = comparisonGroups(mapItems, referenceBudget)
 
-  /** Valor de cada insumo do mapa: preço da vencedora (se cotou) ou da melhor condição × quantidade */
+  /** Valor de cada insumo do mapa: preço da empresa escolhida, senão da vencedora, senão da melhor condição × quantidade */
   const contractedOf = (its: QcItem[], bestList: BestCondition[]) => {
-    const unit = awardedUnitPrices(its, bestList, prices, winnerCsId)
+    const unit = awardedUnitPrices(its, bestList, prices, winnerCsId, choices)
     return new Map(its.map((i) => [i.id, unit.get(i.id) ? lineTotal(unit.get(i.id)!, i.quantity) : null] as const))
   }
 
@@ -146,6 +148,7 @@ export function buildQcMap(d: QcMapSource, opts: { today?: string } = {}): QcMap
   const mixTotal = bestMixTotal(best)
   const budgetTotal = Decimal.sum(best.map((b) => b.budgetTotal))
   const winnerSummary = winnerSupplier ? summaries.find((s) => s.competitionSupplierId === winnerSupplier.id) : undefined
+  const chosen = computeChosenQuotation(items, prices, choices, envelope, [...suppliers].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.id))
 
   const issues = [
     ...validateForSubmission({
@@ -166,12 +169,13 @@ export function buildQcMap(d: QcMapSource, opts: { today?: string } = {}): QcMap
       items,
       suppliers,
       best,
+      chosen,
       today: opts.today,
     }),
     ...validateReferences(mapItems, referenceIds),
   ]
 
-  const awardedByItem = awardedUnitPrices(items, best, prices, winnerCsId)
+  const awardedByItem = awardedUnitPrices(items, best, prices, winnerCsId, choices)
   const contractedByItem = contractedOf(items, best)
   const linkAmounts = linkAwardedAmounts(planning, groupOfReference, contractedByItem)
   const links = planning.map((l) => {
@@ -208,12 +212,6 @@ export function buildQcMap(d: QcMapSource, opts: { today?: string } = {}): QcMap
     winner: winnerSummary ? { summary: winnerSummary, comparison: compareWithBudget(envelope, winnerSummary.total) } : null,
     lowestComplete: summaries.find((s) => s.rank === 1) ?? null,
     issues,
-    chosen: computeChosenQuotation(
-      items,
-      prices,
-      new Map(d.items.map((i) => [i.id, i.chosenSupplierId ?? null])),
-      envelope,
-      [...suppliers].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.id),
-    ),
+    chosen,
   }
 }

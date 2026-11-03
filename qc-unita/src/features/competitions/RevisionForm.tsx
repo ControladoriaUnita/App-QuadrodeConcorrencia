@@ -124,7 +124,15 @@ export function RevisionForm({ detail, map, saving, onSave }: { detail: Competit
               ))}
             </Select>
           </Field>
-          <Field label="Empresa vencedora" className="sm:col-span-2" hint="Total considerando a quantidade equalizada de todos os itens cotados.">
+          <Field
+            label="Empresa vencedora"
+            className="sm:col-span-2"
+            hint={
+              map.chosen.suppliers.length
+                ? 'Opcional: com cotação escolhida, as empresas são as escolhidas no mapa (uma solicitação de contrato por empresa).'
+                : 'Total considerando a quantidade equalizada de todos os itens cotados.'
+            }
+          >
             <Select disabled={disabled} {...register('winnerSupplierId')}>
               <option value="">Selecione…</option>
               {detail.suppliers.map((s) => {

@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AddendumDTO, ContractItemDTO, ContractListItemDTO, ContractPartyDTO, ContractProjectDTO } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import { lineTotal } from '../../../shared/domain/competition/best-condition'
+import { nextContractCode } from '../../../shared/domain/contract/contract-request'
 import type { AddendumContent, ContractData, ContractRepository } from '../../application/ports'
 
 type Json = Record<string, unknown>
@@ -221,8 +222,8 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
     },
 
     async nextCode(workId, workCode) {
-      const rows = must(await db.from('contract_requests').select('id, competitions!inner(work_id)').eq('competitions.work_id', workId)) as unknown[]
-      return `SC-${workCode}-${String(rows.length + 1).padStart(3, '0')}`
+      const rows = must(await db.from('contract_requests').select('code, competitions!inner(work_id)').eq('competitions.work_id', workId)) as { code: string }[]
+      return nextContractCode(workCode, rows.map((r) => r.code))
     },
 
     async create(d, actorId) {
@@ -232,20 +233,27 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
         pct_equipment: d.pctEquipment, pct_service: d.pctService, budget_amount: d.budgetAmount, available_amount: d.availableAmount,
         scope_definitions: d.scopeDefinitions, notes: d.notes, created_by: actorId,
       }).select('id').single()) as { id: string }
-      if (d.items.length) {
-        const inserted = must(await db.from('contract_request_items').insert(
-          d.items.map((i, idx) => ({
-            contract_request_id: cr.id, competition_item_id: i.competitionItemId, material_id: i.materialId, code: i.code,
-            description: i.description, specification: i.specification, unit: i.unit, quantity: i.quantity, unit_price: i.unitPrice,
-            pct_retention: i.pctRetention, pct_material: i.pctMaterial, pct_equipment: i.pctEquipment, sort_order: idx,
-            references: i.references,
-          })),
-        ).select('id, sort_order')) as { id: string; sort_order: number }[]
-        const allocations = d.items.flatMap((i, idx) => {
-          const itemId = inserted.find((x) => x.sort_order === idx)!.id
-          return i.allocations.map((a) => ({ contract_request_item_id: itemId, package_code: a.packageCode, quantity: a.quantity }))
-        })
-        if (allocations.length) must(await db.from('contract_item_allocations').insert(allocations))
+      // Sem transação: se os itens falharem, desfaz o cabeçalho (senão o rascunho incompleto
+      // bloquearia a empresa pelo índice de uma solicitação ativa por concorrência e empresa)
+      try {
+        if (d.items.length) {
+          const inserted = must(await db.from('contract_request_items').insert(
+            d.items.map((i, idx) => ({
+              contract_request_id: cr.id, competition_item_id: i.competitionItemId, material_id: i.materialId, code: i.code,
+              description: i.description, specification: i.specification, unit: i.unit, quantity: i.quantity, unit_price: i.unitPrice,
+              pct_retention: i.pctRetention, pct_material: i.pctMaterial, pct_equipment: i.pctEquipment, sort_order: idx,
+              references: i.references,
+            })),
+          ).select('id, sort_order')) as { id: string; sort_order: number }[]
+          const allocations = d.items.flatMap((i, idx) => {
+            const itemId = inserted.find((x) => x.sort_order === idx)!.id
+            return i.allocations.map((a) => ({ contract_request_item_id: itemId, package_code: a.packageCode, quantity: a.quantity }))
+          })
+          if (allocations.length) must(await db.from('contract_item_allocations').insert(allocations))
+        }
+      } catch (err) {
+        await db.from('contract_requests').delete().eq('id', cr.id)
+        throw err
       }
       return cr.id
     },

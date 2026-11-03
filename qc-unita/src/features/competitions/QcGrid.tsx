@@ -245,6 +245,7 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                           <DecimalInput
                             value={item[k]}
                             scale="ratio"
+                            max="1"
                             fractionDigits={1}
                             allowEmpty={false}
                             disabled={!can.edit}

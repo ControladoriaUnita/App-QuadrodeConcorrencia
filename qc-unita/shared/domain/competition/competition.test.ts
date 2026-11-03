@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { D } from '../decimal'
 import { bestMixTotal, computeBestConditions, computeSupplierSummaries } from './best-condition'
 import { availableBudget, compareWithBudget } from './budget-comparison'
-import { canCreateRevision, nextRevisionNumber, validateForSubmission, assertEditable } from './revision'
+import { approvalAmount, canCreateRevision, nextRevisionNumber, validateForSubmission, assertEditable } from './revision'
+import { computeChosenQuotation } from './chosen-quotation'
 import { buildSnapshot, canonicalJson } from './snapshot'
 import type { QcItem, QcPrice, QcSupplier } from './types'
 
@@ -106,6 +107,40 @@ describe('revisões', () => {
       items, suppliers: [], best: [],
     })
     expect(none.map((i) => i.field)).toContain('suppliers')
+  })
+})
+
+describe('envio com cotação escolhida', () => {
+  const revision = {
+    id: 'r', number: 0, status: 'draft' as const, frozenAt: null, requestedOn: '2026-10-01', serviceStartOn: '2026-11-01',
+    serviceEndOn: '2026-12-01', engineeringOwnerName: 'Eng', procurementOwnerName: 'Sup', contractTypeId: 't',
+    winnerSupplierId: null, winnerJustification: 'Divisão por menor preço em cada insumo',
+  }
+  const env = { budgetAmount: D('0'), usedAmount: D('0'), adjustmentAmount: D('0') }
+  const validate = (choices: [string, string][], sups = suppliers) =>
+    validateForSubmission({
+      revision, items, suppliers: sups, best: computeBestConditions(items, sups, prices),
+      chosen: computeChosenQuotation(items, prices, new Map(choices), env), today: '2026-11-03',
+    })
+
+  it('dispensa a vencedora única, mas exige empresa (que cotou) em todo insumo com quantidade', () => {
+    expect(validate([['a', 'B'], ['b', 'A']])).toEqual([])
+    expect(validate([['a', 'B']])).toEqual([{ field: 'chosen', message: 'Cotação escolhida: 1 insumo(s) com quantidade sem empresa escolhida.' }])
+    // B não cotou o insumo b (preço zero)
+    expect(validate([['a', 'A'], ['b', 'B']])).toEqual([{ field: 'chosen', message: 'Cotação escolhida: 1 insumo(s) escolhido(s) com empresa que não cotou o preço.' }])
+    // Sem escolha nenhuma: continua exigindo a vencedora
+    expect(validate([]).map((i) => i.field)).toContain('winnerSupplierId')
+  })
+
+  it('confere a CND de cada empresa escolhida', () => {
+    const vencida = suppliers.map((s) => (s.id === 'B' ? { ...s, cndValidUntil: '2026-10-31' } : s))
+    expect(validate([['a', 'B'], ['b', 'A']], vencida)).toEqual([{ field: 'chosen', message: 'CND de B (cotação escolhida) vencida em 2026-10-31.' }])
+  })
+
+  it('alçada pelo total escolhido, antes da vencedora e da melhor condição', () => {
+    expect(approvalAmount(D('100'), D('90'), D('120')).toFixed()).toBe('120')
+    expect(approvalAmount(D('100'), D('90')).toFixed()).toBe('100')
+    expect(approvalAmount(null, D('90')).toFixed()).toBe('90')
   })
 })
 

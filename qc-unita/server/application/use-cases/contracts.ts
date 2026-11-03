@@ -17,6 +17,7 @@ import { DomainError } from '../../../shared/domain/competition/revision'
 import {
   buildChosenContractDrafts,
   buildContractDraft,
+  contractBudgetShare,
   contractDistribution,
   hasChosenQuotation,
   unchosenItems,
@@ -25,7 +26,7 @@ import {
 } from '../../../shared/domain/contract/contract-request'
 import { erpSupports, type ERPProvider } from '../../infrastructure/erp/erp-provider'
 import { AppError, can, notFound, requirePermission, type Actor, type RequestContext } from '../context'
-import type { ContractData, Repositories } from '../ports'
+import type { ContractData, NewContractRequest, Repositories } from '../ports'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 
@@ -138,51 +139,64 @@ export async function createContractRequest(repos: Repositories, ctx: RequestCon
   const work = (await repos.catalog.getWork(workId))!
   const created: { id: string; code: string; excluded: number }[] = []
   for (const draft of drafts) {
-    const code = await repos.contracts.nextCode(workId, work.code)
     const notes = (
       (draft.excluded.length
         ? `Itens não cotados pela ${chosen ? 'empresa escolhida' : 'vencedora'} (fora deste contrato): ${draft.excluded.map((e) => e.code).join(', ')}.`
         : '') + unchosen
     ).trim()
-    const id = await repos.contracts.create(
-      {
-        competitionId,
-        revisionId: approved.id,
-        supplierId: draft.supplierId,
-        contractTypeId: r.contractTypeId,
-        code,
-        startOn: r.serviceStartOn,
-        endOn: r.serviceEndOn,
-        totalAmount: draft.total.toDb(),
-        pctMaterial: draft.distribution.pctMaterial.toFixed(6),
-        pctEquipment: draft.distribution.pctEquipment.toFixed(6),
-        pctService: draft.distribution.pctService.toFixed(6),
-        budgetAmount: map.budgetTotal.toDb(),
-        availableAmount: map.available.toDb(),
-        scopeDefinitions: r.engineeringNotes,
-        notes: notes || null,
-        items: draft.items.map((i) => ({
-          competitionItemId: i.competitionItemId,
-          materialId: i.materialId,
-          code: i.code,
-          description: i.description,
-          specification: i.specification,
-          unit: i.unit,
-          quantity: i.quantity.toDb(),
-          unitPrice: i.unitPrice.toDb(),
-          pctRetention: i.pctRetention.toFixed(6),
-          pctMaterial: i.pctMaterial.toFixed(6),
-          pctEquipment: i.pctEquipment.toFixed(6),
-          allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: a.quantity.toDb() })),
-          references: i.references.map((r) => ({ ...r, budget: r.budget.toDb() })),
-        })),
-      },
-      ctx.actor.id,
-    )
+    // Cotação escolhida: cada solicitação leva a verba dos seus insumos; vencedora única: a do QC inteiro
+    const budget = chosen ? contractBudgetShare(draft, map) : { budgetAmount: map.budgetTotal, availableAmount: map.available }
+    const { id, code } = await createWithFreshCode(repos, workId, work.code, ctx.actor.id, {
+      competitionId,
+      revisionId: approved.id,
+      supplierId: draft.supplierId,
+      contractTypeId: r.contractTypeId,
+      startOn: r.serviceStartOn,
+      endOn: r.serviceEndOn,
+      totalAmount: draft.total.toDb(),
+      pctMaterial: draft.distribution.pctMaterial.toFixed(6),
+      pctEquipment: draft.distribution.pctEquipment.toFixed(6),
+      pctService: draft.distribution.pctService.toFixed(6),
+      budgetAmount: budget.budgetAmount.toDb(),
+      availableAmount: budget.availableAmount.toDb(),
+      scopeDefinitions: r.engineeringNotes,
+      notes: notes || null,
+      items: draft.items.map((i) => ({
+        competitionItemId: i.competitionItemId,
+        materialId: i.materialId,
+        code: i.code,
+        description: i.description,
+        specification: i.specification,
+        unit: i.unit,
+        quantity: i.quantity.toDb(),
+        unitPrice: i.unitPrice.toDb(),
+        pctRetention: i.pctRetention.toFixed(6),
+        pctMaterial: i.pctMaterial.toFixed(6),
+        pctEquipment: i.pctEquipment.toFixed(6),
+        allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: a.quantity.toDb() })),
+        references: i.references.map((r) => ({ ...r, budget: r.budget.toDb() })),
+      })),
+    })
     created.push({ id, code, excluded: draft.excluded.length })
   }
   // id/code/excluded: a primeira (compatível com a solicitação única); created: todas as geradas
   return { ...created[0]!, created }
+}
+
+/**
+ * Grava a solicitação com o próximo número da obra. Dois pedidos ao mesmo tempo podiam calcular o
+ * mesmo número: o banco recusa o repetido (código único) e aqui tenta de novo com o seguinte.
+ */
+export async function createWithFreshCode(repos: Repositories, workId: string, workCode: string, actorId: string, data: Omit<NewContractRequest, 'code'>) {
+  for (let attempt = 1; ; attempt++) {
+    const code = await repos.contracts.nextCode(workId, workCode)
+    try {
+      return { id: await repos.contracts.create({ ...data, code }, actorId), code }
+    } catch (err) {
+      if (attempt < 3 && /contract_requests_code_key/.test(err instanceof Error ? err.message : String(err))) continue
+      throw err
+    }
+  }
 }
 
 /** Ainda há solicitação a gerar? (QC aprovado sem solicitação ativa, ou empresa escolhida ainda sem a dela) */

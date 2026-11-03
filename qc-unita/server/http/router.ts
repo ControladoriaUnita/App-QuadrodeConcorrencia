@@ -319,7 +319,9 @@ export async function handle(req: Request): Promise<Response> {
     return json(result ?? { ok: true }, match.r.status ?? 200, correlationId)
   } catch (err) {
     if (err instanceof ZodError) {
-      return errorResponse(new AppError('VALIDATION', 'Dados inválidos.', 422, err.flatten()), correlationId)
+      // O motivo vai na mensagem: a tela mostra a mensagem, e só "Dados inválidos." não dizia o que corrigir
+      const first = err.issues[0]?.message
+      return errorResponse(new AppError('VALIDATION', first ? `Dados inválidos: ${first}` : 'Dados inválidos.', 422, err.flatten()), correlationId)
     }
     const appErr = toAppError(err)
     if (appErr.status >= 500) console.error(`[${correlationId}]`, err)

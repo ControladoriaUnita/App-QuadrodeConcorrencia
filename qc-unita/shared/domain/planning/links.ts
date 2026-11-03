@@ -71,20 +71,21 @@ export function itemBudgetFromLines(parts: { quantity: Decimal; budget: Decimal 
 const ZERO = Decimal.ZERO
 const RATIO = 6
 
-/** Preço contratado por item: vencedora indicada (se cotou o item) ou melhor condição. */
+/** Preço contratado por item: empresa da cotação escolhida, senão vencedora indicada (se cotou o item), senão melhor condição. */
 export function awardedUnitPrices(
   items: QcItem[],
   best: BestCondition[],
   prices: QcPrice[],
   winnerCompetitionSupplierId: string | null,
+  /** Cotação escolhida: a empresa escolhida no insumo vem antes da vencedora */
+  choices: Map<string, string | null> = new Map(),
 ): Map<string, Decimal | null> {
   const bestBy = new Map(best.map((b) => [b.itemId, b]))
-  const winnerPrice = new Map(
-    prices
-      .filter((p) => p.competitionSupplierId === winnerCompetitionSupplierId && p.unitPrice?.isPositive())
-      .map((p) => [p.itemId, p.unitPrice as Decimal]),
+  const quoted = new Map(prices.filter((p) => p.unitPrice?.isPositive()).map((p) => [`${p.itemId}::${p.competitionSupplierId}`, p.unitPrice as Decimal]))
+  const priceOf = (itemId: string, csId: string | null | undefined) => (csId ? quoted.get(`${itemId}::${csId}`) : undefined)
+  return new Map(
+    items.map((i) => [i.id, priceOf(i.id, choices.get(i.id)) ?? priceOf(i.id, winnerCompetitionSupplierId) ?? bestBy.get(i.id)?.unitPrice ?? null]),
   )
-  return new Map(items.map((i) => [i.id, winnerPrice.get(i.id) ?? bestBy.get(i.id)?.unitPrice ?? null]))
 }
 
 /** Valor contratado da revisão = Σ quantidade equalizada × preço contratado. */

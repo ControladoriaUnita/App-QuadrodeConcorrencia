@@ -22,15 +22,21 @@ const COMPANY_OF: Record<string, string> = { '2041': '1', '2055': '1', '1980': '
 /** Obra que existe só no ERP: permite criar uma obra nova no modo demonstração */
 const NEW_WORK_OPTIONS: ErpWorkOption[] = [{ company: '2', code: '2070', name: 'Residencial Beta' }]
 
+/**
+ * CND relativa à data de hoje: com datas fixas a semente quebrava quando uma CND vencia (a vencedora
+ * do Contrapiso deixava de poder ir à aprovação). A Horizonte segue vencida de propósito.
+ */
+const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+
 const SUPPLIERS: ErpSupplier[] = [
-  { erpId: 'F-1001', legalName: 'Terra Forte Terraplenagem Ltda', tradeName: 'Terra Forte', taxId: '12345678000190', contactName: 'Marcos Lima', phone: '(11) 4002-1001', email: 'comercial@terraforte.example', cndValidUntil: '2027-03-31', city: 'São Paulo', state: 'SP', active: true },
-  { erpId: 'F-1002', legalName: 'Pavimenta Engenharia e Obras Ltda', tradeName: 'Pavimenta', taxId: '23456789000101', contactName: 'Ana Souza', phone: '(11) 4002-1002', email: 'propostas@pavimenta.example', cndValidUntil: '2026-12-15', city: 'Guarulhos', state: 'SP', active: true },
-  { erpId: 'F-1003', legalName: 'Construtora Horizonte Serviços Ltda', tradeName: 'Horizonte', taxId: '34567890000112', contactName: 'Paulo Reis', phone: '(11) 4002-1003', email: 'orcamentos@horizonte.example', cndValidUntil: '2026-09-30', city: 'Osasco', state: 'SP', active: true },
-  { erpId: 'F-1004', legalName: 'Impermax Impermeabilizações Ltda', tradeName: 'Impermax', taxId: '45678901000123', contactName: 'Clara Nunes', phone: '(11) 4002-1004', email: 'vendas@impermax.example', cndValidUntil: '2027-01-20', city: 'São Paulo', state: 'SP', active: true },
-  { erpId: 'F-1005', legalName: 'Alumax Esquadrias de Alumínio Ltda', tradeName: 'Alumax', taxId: '56789012000134', contactName: 'Rafael Prado', phone: '(11) 4002-1005', email: 'comercial@alumax.example', cndValidUntil: '2027-05-10', city: 'Barueri', state: 'SP', active: true },
-  { erpId: 'F-1006', legalName: 'Cor & Arte Pinturas Ltda', tradeName: 'Cor & Arte', taxId: '67890123000145', contactName: 'Juliana Melo', phone: '(11) 4002-1006', email: 'contato@corearte.example', cndValidUntil: '2026-11-05', city: 'São Paulo', state: 'SP', active: true },
-  { erpId: 'F-1007', legalName: 'Içar Locação de Equipamentos S.A.', tradeName: 'Içar Gruas', taxId: '78901234000156', contactName: 'Diego Alves', phone: '(11) 4002-1007', email: 'locacao@icar.example', cndValidUntil: '2027-02-28', city: 'Jundiaí', state: 'SP', active: true },
-  { erpId: 'F-1008', legalName: 'Mineira Obras e Serviços Ltda', tradeName: 'Mineira Obras', taxId: '89012345000167', contactName: 'Tiago Rocha', phone: '(31) 4002-1008', email: 'obras@mineira.example', cndValidUntil: '2026-10-31', city: 'Belo Horizonte', state: 'MG', active: true },
+  { erpId: 'F-1001', legalName: 'Terra Forte Terraplenagem Ltda', tradeName: 'Terra Forte', taxId: '12345678000190', contactName: 'Marcos Lima', phone: '(11) 4002-1001', email: 'comercial@terraforte.example', cndValidUntil: inDays(150), city: 'São Paulo', state: 'SP', active: true },
+  { erpId: 'F-1002', legalName: 'Pavimenta Engenharia e Obras Ltda', tradeName: 'Pavimenta', taxId: '23456789000101', contactName: 'Ana Souza', phone: '(11) 4002-1002', email: 'propostas@pavimenta.example', cndValidUntil: inDays(120), city: 'Guarulhos', state: 'SP', active: true },
+  { erpId: 'F-1003', legalName: 'Construtora Horizonte Serviços Ltda', tradeName: 'Horizonte', taxId: '34567890000112', contactName: 'Paulo Reis', phone: '(11) 4002-1003', email: 'orcamentos@horizonte.example', cndValidUntil: inDays(-34), city: 'Osasco', state: 'SP', active: true },
+  { erpId: 'F-1004', legalName: 'Impermax Impermeabilizações Ltda', tradeName: 'Impermax', taxId: '45678901000123', contactName: 'Clara Nunes', phone: '(11) 4002-1004', email: 'vendas@impermax.example', cndValidUntil: inDays(80), city: 'São Paulo', state: 'SP', active: true },
+  { erpId: 'F-1005', legalName: 'Alumax Esquadrias de Alumínio Ltda', tradeName: 'Alumax', taxId: '56789012000134', contactName: 'Rafael Prado', phone: '(11) 4002-1005', email: 'comercial@alumax.example', cndValidUntil: inDays(190), city: 'Barueri', state: 'SP', active: true },
+  { erpId: 'F-1006', legalName: 'Cor & Arte Pinturas Ltda', tradeName: 'Cor & Arte', taxId: '67890123000145', contactName: 'Juliana Melo', phone: '(11) 4002-1006', email: 'contato@corearte.example', cndValidUntil: inDays(20), city: 'São Paulo', state: 'SP', active: true },
+  { erpId: 'F-1007', legalName: 'Içar Locação de Equipamentos S.A.', tradeName: 'Içar Gruas', taxId: '78901234000156', contactName: 'Diego Alves', phone: '(11) 4002-1007', email: 'locacao@icar.example', cndValidUntil: inDays(117), city: 'Jundiaí', state: 'SP', active: true },
+  { erpId: 'F-1008', legalName: 'Mineira Obras e Serviços Ltda', tradeName: 'Mineira Obras', taxId: '89012345000167', contactName: 'Tiago Rocha', phone: '(31) 4002-1008', email: 'obras@mineira.example', cndValidUntil: inDays(60), city: 'Belo Horizonte', state: 'MG', active: true },
 ]
 
 export class MockERPProvider implements ERPProvider {

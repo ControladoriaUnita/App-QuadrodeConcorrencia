@@ -6,6 +6,7 @@
 import type { AddendumDTO, AddendumItemDTO, ContractItemDTO, ContractListItemDTO, ContractPartyDTO, ContractProjectDTO } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import { lineTotal } from '../../../shared/domain/competition/best-condition'
+import { nextContractCode } from '../../../shared/domain/contract/contract-request'
 import type { AddendumContent, ContractData, ContractRepository } from '../../application/ports'
 import type { AuditCtx, MemoryDb, Row } from './memory-db'
 
@@ -183,8 +184,8 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
     },
 
     async nextCode(workId, workCode) {
-      const n = db.all('contract_requests').filter((cr) => db.get('competitions', cr.competitionId as string)?.workId === workId).length + 1
-      return `SC-${workCode}-${String(n).padStart(3, '0')}`
+      const codes = db.all('contract_requests').filter((cr) => db.get('competitions', cr.competitionId as string)?.workId === workId).map((cr) => cr.code as string)
+      return nextContractCode(workCode, codes)
     },
 
     async create(d, actorId) {

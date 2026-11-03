@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { D } from '../decimal'
 import type { BudgetLineDTO, WorkCompetitionDTO } from '../../contracts'
-import { consolidate, groupBudgetLines, lineBalances, lineBudgetValue, linkFromQuantity, linkFromShare, rebalance } from './links'
+import { awardedUnitPrices, consolidate, groupBudgetLines, lineBalances, lineBudgetValue, linkFromQuantity, linkFromShare, rebalance } from './links'
 import { buildWorkOverview, UNLINKED } from '../work/overview'
 
 const line = (id: string, materialId: string, code: string, pkg: string, quantity: string, total: string): BudgetLineDTO => ({
@@ -101,5 +101,21 @@ describe('visão da obra', () => {
     expect(sem.contracted.toFixed()).toBe('50')
     expect(sem.quoting.toFixed()).toBe('100')
     expect(o.uncovered).toBe(0)
+  })
+})
+
+describe('preço contratado por insumo', () => {
+  const it2 = (id: string) => ({ id, sortOrder: 1, code: id, description: id, unit: 'un', budgetTotal: D(0), quantity: D(10), pctMaterial: D(0), pctEquipment: D(0), pctRetention: D(0) })
+  const items = [it2('x'), it2('y'), it2('z')]
+  const prices = [
+    { competitionSupplierId: 'A', itemId: 'x', unitPrice: D(5) }, { competitionSupplierId: 'B', itemId: 'x', unitPrice: D(4) },
+    { competitionSupplierId: 'A', itemId: 'y', unitPrice: D(7) }, { competitionSupplierId: 'B', itemId: 'y', unitPrice: D(8) },
+    { competitionSupplierId: 'B', itemId: 'z', unitPrice: D(3) },
+  ]
+  const best = items.map((i) => ({ itemId: i.id, competitionSupplierId: 'B', unitPrice: D(1) })) as never
+
+  it('cotação escolhida vem antes da vencedora; sem escolha (ou sem preço da escolhida), vencedora e depois melhor condição', () => {
+    const unit = awardedUnitPrices(items, best, prices, 'A', new Map([['x', 'B'], ['z', 'A']]))
+    expect([...unit].map(([k, v]) => [k, v?.toFixed()])).toEqual([['x', '4'], ['y', '7'], ['z', '1']])
   })
 })

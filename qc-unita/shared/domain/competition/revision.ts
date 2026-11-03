@@ -12,6 +12,7 @@
  * - Nova revisão parte da última aprovada ou rejeitada (cópia integral).
  */
 import { Decimal } from '../decimal'
+import type { ChosenQuotation } from './chosen-quotation'
 import type { BestCondition, QcItem, QcSupplier, RevisionStatus } from './types'
 
 export class DomainError extends Error {
@@ -89,9 +90,12 @@ export function validateForSubmission(input: {
   items: QcItem[]
   suppliers: QcSupplier[]
   best: BestCondition[]
+  /** Cotação escolhida (empresa por insumo): com ela, a vencedora única deixa de ser exigida */
+  chosen?: ChosenQuotation
   today?: string // yyyy-mm-dd
 }): ValidationIssue[] {
-  const { revision: r, items, suppliers, best } = input
+  const { revision: r, items, suppliers, best, chosen } = input
+  const split = !!chosen?.lines.some((l) => l.competitionSupplierId)
   const issues: ValidationIssue[] = []
   const req = (cond: unknown, field: string, message: string) => {
     if (!cond) issues.push({ field, message })
@@ -107,8 +111,12 @@ export function validateForSubmission(input: {
   req(r.engineeringOwnerName?.trim(), 'engineeringOwnerName', 'Informe o engenheiro responsável.')
   req(r.procurementOwnerName?.trim(), 'procurementOwnerName', 'Informe o responsável de suprimentos.')
   req(r.contractTypeId, 'contractTypeId', 'Selecione o tipo de contrato.')
-  req(r.winnerSupplierId, 'winnerSupplierId', 'Indique a empresa vencedora.')
-  req(r.winnerJustification?.trim(), 'winnerJustification', 'Justifique a escolha da empresa vencedora.')
+  if (!split) req(r.winnerSupplierId, 'winnerSupplierId', 'Indique a empresa vencedora.')
+  req(
+    r.winnerJustification?.trim(),
+    'winnerJustification',
+    split ? 'Justifique a escolha das empresas da cotação escolhida.' : 'Justifique a escolha da empresa vencedora.',
+  )
 
   const activeItems = items.filter((i) => i.quantity.isPositive())
   req(activeItems.length > 0, 'items', 'Inclua ao menos um item com quantidade.')
@@ -131,6 +139,22 @@ export function validateForSubmission(input: {
     issues.push({ field: 'winnerSupplierId', message: `CND da vencedora vencida em ${winner.cndValidUntil}.` })
   }
 
+  // Cotação escolhida: todo insumo com quantidade com empresa (que cotou) e CND válida de cada uma
+  if (split && chosen) {
+    const active = new Set(activeItems.map((i) => i.id))
+    const lines = chosen.lines.filter((l) => active.has(l.itemId))
+    const unchosen = lines.filter((l) => !l.competitionSupplierId).length
+    const noPrice = lines.filter((l) => l.missingPrice).length
+    if (unchosen) issues.push({ field: 'chosen', message: `Cotação escolhida: ${unchosen} insumo(s) com quantidade sem empresa escolhida.` })
+    if (noPrice) issues.push({ field: 'chosen', message: `Cotação escolhida: ${noPrice} insumo(s) escolhido(s) com empresa que não cotou o preço.` })
+    const used = new Set(lines.map((l) => l.competitionSupplierId).filter(Boolean))
+    for (const s of suppliers) {
+      if (used.has(s.id) && input.today && s.cndValidUntil && s.cndValidUntil < input.today) {
+        issues.push({ field: 'chosen', message: `CND de ${s.legalName} (cotação escolhida) vencida em ${s.cndValidUntil}.` })
+      }
+    }
+  }
+
   const unquoted = best.filter((b) => !b.competitionSupplierId && activeItems.some((i) => i.id === b.itemId))
   if (unquoted.length) {
     issues.push({ field: 'prices', message: `${unquoted.length} item(ns) sem nenhuma cotação.` })
@@ -140,6 +164,6 @@ export function validateForSubmission(input: {
 }
 
 /** Valor de referência para alçada de aprovação: total do vencedor, ou do mix se não houver vencedor. */
-export function approvalAmount(winnerTotal: Decimal | null, mixTotal: Decimal): Decimal {
-  return winnerTotal ?? mixTotal
+export function approvalAmount(winnerTotal: Decimal | null, mixTotal: Decimal, chosenTotal: Decimal | null = null): Decimal {
+  return chosenTotal ?? winnerTotal ?? mixTotal
 }

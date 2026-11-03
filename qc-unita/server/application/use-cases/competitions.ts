@@ -249,6 +249,7 @@ export async function updateRevision(repos: Repositories, ctx: RequestContext, r
 
 export async function updateItem(repos: Repositories, ctx: RequestContext, revisionId: string, itemId: string, input: UpdateItemInput) {
   const { ref, data } = await loadDraft(repos, ctx, revisionId)
+  assertInRevision(data, { items: [itemId] })
   if (input.pctMaterial !== undefined && input.pctEquipment !== undefined) {
     if (Decimal.from(input.pctMaterial).plus(input.pctEquipment).gt(1)) {
       throw new DomainError('PCT_INVALID', '% material + % equipamento não pode exceder 100%.')
@@ -281,19 +282,22 @@ export async function addSupplier(repos: Repositories, ctx: RequestContext, revi
 }
 
 export async function updateSupplier(repos: Repositories, ctx: RequestContext, revisionId: string, competitionSupplierId: string, input: UpdateSupplierTermsInput) {
-  const ref = await loadEditable(repos, ctx, revisionId, 'proposal.edit')
+  const { ref, data } = await loadDraft(repos, ctx, revisionId, 'proposal.edit')
+  assertInRevision(data, { suppliers: [competitionSupplierId] })
   await repos.competitions.updateSupplier(competitionSupplierId, input)
   await recompute(repos, ref.competitionId, revisionId)
 }
 
 export async function removeSupplier(repos: Repositories, ctx: RequestContext, revisionId: string, competitionSupplierId: string) {
-  const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
+  const { ref, data } = await loadDraft(repos, ctx, revisionId)
+  assertInRevision(data, { suppliers: [competitionSupplierId] })
   await repos.competitions.removeSupplier(competitionSupplierId)
   await recompute(repos, ref.competitionId, revisionId)
 }
 
 export async function upsertPrices(repos: Repositories, ctx: RequestContext, revisionId: string, input: UpsertPricesInput) {
-  const ref = await loadEditable(repos, ctx, revisionId, 'proposal.edit')
+  const { ref, data } = await loadDraft(repos, ctx, revisionId, 'proposal.edit')
+  assertInRevision(data, { items: input.prices.map((p) => p.itemId), suppliers: input.prices.map((p) => p.competitionSupplierId) })
   await repos.competitions.upsertPrices(revisionId, input.prices)
   const map = await recompute(repos, ref.competitionId, revisionId)
   return { bestMixTotal: map.mixTotal.toDb() }
@@ -305,8 +309,8 @@ export async function setBestOverride(
   revisionId: string,
   input: { itemId: string; competitionSupplierId: string | null; reason?: string },
 ) {
-  const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
-  const data = (await repos.competitions.getData(ref.competitionId, revisionId))!
+  const { data } = await loadDraft(repos, ctx, revisionId)
+  assertInRevision(data, { items: [input.itemId], suppliers: input.competitionSupplierId ? [input.competitionSupplierId] : [] })
   const overrides = data.overrides.filter((o) => o.itemId !== input.itemId)
   if (input.competitionSupplierId) {
     if (!input.reason?.trim()) throw new DomainError('OVERRIDE_REASON', 'Justifique a escolha manual do fornecedor.')
@@ -385,10 +389,21 @@ function buildLink(line: BudgetLineDTO, spec: { share?: Decimal; quantity?: Deci
   }
 }
 
-async function loadDraft(repos: Repositories, ctx: RequestContext, revisionId: string) {
-  const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
+async function loadDraft(repos: Repositories, ctx: RequestContext, revisionId: string, permission = 'competition.edit') {
+  const ref = await loadEditable(repos, ctx, revisionId, permission)
   const data = (await repos.competitions.getData(ref.competitionId, revisionId))!
   return { ref, data }
+}
+
+/**
+ * Itens e fornecedores informados precisam ser da revisão da URL: a permissão e a trava de edição
+ * são conferidas nela, então um id de outra revisão (ex.: em aprovação) seria alterado sem trava.
+ */
+function assertInRevision(data: CompetitionData, ids: { items?: string[]; suppliers?: string[] }) {
+  const items = new Set(data.items.map((i) => i.id))
+  const suppliers = new Set(data.suppliers.map((s) => s.id))
+  if (ids.items?.some((id) => !items.has(id))) throw notFound('Item')
+  if (ids.suppliers?.some((id) => !suppliers.has(id))) throw notFound('Fornecedor da revisão')
 }
 
 /** Linhas do orçamento de um insumo referência e o % de cada uma (verba puxada). */
@@ -397,8 +412,9 @@ export async function setReferenceLines(repos: Repositories, ctx: RequestContext
   if (!data.references.some((r) => r.id === referenceId)) throw notFound('Insumo referência')
   const ids = [...new Set(input.links.map((l) => l.activityItemId))]
   if (ids.length !== input.links.length) throw new AppError('LINK_DUPLICATED', 'A mesma linha do orçamento foi informada duas vezes.', 422)
-  const lines = await repos.catalog.getBudgetLines(ids)
-  if (lines.length !== ids.length) throw new AppError('LINK_LINE', 'Linha do orçamento não encontrada.', 422)
+  // Só linhas do orçamento desta obra: de outra obra o saldo seria calculado contra os compromissos errados
+  const lines = await repos.catalog.getBudgetLines(ids, ref.workId)
+  if (lines.length !== ids.length) throw new AppError('LINK_LINE', 'Linha do orçamento não encontrada nesta obra.', 422)
   const byId = new Map(lines.map((l) => [l.id, l]))
   const links = input.links.map((l) =>
     buildLink(byId.get(l.activityItemId)!, {
@@ -428,7 +444,9 @@ export async function setReferenceLines(repos: Repositories, ctx: RequestContext
  */
 export async function addLines(repos: Repositories, ctx: RequestContext, revisionId: string, input: AddLinesInput) {
   const { ref, data } = await loadDraft(repos, ctx, revisionId)
-  const lines = await repos.catalog.getBudgetLines([...new Set(input.lineIds)])
+  const lineIds = [...new Set(input.lineIds)]
+  const lines = await repos.catalog.getBudgetLines(lineIds, ref.workId)
+  if (lines.length !== lineIds.length) throw new AppError('LINK_LINE', 'Linha do orçamento não encontrada nesta obra.', 422)
   const already = new Set(data.links.map((l) => l.lineKey))
   const fresh = lines.filter((l) => !already.has(l.lineKey))
   if (!fresh.length) throw new AppError('LINES_ALREADY_LINKED', 'As linhas selecionadas já estão neste QC.', 409)
@@ -524,7 +542,8 @@ function assertReferences(data: CompetitionData, referenceIds: string[]) {
 }
 
 export async function removeItem(repos: Repositories, ctx: RequestContext, revisionId: string, itemId: string) {
-  const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
+  const { ref, data } = await loadDraft(repos, ctx, revisionId)
+  assertInRevision(data, { items: [itemId] })
   await repos.competitions.removeItem(itemId)
   await recompute(repos, ref.competitionId, revisionId)
 }
@@ -560,7 +579,9 @@ export async function submitRevision(repos: Repositories, ctx: RequestContext, r
   if (map.issues.length) {
     throw new AppError('SUBMISSION_INVALID', 'Existem pendências para envio à aprovação.', 422, map.issues)
   }
-  const amount = approvalAmount(map.winner?.summary.total ?? null, map.mixTotal)
+  // Alçada: total da cotação escolhida (várias empresas), senão o da vencedora, senão a melhor condição
+  const split = map.chosen.lines.some((l) => l.competitionSupplierId)
+  const amount = approvalAmount(map.winner?.summary.total ?? null, map.mixTotal, split ? map.chosen.total : null)
   const plan = buildApprovalPlan(await repos.approvals.listSteps(), amount)
   await repos.approvals.createPlan(revisionId, plan)
   await repos.competitions.setRevisionStatus(revisionId, {

@@ -165,6 +165,50 @@ describe('cotação escolhida e responsáveis por extenso', () => {
   })
 })
 
+describe('edição só da revisão da URL e sem valores negativos', () => {
+  it('ids de outra revisão (fora do rascunho) são recusados pela URL do rascunho', async () => {
+    const draft = list.find((c) => c.title.startsWith('Pavimentação'))!
+    const locked = list.find((c) => c.title.startsWith('Contrapiso'))!
+    const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    const { data: other } = await call<CompetitionDetailDTO>('GET', `/competitions/${locked.id}`)
+    expect(other.revision.status).not.toBe('draft')
+    const p = other.prices.find((x) => x.unitPrice)!
+    const item = other.items[0]!
+    const sup = other.suppliers[0]!
+    const base = `/revisions/${d.revision.id}`
+
+    expect((await call('PUT', `${base}/prices`, { prices: [{ itemId: p.itemId, competitionSupplierId: p.competitionSupplierId, unitPrice: '0.01' }] })).status).toBe(404)
+    // item do rascunho com fornecedor da outra revisão também não passa
+    expect((await call('PUT', `${base}/prices`, { prices: [{ itemId: d.items[0]!.id, competitionSupplierId: sup.id, unitPrice: '0.01' }] })).status).toBe(404)
+    expect((await call('PATCH', `${base}/items/${item.id}`, { quantity: '1' })).status).toBe(404)
+    expect((await call('DELETE', `${base}/items/${item.id}`)).status).toBe(404)
+    expect((await call('PATCH', `${base}/suppliers/${sup.id}`, { notes: 'x' })).status).toBe(404)
+    expect((await call('DELETE', `${base}/suppliers/${sup.id}`)).status).toBe(404)
+    expect((await call('PUT', `${base}/overrides`, { itemId: item.id, competitionSupplierId: sup.id, reason: 'x' })).status).toBe(404)
+
+    const { data: after } = await call<CompetitionDetailDTO>('GET', `/competitions/${locked.id}`)
+    expect(after.prices).toEqual(other.prices)
+    expect(after.items).toEqual(other.items)
+    expect(after.suppliers).toEqual(other.suppliers)
+  })
+
+  it('quantidade e preço negativos são recusados', async () => {
+    const draft = list.find((c) => c.title.startsWith('Pavimentação'))!
+    const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    const item = d.items[0]!
+    const base = `/revisions/${d.revision.id}`
+    const neg = await call<{ error: { message: string } }>('PATCH', `${base}/items/${item.id}`, { quantity: '-1000' })
+    expect([neg.status, neg.data.error.message]).toEqual([422, 'Dados inválidos: Quantidade não pode ser negativa'])
+    // % acima de 100: a mensagem diz o limite (antes só "Dados inválidos.")
+    const pct = await call<{ error: { message: string } }>('PATCH', `${base}/items/${item.id}`, { pctMaterial: '1.5' })
+    expect(pct.data.error.message).toBe('Dados inválidos: Percentual deve estar entre 0% e 100%')
+    expect((await call('PUT', `${base}/prices`, { prices: [{ itemId: item.id, competitionSupplierId: d.suppliers[0]!.id, unitPrice: '-5' }] })).status).toBe(422)
+    const { data: after } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    expect(after.items[0]!.quantity).toBe(item.quantity)
+    expect(after.prices).toEqual(d.prices)
+  })
+})
+
 describe('obra e vínculos de planejamento', () => {
   it('lista obras com resumo de consumo e visão por tipo de serviço', async () => {
     const works = await call<{ id: string; code: string; summary: { budgetTotal: string; contracted: string; competitions: number } }[]>('GET', '/works')
@@ -176,6 +220,18 @@ describe('obra e vínculos de planejamento', () => {
     expect(ov.data.packages.length).toBeGreaterThan(3)
     expect(ov.data.competitions.map((c) => c.category).sort()).toContain('contracted')
     expect(ov.data.links.length).toBeGreaterThan(0)
+  })
+
+  it('não puxa linhas do orçamento de outra obra', async () => {
+    const works = (await call<{ id: string; code: string }[]>('GET', '/works')).data
+    const other = works.find((w) => w.code === '2055')!
+    const { data: foreign } = await call<{ id: string }[]>('GET', `/works/${other.id}/budget-lines`)
+    const draft = (await call<CompetitionListItemDTO[]>('GET', '/competitions')).data.find((c) => c.title.startsWith('Pavimentação'))!
+    const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)
+    const add = await call<{ error: { code: string } }>('POST', `/revisions/${d.revision.id}/lines`, { lineIds: [foreign[0]!.id], shares: {}, fillMap: false })
+    expect([add.status, add.data.error.code]).toEqual([422, 'LINK_LINE'])
+    const set = await call<{ error: { code: string } }>('PUT', `/revisions/${d.revision.id}/references/${d.references[0]!.id}/lines`, { links: [{ activityItemId: foreign[0]!.id, share: '1' }] })
+    expect([set.status, set.data.error.code]).toEqual([422, 'LINK_LINE'])
   })
 
   it('QC com vários IPs, linha a linha, consolidando outros QCs', async () => {

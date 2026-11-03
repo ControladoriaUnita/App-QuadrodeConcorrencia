@@ -26,6 +26,8 @@ export function SuppliersPanel({ detail, map, today, adding, onAdd, onUpdate, on
   const catalog = useSuppliers(search)
   const [removing, setRemoving] = useState<QcSupplierDTO | null>(null)
   const participating = new Set(detail.suppliers.map((s) => s.supplierId))
+  /** Insumos da cotação escolhida que saem junto com o fornecedor */
+  const chosenWith = (s: { id: string } | null) => (s ? detail.items.filter((i) => i.chosenSupplierId === s.id).length : 0)
   const options = (catalog.data ?? []).map((s) => ({
     value: s.id,
     label: s.tradeName && s.tradeName !== s.legalName ? `${s.tradeName} — ${s.legalName}` : s.legalName,
@@ -83,7 +85,9 @@ export function SuppliersPanel({ detail, map, today, adding, onAdd, onUpdate, on
       <ConfirmDialog
         open={!!removing}
         title="Remover fornecedor?"
-        description={`Os preços lançados por ${removing?.tradeName || removing?.legalName} nesta revisão serão excluídos. A alteração fica registrada na auditoria.`}
+        description={`Os preços lançados por ${removing?.tradeName || removing?.legalName} nesta revisão serão excluídos${
+          chosenWith(removing) ? ` e ${chosenWith(removing)} insumo(s) da cotação escolhida ficarão sem empresa` : ''
+        }. A alteração fica registrada na auditoria.`}
         confirmLabel="Remover"
         tone="danger"
         onCancel={() => setRemoving(null)}
@@ -145,7 +149,7 @@ function SupplierCard({
         }
         actions={
           removable && (
-            <Button variant="ghost" size="sm" aria-label="Remover fornecedor" icon={<Trash2 className="size-4" />} onClick={onRemove} />
+            <Button variant="ghost" size="sm" aria-label={`Remover fornecedor ${s.tradeName || s.legalName}`} icon={<Trash2 className="size-4" />} onClick={onRemove} />
           )
         }
       />
