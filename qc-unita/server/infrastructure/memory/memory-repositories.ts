@@ -26,6 +26,7 @@ import { uid, type AuditCtx, type MemoryDb, type Row } from './memory-db'
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
 import { createMemoryAttachments, createMemoryStorage } from './memory-attachments'
 import { createMemoryBudgetMappings, createMemoryIndirect } from './memory-budget-mappings'
+import { createMemoryOutOfScope } from './memory-out-of-scope'
 import { createMemoryContracts } from './memory-contracts'
 
 type R<T> = T & Row
@@ -223,6 +224,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
     storage: createMemoryStorage(),
     budgetMappings: createMemoryBudgetMappings(db),
     indirect: createMemoryIndirect(db),
+    outOfScope: createMemoryOutOfScope(db, audit),
 
     // ------------------------------------------------------------------ identidade
     identity: {

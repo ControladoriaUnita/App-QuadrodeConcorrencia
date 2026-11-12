@@ -20,10 +20,26 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v10 |
-| dev | v11 |
+| produção | v11 |
+| dev | v12 |
 
-## v11 — dev (2026-11-03)
+## v12 — dev (2026-11-12)
+
+- **Custos fora de escopo:** aba nova **Fora de escopo** na obra, entre Orçamento e Concorrências, para lançar o que a obra precisa e que não está previsto no orçamento. Cada lançamento recebe um número da obra (FE-001, FE-002…) e guarda:
+  - insumo (do cadastro ou livre), unidade, quantidade e custo unitário (total = quantidade × unitário);
+  - data, **motivo** e **justificativa** obrigatória;
+  - quem solicitou e, se quiser, o Item da EAP do orçamento vigente e o IP.
+- A tela mostra:
+  - o total fora de escopo;
+  - o peso sobre o orçamento vigente, em destaque acima de 5%;
+  - o orçamento + fora de escopo;
+  - o resumo por motivo e por Item da EAP;
+  - a lista com busca e filtro por motivo, com editar e excluir.
+- Lançam Administrador, Suprimentos e Engenharia (permissão nova `out_of_scope.manage`, dada aos papéis que mantêm o orçamento); os demais só consultam. Tudo fica na auditoria.
+- Por enquanto os lançamentos ficam à parte: não entram no comprometido do orçamento nem nas concorrências.
+- Banco: migration `025_out_of_scope_costs.sql`. Rodar no Supabase antes de liberar.
+
+## v11 — produção (2026-11-03)
 
 - Simulado: os fornecedores passam a ser escolhidos entre empresas de obra (construtora, engenharia, concreto, terraplenagem, materiais de construção…), com CND válida. Em ordem alfabética pura, o cadastro da UAU fazia o simulado usar cartórios ("1 TABELIAO DE PROTESTO…") e lojas de filtros.
 

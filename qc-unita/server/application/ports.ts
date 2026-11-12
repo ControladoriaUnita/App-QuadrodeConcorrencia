@@ -5,6 +5,7 @@
 import type {
   AttachmentDTO,
   AttachmentEntity,
+  OutOfScopeCostDTO,
   BudgetLineDTO,
   BudgetImportInput,
   BudgetStructureDTO,
@@ -437,6 +438,33 @@ export interface FileStorage {
   remove(path: string): Promise<void>
 }
 
+// ----------------------------------------------------------------------------- custos fora de escopo
+/** Conteúdo gravado de um custo fora de escopo (o total é calculado: quantidade × unitário) */
+export interface OutOfScopeWrite {
+  code: string | null
+  description: string
+  unit: string
+  quantity: string
+  unitCost: string
+  wbs: string | null
+  wbsDescription: string | null
+  planningCode: string | null
+  planningDescription: string | null
+  category: OutOfScopeCostDTO['category']
+  justification: string
+  requestedBy: string | null
+  occurredOn: string
+}
+
+export interface OutOfScopeRepository {
+  list(workId: string): Promise<OutOfScopeCostDTO[]>
+  get(id: string): Promise<(OutOfScopeCostDTO & { workId: string }) | null>
+  /** Número sequencial da obra atribuído na gravação */
+  create(workId: string, data: OutOfScopeWrite, actorId: string): Promise<{ id: string; number: number }>
+  update(id: string, data: OutOfScopeWrite, actorId: string): Promise<void>
+  delete(id: string): Promise<void>
+}
+
 export interface Repositories {
   identity: IdentityRepository
   attachments: AttachmentRepository
@@ -451,4 +479,5 @@ export interface Repositories {
   budgetWriter: BudgetWriter
   budgetMappings: BudgetMappingRepository
   indirect: IndirectRepository
+  outOfScope: OutOfScopeRepository
 }

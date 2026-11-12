@@ -596,6 +596,60 @@ export interface WorkListDTO<T> {
   items: T[]
 }
 
+// ----------------------------------------------------------------------------- custos fora de escopo
+export type OutOfScopeCategoryKey = 'client_request' | 'budget_omission' | 'design_change' | 'technical_requirement' | 'regulatory' | 'other'
+
+/** Item de custo não previsto no orçamento da obra */
+export interface OutOfScopeCostDTO {
+  id: string
+  /** Sequencial da obra (FE-001…) */
+  number: number
+  /** Código do insumo (cadastro UAU / orçamento), quando houver */
+  code: string | null
+  description: string
+  unit: string
+  quantity: string
+  unitCost: string
+  total: string
+  /** Item da EAP do orçamento onde o custo se encaixa (opcional) */
+  wbs: string | null
+  wbsDescription: string | null
+  planningCode: string | null
+  planningDescription: string | null
+  category: OutOfScopeCategoryKey
+  justification: string
+  /** Quem pediu/apontou o custo (texto livre) */
+  requestedBy: string | null
+  occurredOn: string
+  createdByName: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OutOfScopeListDTO {
+  items: OutOfScopeCostDTO[]
+  /** Orçamento vigente da obra (null sem orçamento) */
+  budgetTotal: string | null
+  canManage: boolean
+}
+
+export const saveOutOfScopeSchema = z
+  .object({
+    code: z.string().trim().max(40).nullable().optional(),
+    description: z.string().trim().min(3, 'Descreva o item').max(500),
+    unit: z.string().trim().min(1, 'Informe a unidade').max(20),
+    quantity: decimalString.refine((v) => Number(v) > 0, 'Quantidade deve ser maior que zero'),
+    unitCost: decimalString.refine((v) => Number(v) >= 0, 'Custo unitário não pode ser negativo'),
+    wbs: z.string().trim().regex(/^\d+(\.\d+)*$/, 'Item da EAP inválido').nullable().optional(),
+    planningCode: z.string().trim().max(30).nullable().optional(),
+    planningDescription: z.string().trim().max(500).nullable().optional(),
+    category: z.enum(['client_request', 'budget_omission', 'design_change', 'technical_requirement', 'regulatory', 'other']),
+    justification: z.string().trim().min(5, 'Justifique por que o custo não estava no orçamento').max(4000),
+    requestedBy: z.string().trim().max(200).nullable().optional(),
+    occurredOn: isoDate,
+  })
+export type SaveOutOfScopeInput = z.infer<typeof saveOutOfScopeSchema>
+
 // Cadastro manual de obra (obras do ERP chegam pela sincronização)
 export const createWorkSchema = z
   .object({

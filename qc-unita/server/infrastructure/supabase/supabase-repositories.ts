@@ -30,6 +30,7 @@ import type { AggregatedInput, CompetitionData, NewLink, Repositories } from '..
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
 import { createSupabaseAttachments, createSupabaseStorage } from './supabase-attachments'
 import { createSupabaseBudgetMappings, createSupabaseIndirect } from './supabase-budget-mappings'
+import { createSupabaseOutOfScope } from './supabase-out-of-scope'
 import { createSupabaseContracts } from './supabase-contracts'
 import { allPages } from './pages'
 
@@ -281,6 +282,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
     storage: createSupabaseStorage(db),
     budgetMappings: createSupabaseBudgetMappings(service),
     indirect: createSupabaseIndirect(service),
+    outOfScope: createSupabaseOutOfScope(db),
 
     // ------------------------------------------------------------------ identidade
     identity: {

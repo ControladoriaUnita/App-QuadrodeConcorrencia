@@ -39,13 +39,23 @@ No **modo demonstração** (`DATA_SOURCE=memory`) a API roda dentro do próprio 
 
 ## Fluxo de telas
 
-A barra superior tem o **seletor de obra** e as abas na ordem do fluxo: **1 Orçamento → 2 Concorrências → 3 Fornecedores → 4 Contratos e aditivos → 5 Integração ERP**. Ao entrar, o app abre o **orçamento da última obra usada** (ou da única disponível); sem obra escolhida, a seleção de obras.
+A barra superior tem o **seletor de obra** e as abas na ordem do fluxo: **1 Orçamento → 2 Fora de escopo → 3 Concorrências → 4 Fornecedores → 5 Contratos e aditivos → 6 Integração ERP**. Ao entrar, o app abre o **orçamento da última obra usada** (ou da única disponível); sem obra escolhida, a seleção de obras.
 
 1. **Orçamento** (`/obras/:id/orcamento`, tela inicial) — a planilha do orçamento (Item → composição → insumos) com o comprometido por QC e o saldo livre; importar orçamento e "Nova concorrência" partem daqui.
-2. **Concorrências** (`/obras/:id/concorrencias`) — **quadro kanban** por etapa (Em cotação · Em aprovação · Aprovada · Contratada; canceladas sob demanda), uma caixa por QC com orçado × valor e economia. A visão **Por tipo de serviço** continua como alternativa.
-3. **Nova concorrência** (`/obras/:id/concorrencias/nova`) — os insumos são escolhidos **na mesma árvore do orçamento**: marca-se o insumo (ou um Item/composição inteiro) e informa-se o **% a consumir**; colunas "% a consumir" e "Verba puxada" ficam fixas à direita. Os IPs do QC saem das linhas marcadas. O "Adicionar linhas do orçamento" dentro do QC usa a mesma tela.
-4. **QC** — mapa de cotação, **Vínculos e insumos** (consolidador), dados, escopo, fornecedores, **anexos**, aprovações e histórico.
-5. **Solicitação de Contrato** — gerada do QC aprovado (botão "Gerar solicitação de contrato"); abas Solicitação, Itens e vínculos, Aditivos e Anexos. Lista por obra em **Contratos e aditivos**.
+2. **Fora de escopo** (`/obras/:id/fora-de-escopo`) — custos que a obra precisa e que **não estão previstos no orçamento**, lançados à parte com motivo e justificativa (ver abaixo).
+3. **Concorrências** (`/obras/:id/concorrencias`) — **quadro kanban** por etapa (Em cotação · Em aprovação · Aprovada · Contratada; canceladas sob demanda), uma caixa por QC com orçado × valor e economia. A visão **Por tipo de serviço** continua como alternativa.
+4. **Nova concorrência** (`/obras/:id/concorrencias/nova`) — os insumos são escolhidos **na mesma árvore do orçamento**: marca-se o insumo (ou um Item/composição inteiro) e informa-se o **% a consumir**; colunas "% a consumir" e "Verba puxada" ficam fixas à direita. Os IPs do QC saem das linhas marcadas. O "Adicionar linhas do orçamento" dentro do QC usa a mesma tela.
+5. **QC** — mapa de cotação, **Vínculos e insumos** (consolidador), dados, escopo, fornecedores, **anexos**, aprovações e histórico.
+6. **Solicitação de Contrato** — gerada do QC aprovado (botão "Gerar solicitação de contrato"); abas Solicitação, Itens e vínculos, Aditivos e Anexos. Lista por obra em **Contratos e aditivos**.
+
+### Custos fora de escopo (aba "Fora de escopo")
+
+Itens que não estão previstos no orçamento da obra — não há linha do orçamento para vincular numa concorrência. Cada lançamento tem número sequencial da obra (**FE-001**, FE-002…), insumo (do cadastro ou livre), unidade, quantidade, custo unitário (total = quantidade × unitário, 4 casas), data, **motivo** (solicitação do cliente, omissão do orçamento, alteração de projeto, exigência técnica, exigência legal/concessionária, outros), **justificativa** obrigatória, quem solicitou e, opcionalmente, o Item da EAP do orçamento vigente e o IP.
+
+- A tela mostra o total fora de escopo, o peso sobre o orçamento vigente (destaque acima de 5%), o orçamento + fora de escopo, o resumo por motivo e por Item da EAP e a lista com busca e filtro por motivo.
+- Leitura: `budget.read`. Lançar, editar e excluir: permissão nova `out_of_scope.manage` (Administrador, Suprimentos e Engenharia — os papéis que mantêm o orçamento). Tudo na auditoria campo a campo.
+- Os lançamentos **ainda não entram** no consumo do orçamento (faixa "comprometido") nem nas concorrências: ficam à parte, para a próxima etapa definir como entram.
+- Banco: migration `025_out_of_scope_costs.sql` (tabela `out_of_scope_costs`, numeração por obra, RLS e auditoria). Domínio em `shared/domain/budget/out-of-scope.ts`.
 
 ### Anexos
 
@@ -147,7 +157,7 @@ src/
   features/contracts             solicitação de contrato, itens e vínculos, aditivos
   features/catalog, integration, auth
 supabase/
-  migrations/001…013             schema versionado (nada manual no painel)
+  migrations/001…025             schema versionado (nada manual no painel)
   tests/                         smoke de RLS/auditoria/congelamento + usuários do teste de integração
 ```
 
