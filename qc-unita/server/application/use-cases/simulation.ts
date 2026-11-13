@@ -38,7 +38,6 @@ type Stage =
   | 'approved'
   | 'split-contracts'
   | 'contract-submitted'
-  | 'contract-signed'
   | 'addendum-pending'
   | 'addendum-approved'
   | 'termination'
@@ -57,8 +56,7 @@ const FIXED: { key: string; stage: Stage; label: string }[] = [
   { key: 'reprovado', stage: 'rejected', label: 'Reprovado na 2ª alçada (pede nova revisão)' },
   { key: 'aprovado', stage: 'approved', label: 'Aprovado — pronto para gerar a solicitação de contrato' },
   { key: 'cotacao-escolhida', stage: 'split-contracts', label: 'Aprovado com cotação escolhida — uma solicitação por empresa (rascunho)' },
-  { key: 'contrato-enviado', stage: 'contract-submitted', label: 'Solicitação enviada a Contratos' },
-  { key: 'contrato-assinado', stage: 'contract-signed', label: 'Contrato assinado' },
+  { key: 'contrato-concluido', stage: 'contract-submitted', label: 'Contrato concluído' },
   { key: 'aditivo-aguardando', stage: 'addendum-pending', label: 'Aditivo aguardando a Gerência/Diretoria' },
   { key: 'aditivo-aprovado', stage: 'addendum-approved', label: 'Aditivo aprovado (novo total do contrato)' },
   { key: 'distrato', stage: 'termination', label: 'Distrato aprovado' },
@@ -218,16 +216,13 @@ async function build(sim: Sim, s: Scenario, title: string): Promise<{ competitio
   await contracts.submitContractRequest(repos, ctx, contractId)
   if (s.stage === 'contract-submitted') return { competitionId, contracts: 1 }
   if (s.stage === 'contract-cancelled') {
-    await contracts.cancelContractRequest(repos, ctx, contractId, 'Simulado: fornecedor desistiu antes da assinatura.')
+    await contracts.cancelContractRequest(repos, ctx, contractId, 'Simulado: fornecedor desistiu do contrato.')
     return { competitionId, contracts: 1 }
   }
   if (s.stage === 'new-revision') {
     await qc.createRevision(repos, ctx, competitionId, 'Simulado: inclusão de serviço complementar (vai por aditivo).')
     return { competitionId, contracts: 1 }
   }
-
-  await contracts.signContract(repos, ctx, contractId, { signedOn: sim.today, erpContractId: `SIM-${Date.now().toString().slice(-6)}` })
-  if (s.stage === 'contract-signed') return { competitionId, contracts: 1 }
 
   const kind = s.stage === 'termination' ? 'termination' : 'addendum'
   const addendumId = await createAddendum(sim, contractId, kind)

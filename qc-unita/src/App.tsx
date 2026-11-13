@@ -16,6 +16,8 @@ import { getLastWorkId, workPath } from '@/features/works/currentWork'
 import { WorkSelectPage } from '@/features/works/WorkSelectPage'
 import { IntegrationPage } from '@/features/integration/IntegrationPage'
 import { MappingsPage } from '@/features/mappings/MappingsPage'
+import { ApprovalFlowsPage } from '@/features/approvals/ApprovalFlowsPage'
+import { OutOfScopePage } from '@/features/out-of-scope/OutOfScopePage'
 import { useAuth } from '@/lib/auth'
 
 const loading = (
@@ -62,6 +64,7 @@ export function App() {
         <Route path="/obras" element={<WorkSelectPage />} />
         <Route path="/obras/:workId" element={<LegacyWorkRedirect />} />
         <Route path="/obras/:workId/orcamento" element={<BudgetPage />} />
+        <Route path="/obras/:workId/fora-de-escopo" element={<OutOfScopePage />} />
         <Route path="/obras/:workId/concorrencias" element={<CompetitionsBoardPage />} />
         <Route path="/obras/:workId/concorrencias/nova" element={<NewCompetitionPage />} />
         <Route path="/obras/:workId/qc/:id" element={<CompetitionPage />} />
@@ -72,6 +75,7 @@ export function App() {
         <Route path="/consulta-uau" element={<UauCatalogPage />} />
         <Route path="/de-para" element={<MappingsPage />} />
         <Route path="/integracao" element={<IntegrationPage />} />
+        <Route path="/aprovacoes" element={<ApprovalFlowsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

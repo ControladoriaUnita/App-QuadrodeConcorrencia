@@ -39,13 +39,29 @@ No **modo demonstração** (`DATA_SOURCE=memory`) a API roda dentro do próprio 
 
 ## Fluxo de telas
 
-A barra superior tem o **seletor de obra** e as abas na ordem do fluxo: **1 Orçamento → 2 Concorrências → 3 Fornecedores → 4 Contratos e aditivos → 5 Integração ERP**. Ao entrar, o app abre o **orçamento da última obra usada** (ou da única disponível); sem obra escolhida, a seleção de obras.
+A barra superior tem o **seletor de obra** e as abas na ordem do fluxo: **1 Orçamento → 2 Fora de escopo → 3 Concorrências → 4 Fornecedores → 5 Contratos e aditivos → 6 Integração ERP**. Ao entrar, o app abre o **orçamento da última obra usada** (ou da única disponível); sem obra escolhida, a seleção de obras.
 
 1. **Orçamento** (`/obras/:id/orcamento`, tela inicial) — a planilha do orçamento (Item → composição → insumos) com o comprometido por QC e o saldo livre; importar orçamento e "Nova concorrência" partem daqui.
-2. **Concorrências** (`/obras/:id/concorrencias`) — **quadro kanban** por etapa (Em cotação · Em aprovação · Aprovada · Contratada; canceladas sob demanda), uma caixa por QC com orçado × valor e economia. A visão **Por tipo de serviço** continua como alternativa.
-3. **Nova concorrência** (`/obras/:id/concorrencias/nova`) — os insumos são escolhidos **na mesma árvore do orçamento**: marca-se o insumo (ou um Item/composição inteiro) e informa-se o **% a consumir**; colunas "% a consumir" e "Verba puxada" ficam fixas à direita. Os IPs do QC saem das linhas marcadas. O "Adicionar linhas do orçamento" dentro do QC usa a mesma tela.
-4. **QC** — mapa de cotação, **Vínculos e insumos** (consolidador), dados, escopo, fornecedores, **anexos**, aprovações e histórico.
-5. **Solicitação de Contrato** — gerada do QC aprovado (botão "Gerar solicitação de contrato"); abas Solicitação, Itens e vínculos, Aditivos e Anexos. Lista por obra em **Contratos e aditivos**.
+2. **Fora de escopo** (`/obras/:id/fora-de-escopo`) — custos que a obra precisa e que **não estão previstos no orçamento**, lançados à parte com motivo e justificativa (ver abaixo).
+3. **Concorrências** (`/obras/:id/concorrencias`) — **quadro kanban** por etapa (Em cotação · Em aprovação · Aprovada · Contratada; canceladas sob demanda), uma caixa por QC com orçado × valor e economia. A visão **Por tipo de serviço** continua como alternativa.
+4. **Nova concorrência** (`/obras/:id/concorrencias/nova`) — os insumos são escolhidos **na mesma árvore do orçamento**: marca-se o insumo (ou um Item/composição inteiro) e informa-se o **% a consumir**; colunas "% a consumir" e "Verba puxada" ficam fixas à direita. Os IPs do QC saem das linhas marcadas. O "Adicionar linhas do orçamento" dentro do QC usa a mesma tela.
+5. **QC** — mapa de cotação, **Vínculos e insumos** (consolidador), dados, escopo, fornecedores, **anexos**, aprovações e histórico.
+6. **Solicitação de Contrato** — gerada do QC aprovado (botão "Gerar solicitação de contrato"); abas Solicitação, Itens e vínculos, Aditivos e Anexos. Lista por obra em **Contratos e aditivos**.
+
+### Custos fora de escopo (aba "Fora de escopo")
+
+Itens que não estão previstos no orçamento da obra — não há linha do orçamento para vincular numa concorrência. Cada lançamento tem número sequencial da obra (**FE-001**, FE-002…), insumo (do cadastro ou livre), unidade, quantidade, custo unitário (total = quantidade × unitário, 4 casas), data, **motivo** (solicitação do cliente, omissão do orçamento, alteração de projeto, exigência técnica, exigência legal/concessionária, outros), **justificativa** obrigatória, quem solicitou e, opcionalmente, o Item da EAP do orçamento vigente e o IP.
+
+- A tela mostra o total fora de escopo, o peso sobre o orçamento vigente (destaque acima de 5%), o orçamento + fora de escopo, o resumo por motivo e por Item da EAP e a lista com busca e filtro por motivo.
+- Leitura: `budget.read`. Lançar, editar e excluir: permissão nova `out_of_scope.manage` (Administrador, Suprimentos e Engenharia — os papéis que mantêm o orçamento). Tudo na auditoria campo a campo.
+- **Ligado ao QC** (migration `027_qc_out_of_scope.sql`, domínio em `shared/domain/competition/scope.ts`):
+  - cada lançamento manual aponta o QC a que se refere (`competition_id`, obrigatório na tela quando a obra tem concorrências; o banco recusa QC de outra obra);
+  - no mapa do QC cada insumo tem **Quant. FE** (`competition_items.out_of_scope_quantity`; vazio = automático: insumo sem referência do orçamento é 100% FE) e **Unit. FE** (preço contratado);
+  - o rodapé do mapa mostra fora de escopo, total e resultado **sem** fora de escopo, além dos totais com ele;
+  - as linhas FE dos mapas (revisão corrente de cada QC) aparecem na aba em "Apontados nos QCs", calculadas na leitura e com link para o QC de origem.
+- **Desvio** é diferente de fora de escopo: preço ou quantidade acima do orçado num insumo que está no orçamento. É apontado **por linha** no mapa ("desvio de preço" / "desvio de quantidade"), nunca por pacote ou Item da EAP. A quantidade só é comparada quando as referências são só daquele insumo e na mesma unidade.
+- Os lançamentos ainda não entram no consumo do orçamento (faixa "comprometido").
+- Banco: migration `025_out_of_scope_costs.sql` (tabela `out_of_scope_costs`, numeração por obra, RLS e auditoria). Domínio em `shared/domain/budget/out-of-scope.ts`.
 
 ### Anexos
 
@@ -56,12 +72,24 @@ Aba **Anexos** no QC (propostas, com o fornecedor; memoriais; documentos) e na s
 - **Origem**: revisão aprovada do QC, empresa vencedora, tipo de contrato e datas do serviço. Entram os itens com quantidade que a vencedora cotou, ao preço dela; itens que ela não cotou ficam de fora e são anotados nas observações. Vínculos IP · Qtd · Valor vêm dos vínculos de planejamento (valor = quantidade × R$ unitário). Distribuição §1.6 ponderada pelo valor contratado.
 - **Cotação escolhida**: se a revisão aprovada tem empresa escolhida por insumo no mapa, nasce uma solicitação por empresa, só com os insumos dela; a verba de cada uma é a dos seus insumos. Para enviar à aprovação, todo insumo com quantidade precisa de empresa (que cotou) com CND válida; a vencedora única fica opcional e a alçada usa o total escolhido.
 - **Seções do formulário**: dados iniciais, contratado e 2º contratado, tipo, distribuição, validade, §3 projetos (folha/arquivo/revisão), §4 escopo técnico, §5 materiais com faturamento direto (obrigatório em CTD04/CTD10), §6 critérios de medição (obrigatório), observações. No rascunho é possível ajustar especificação e % de retenção por item.
-- **Ciclo**: rascunho → **enviada a Contratos** (QC passa a "Contratada"; dados e itens travados também por trigger) → **no ERP** (`ERPProvider.pushContract` + `integration_logs`) → **assinado**. Cancelável até ir ao ERP; ao cancelar, o QC volta ao status da revisão corrente. Uma solicitação ativa por concorrência e empresa (`contract_requests_one_active_supplier`); o número SC é o maior da obra + 1, com nova tentativa se dois pedidos colidirem. Novas revisões de um QC contratado não desfazem o contrato.
-- **Aditivos e distratos**: lançamentos item a item (o valor é sempre a soma dos itens, nunca um valor geral do contrato), numerados por tipo (1º aditivo, 1º distrato…), com motivo, data e nova data de término. Quem digita informa quantidades positivas; o tipo define o sinal: **aditivo** soma (itens do contrato ou itens novos, R$ unitário pode mudar) e **distrato** subtrai (só itens do contrato, ao preço contratado, sem passar da quantidade vigente).
+- **Ciclo**: rascunho → **concluído** ao enviar (a aprovação já aconteceu no QC; o QC passa a "Contratada"; dados e itens travados também por trigger). Não há assinatura nem envio ao ERP (sem API de contrato); `sent_to_erp` e `signed` ficam só para contratos antigos e também contam como concluídos. Cancelável no rascunho e concluído; ao cancelar, o QC volta ao status da revisão corrente. Uma solicitação ativa por concorrência e empresa (`contract_requests_one_active_supplier`); o número SC é o maior da obra + 1, com nova tentativa se dois pedidos colidirem. Novas revisões de um QC contratado não desfazem o contrato.
+- **Aditivos e distratos**: lançamentos item a item (o valor é sempre a soma dos itens, nunca um valor geral do contrato), numerados por tipo (1º aditivo, 1º distrato…), com motivo, data e nova data de término. Quem digita informa quantidades positivas; o tipo define o sinal: **aditivo** soma (itens do contrato ou itens novos, R$ unitário pode mudar) e **distrato** subtrai (só itens do contrato, ao preço contratado, sem passar da quantidade vigente). No aditivo cada item do contrato também pode **reduzir** (`reduce: true`, ao preço contratado, com as regras do distrato): é o **remanejamento**, zerar uma linha e acrescentar em outra na mesma solicitação. O total do aditivo é o líquido (acréscimos − reduções); a transferência de saldo entre linhas é digitada pelo usuário. Migration `026_addendum_reduce_lines.sql` (regra de sinal do trigger).
 - **Vínculos de planejamento por item**: cada item lançado é distribuído entre os IPs (sugestão proporcional ao IP vigente, editável); a soma fecha com a quantidade do item e, no distrato, nenhum IP fica negativo. É o que o planejamento usa para vincular no ERP.
 - Fluxo rascunho → aguardando aprovação → **aprovado/reprovado pela Gerência/Diretoria** (papéis `manager`/`director`/`admin` com `approval.decide`; reprovação exige comentário). Um lançamento aberto por vez.
 - **Consumo**: lançamentos aprovados entram no **Contratado** da obra (`qc_work_addenda_totals`; distratos reduzem); a vigência passa a ser a nova data do último lançamento aprovado.
 - Migrations `013_contract_requests.sql` e `016_addendum_kind_allocations.sql`; domínio em `shared/domain/contract/contract-request.ts` e `shared/domain/contract/addendum.ts`.
+
+### Fluxos de aprovação (tela "Aprovações")
+
+- **Pedido do QC**: na criação (e na aba Dados, enquanto em rascunho) o solicitante informa **material ou mão de obra**, a **origem** (obra ou Suprimentos) e o **diretor aprovador** (RT, SR…; `approval_directors`, não presos às obras). Os três escolhem o fluxo.
+- **Fluxos** (`approval_flows` + `approval_flow_steps`, migration `028_approval_flows.sql`, domínio em `shared/domain/approval/flows.ts`), por tipo de solicitação:
+  - **contratação**: envio do QC;
+  - **desvio de custo ou quantidade**: entra sozinho no fim do plano quando alguma linha do mapa tem desvio;
+  - **aditivo/distrato** e **aditivo de prazo** (sem itens, com nova data): vêm da tela de Contratos e usam os critérios do QC de origem.
+- **Escolha do fluxo**: critério vazio vale para qualquer pedido; vence o fluxo mais específico. Cada etapa tem papel, alçada mínima e pode ser a **etapa do diretor do pedido**. Diretor com usuário ligado: só ele decide; sem usuário, qualquer pessoa com o papel.
+- **Sem fluxo**: sem fluxo de contratação valem as etapas gerais (`approval_steps`); sem fluxo de aditivo vale a decisão única da Gerência/Diretoria (como antes).
+- **Aditivos em etapas** (`addendum_approvals`): o aditivo só fica aprovado na última etapa.
+- **Configuração**: todos consultam a tela **Aprovações**; só o administrador cadastra fluxos e diretores. A migration cria fluxos iniciais iguais às etapas atuais (mais "Contratação de serviço (RT/SR)" com o diretor no fim, o de desvio com o diretor do pedido e os de aditivo/prazo com a Gerência). Os aprovadores definitivos são cadastrados na tela.
 
 ### Consumo do orçamento
 
@@ -90,7 +118,7 @@ Na obra, **Importar orçamento (Excel)** lê a planilha no navegador — formato
 ### Excluir obra e simulado (administrador global)
 
 - **Excluir obra** (`DELETE /api/works/:id`, corpo `{ confirmCode }` = número da obra): apaga a obra de vez com orçamentos, concorrências, contratos, aditivos e anexos (e os arquivos no Storage). No Supabase é a função `qc_purge_work` (migration `024_purge_work.sql`), só para a service_role: suspende as travas de revisão/contrato e a auditoria linha a linha dentro da própria transação e deixa um registro único da exclusão em `audit_logs`.
-- **Simulado** (`/api/works/:id/simulation`): `reset` apaga concorrências e contratos da obra (`qc_purge_work` mantendo a obra) e `run` gera um cenário por chamada (cabe no tempo da função): cotação, aprovação parada em cada alçada ativa, reprovada, aprovada, cotação escolhida, solicitação enviada/assinada/cancelada, aditivo aguardando/aprovado, distrato e nova revisão. Usa os mesmos casos de uso das telas; como o administrador decide todas as alçadas, a rota usa os repositórios sem RLS (`session.elevated`) depois de conferir o administrador.
+- **Simulado** (`/api/works/:id/simulation`): `reset` apaga concorrências e contratos da obra (`qc_purge_work` mantendo a obra) e `run` gera um cenário por chamada (cabe no tempo da função): cotação, aprovação parada em cada alçada ativa, reprovada, aprovada, cotação escolhida, contrato concluído/cancelado, aditivo aguardando/aprovado, distrato e nova revisão. Usa os mesmos casos de uso das telas; como o administrador decide todas as alçadas, a rota usa os repositórios sem RLS (`session.elevated`) depois de conferir o administrador.
 
 ### Vínculos de planejamento (aba "Vínculos e insumos")
 
@@ -147,7 +175,7 @@ src/
   features/contracts             solicitação de contrato, itens e vínculos, aditivos
   features/catalog, integration, auth
 supabase/
-  migrations/001…013             schema versionado (nada manual no painel)
+  migrations/001…025             schema versionado (nada manual no painel)
   tests/                         smoke de RLS/auditoria/congelamento + usuários do teste de integração
 ```
 

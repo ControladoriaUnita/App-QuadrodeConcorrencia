@@ -20,10 +20,70 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v10 |
-| dev | v11 |
+| produção | v11 |
+| dev | v15 |
 
-## v11 — dev (2026-11-03)
+## v15 — dev (2026-11-13)
+
+- **Pedido do QC:** na criação da concorrência, o solicitante informa três campos obrigatórios. Na aba Dados eles podem ser trocados enquanto o QC está em rascunho:
+  - **material ou mão de obra**;
+  - a **origem** (obra ou Suprimentos);
+  - o **diretor aprovador** (RT, SR…). Os diretores não ficam presos às obras.
+  Os três escolhem o fluxo de aprovação, mostrado na tela com as etapas, e aparecem no cabeçalho do QC.
+- **Fluxos de aprovação configuráveis** (tela nova **Aprovações**). Um fluxo por tipo de solicitação:
+  - **contratação**;
+  - **desvio de custo ou quantidade**: entra sozinho no fim do plano quando alguma linha do mapa tem desvio;
+  - **aditivo/distrato**;
+  - **aditivo de prazo**: só nova data, sem itens.
+- Cada fluxo vale para a origem, o tipo e o diretor (vazio = qualquer), e o mais específico vence. Cada etapa tem papel, alçada mínima e pode ser a **etapa do diretor do pedido**: com usuário ligado, só esse diretor decide.
+- Todos consultam a tela Aprovações; só o administrador cadastra. Os fluxos iniciais repetem as etapas atuais, e os de contratação de serviço (RT e SR) têm o diretor no fim. Os aprovadores definitivos serão cadastrados na tela.
+- **Aditivos em etapas:** o aditivo, o distrato e o aditivo de prazo passam pelas etapas do fluxo, mostradas no cartão do aditivo, e só ficam aprovados na última. Os enviados antes continuam com a decisão única.
+- Banco: migration `028_approval_flows.sql`:
+  - diretores e fluxos, com os fluxos iniciais;
+  - pedido no QC;
+  - etapas dos aditivos.
+  Rodar no Supabase antes de liberar, depois da 025, 026 e 027.
+
+## v14 — dev (2026-11-13)
+
+- **Fora de escopo ligado ao QC:**
+  - toda solicitação fora de escopo aponta a concorrência (QC) a que se refere. O campo é obrigatório na tela quando a obra tem concorrências, e a lista mostra o link para o QC;
+  - no **mapa de cotação**, cada insumo ganhou **Quant. FE** e **Unit. FE**. Insumo sem referência do orçamento já vem 100% fora de escopo; no insumo orçado, digita-se só a parte nova. Unit. FE é o preço contratado;
+  - o rodapé do mapa mostra o fora de escopo e o total e o resultado **sem** fora de escopo, além dos totais **com** ele;
+  - as linhas fora de escopo dos mapas aparecem sozinhas na aba **Fora de escopo**, em "Apontados nos QCs", com link para o QC de origem, e entram no total da obra.
+- **Desvio por linha:** o mapa marca na própria linha **desvio de preço** (preço contratado acima do unitário orçado) e **desvio de quantidade** (quantidade dentro do escopo acima da orçada), nunca por pacote ou Item da EAP. Desvio é diferente de fora de escopo: vale para insumos que estão no orçamento.
+- Banco: migration `027_qc_out_of_scope.sql`:
+  - coluna de quantidade fora de escopo no insumo do mapa, copiada para a nova revisão;
+  - ligação do lançamento ao QC.
+  Rodar no Supabase antes de liberar, depois da 025 e da 026.
+
+## v13 — dev (2026-11-13)
+
+- **Contrato sem assinatura e sem ERP:** a aprovação acontece no QC, então a solicitação de contrato passa direto a **Concluído** ao clicar em **Enviar e concluir**. Saíram os botões **Registrar assinatura** e **Enviar ao ERP** e as rotas deles (não há API de contrato na UAU). Contratos antigos "No ERP" ou "Assinado" aparecem como Concluído e continuam aceitando aditivos.
+- **Aditivo com acréscimo e redução (remanejamento):** no mesmo aditivo, cada item do contrato pode **acrescentar (+)** ou **reduzir (−)**. Exemplo: zerar uma linha (botão **zerar**) e acrescentar a quantidade em outra linha ou num item novo. A redução:
+  - usa o preço contratado;
+  - não passa da quantidade vigente do item nem da de cada IP.
+- O aditivo mostra acréscimos, reduções e o líquido; o líquido é o que entra no contrato. A transferência de saldo é digitada pelo usuário, sem cálculo automático.
+- Simulado: o cenário "contrato assinado" virou "contrato concluído".
+- Banco: migration `026_addendum_reduce_lines.sql` (só a regra de sinal dos itens do aditivo). Rodar no Supabase antes de liberar. Também é preciso rodar a `025` da v12.
+
+## v12 — dev (2026-11-12)
+
+- **Custos fora de escopo:** aba nova **Fora de escopo** na obra, entre Orçamento e Concorrências, para lançar o que a obra precisa e que não está previsto no orçamento. Cada lançamento recebe um número da obra (FE-001, FE-002…) e guarda:
+  - insumo (do cadastro ou livre), unidade, quantidade e custo unitário (total = quantidade × unitário);
+  - data, **motivo** e **justificativa** obrigatória;
+  - quem solicitou e, se quiser, o Item da EAP do orçamento vigente e o IP.
+- A tela mostra:
+  - o total fora de escopo;
+  - o peso sobre o orçamento vigente, em destaque acima de 5%;
+  - o orçamento + fora de escopo;
+  - o resumo por motivo e por Item da EAP;
+  - a lista com busca e filtro por motivo, com editar e excluir.
+- Lançam Administrador, Suprimentos e Engenharia (permissão nova `out_of_scope.manage`, dada aos papéis que mantêm o orçamento); os demais só consultam. Tudo fica na auditoria.
+- Por enquanto os lançamentos ficam à parte: não entram no comprometido do orçamento nem nas concorrências.
+- Banco: migration `025_out_of_scope_costs.sql`. Rodar no Supabase antes de liberar.
+
+## v11 — produção (2026-11-03)
 
 - Simulado: os fornecedores passam a ser escolhidos entre empresas de obra (construtora, engenharia, concreto, terraplenagem, materiais de construção…), com CND válida. Em ordem alfabética pura, o cadastro da UAU fazia o simulado usar cartórios ("1 TABELIAO DE PROTESTO…") e lojas de filtros.
 

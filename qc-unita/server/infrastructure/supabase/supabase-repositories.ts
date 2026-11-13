@@ -30,6 +30,8 @@ import type { AggregatedInput, CompetitionData, NewLink, Repositories } from '..
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
 import { createSupabaseAttachments, createSupabaseStorage } from './supabase-attachments'
 import { createSupabaseBudgetMappings, createSupabaseIndirect } from './supabase-budget-mappings'
+import { createSupabaseApprovalFlows } from './supabase-approval-flows'
+import { createSupabaseOutOfScope } from './supabase-out-of-scope'
 import { createSupabaseContracts } from './supabase-contracts'
 import { allPages } from './pages'
 
@@ -57,7 +59,8 @@ const REVISION_COLS = `id, number, status, reason, serviceStartOn:service_start_
 const ITEM_COLS = `id, sortOrder:sort_order, materialId:material_id, code, description, unit, quantity:quantity::text,
   scopeDescription:scope_description, contractNotes:contract_notes, pctMaterial:pct_material::text,
   pctEquipment:pct_equipment::text, pctRetention:pct_retention::text, origin, planningCode:planning_code,
-  planningDescription:planning_description, chosenSupplierId:chosen_supplier_id, competition_item_references(reference_id)`
+  planningDescription:planning_description, chosenSupplierId:chosen_supplier_id, outOfScopeQuantity:out_of_scope_quantity::text,
+  competition_item_references(reference_id)`
 const REF_COLS = 'id, sortOrder:sort_order, materialId:material_id, code, description, unit'
 const CS_COLS = `id, supplierId:supplier_id, sortOrder:sort_order, status, legalName:legal_name, tradeName:trade_name, taxId:tax_id,
   contactName:contact_name, phone, email, cndValidUntil:cnd_valid_until, deliveryTerms:delivery_terms,
@@ -228,13 +231,13 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
     const rows = must(
       await db
         .from('approvals')
-        .select('stepOrder:step_order, stepName:step_name, roleId:role_id, status, decidedById:decided_by, decidedAt:decided_at, comment, roles(name)')
+        .select('stepOrder:step_order, stepName:step_name, roleId:role_id, directorId:director_id, status, decidedById:decided_by, decidedAt:decided_at, comment, roles(name), approval_directors(name, user_id)')
         .eq('revision_id', revisionId)
         .order('step_order'),
-    ) as unknown as (ApprovalDTO & { roles: { name: string } | null })[]
+    ) as unknown as (ApprovalDTO & { roles: { name: string } | null; approval_directors: { name: string; user_id: string | null } | null })[]
     const ids = rows.map((r) => r.decidedById).filter(Boolean) as string[]
     const names = ids.length ? (must(await db.from('profiles').select('id, full_name').in('id', ids)) as { id: string; full_name: string }[]) : []
-    return rows.map(({ roles, ...a }) => ({ ...a, roleName: roles?.name ?? '', decidedByName: names.find((n) => n.id === a.decidedById)?.full_name ?? null }))
+    return rows.map(({ roles, approval_directors: director, ...a }) => ({ ...a, roleName: roles?.name ?? '', directorName: director?.name ?? null, directorUserId: director?.user_id ?? null, decidedByName: names.find((n) => n.id === a.decidedById)?.full_name ?? null }))
   }
 
   /** Próximo sort_order livre de uma tabela filha da revisão */
@@ -281,6 +284,8 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
     storage: createSupabaseStorage(db),
     budgetMappings: createSupabaseBudgetMappings(service),
     indirect: createSupabaseIndirect(service),
+    outOfScope: createSupabaseOutOfScope(db),
+    approvalFlows: createSupabaseApprovalFlows(db),
 
     // ------------------------------------------------------------------ identidade
     identity: {
@@ -501,6 +506,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
           id: competitionId, work_id: data.workId, budget_id: data.budgetId, code: data.code, title: data.title,
           description: data.description, package_code: data.packageCode, requested_on: data.requestedOn,
           procurement_owner_id: data.procurementOwnerId, created_by: actorId,
+          request_kind: data.requestKind, origin: data.origin, director_id: data.directorId,
         }))
         must(await db.from('competition_revisions').insert({
           id: revisionId, competition_id: competitionId, number: 0, budget_amount: data.budgetAmount, created_by: actorId,
@@ -517,7 +523,8 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
             .select(`id, code, title, description, status, packageCode:package_code, requestedOn:requested_on, workId:work_id,
               budgetId:budget_id, currentRevisionId:current_revision_id, engineeringOwnerId:engineering_owner_id,
               procurementOwnerId:procurement_owner_id, engineeringOwnerName:engineering_owner_name,
-              procurementOwnerName:procurement_owner_name, works(code, name)`)
+              procurementOwnerName:procurement_owner_name, requestKind:request_kind, origin, directorId:director_id,
+              approval_directors(name), works(code, name)`)
             .eq('id', competitionId)
             .maybeSingle(),
         ) as unknown as (Json & { works: { code: string; name: string } }) | null
@@ -586,6 +593,10 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
             procurementOwner: ref(c.procurementOwnerId),
             engineeringOwnerName: (c.engineeringOwnerName as string) ?? ref(c.engineeringOwnerId)?.fullName ?? null,
             procurementOwnerName: (c.procurementOwnerName as string) ?? ref(c.procurementOwnerId)?.fullName ?? null,
+            requestKind: (c.requestKind as CompetitionData['competition']['requestKind']) ?? null,
+            origin: (c.origin as CompetitionData['competition']['origin']) ?? null,
+            directorId: (c.directorId as string) ?? null,
+            directorName: (c.approval_directors as { name: string } | null)?.name ?? null,
           },
           revision: revisionDto,
           revisions: must(revisions) as unknown as CompetitionData['revisions'],
@@ -799,7 +810,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
       listForRevision: approvalsFor,
       async createPlan(revisionId, plan) {
         must(await db.from('approvals').delete().eq('revision_id', revisionId).eq('status', 'pending'))
-        must(await db.from('approvals').insert(plan.map((p) => ({ revision_id: revisionId, step_order: p.stepOrder, step_name: p.stepName, role_id: p.roleId, status: p.status }))))
+        must(await db.from('approvals').insert(plan.map((p) => ({ revision_id: revisionId, step_order: p.stepOrder, step_name: p.stepName, role_id: p.roleId, director_id: p.directorId ?? null, status: p.status }))))
       },
       async saveDecision(revisionId, step) {
         must(

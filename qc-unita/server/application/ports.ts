@@ -3,8 +3,13 @@
  * interfaces; implementações: memória (dev/testes) e Supabase (produção).
  */
 import type {
+  ApprovalDirectorDTO,
+  ApprovalFlowDTO,
+  SaveApprovalFlowInput,
+  SaveDirectorInput,
   AttachmentDTO,
   AttachmentEntity,
+  OutOfScopeCostDTO,
   BudgetLineDTO,
   BudgetImportInput,
   BudgetStructureDTO,
@@ -88,6 +93,9 @@ export interface NewCompetition {
   requestedOn: string
   procurementOwnerId: string | null
   budgetAmount: string
+  requestKind: 'material' | 'labor' | null
+  origin: 'work' | 'procurement' | null
+  directorId: string | null
   /** Insumos referência (do orçamento) da revisão inicial */
   references: AggregatedInput[]
 }
@@ -191,7 +199,7 @@ export interface CompetitionRepository {
   create(data: NewCompetition, actorId: string): Promise<{ competitionId: string; revisionId: string; referenceIds: string[] }>
   getData(competitionId: string, revisionId?: string): Promise<CompetitionData | null>
   getRevisionRef(revisionId: string): Promise<{ competitionId: string; workId: string; status: RevisionStatus; number: number; frozenAt: string | null } | null>
-  updateCompetition(id: string, patch: { engineeringOwnerId?: string | null; procurementOwnerId?: string | null; engineeringOwnerName?: string | null; procurementOwnerName?: string | null; status?: CompetitionStatus; currentRevisionId?: string }): Promise<void>
+  updateCompetition(id: string, patch: { engineeringOwnerId?: string | null; procurementOwnerId?: string | null; engineeringOwnerName?: string | null; procurementOwnerName?: string | null; status?: CompetitionStatus; currentRevisionId?: string; requestKind?: 'material' | 'labor' | null; origin?: 'work' | 'procurement' | null; directorId?: string | null }): Promise<void>
   updateRevision(revisionId: string, patch: Record<string, unknown>): Promise<void>
   updateItem(itemId: string, patch: UpdateItemInput): Promise<void>
   addSupplier(revisionId: string, supplier: SupplierDTO, sortOrder: number): Promise<string>
@@ -217,6 +225,20 @@ export interface CompetitionRepository {
   /** Revisões efetivas e compromissos por vínculo de todas as concorrências da obra */
   workCommitments(workId: string): Promise<WorkCommitments>
   setRevisionStatus(revisionId: string, change: RevisionStatusChange): Promise<void>
+}
+
+/** Fluxos de aprovação configuráveis, diretores e etapas de aprovação dos aditivos (migration 028) */
+export interface ApprovalFlowRepository {
+  listFlows(): Promise<ApprovalFlowDTO[]>
+  saveFlow(id: string | null, input: SaveApprovalFlowInput): Promise<string>
+  deleteFlow(id: string): Promise<void>
+  listDirectors(): Promise<ApprovalDirectorDTO[]>
+  saveDirector(id: string | null, input: SaveDirectorInput): Promise<string>
+  listRoles(): Promise<{ id: string; key: string; name: string }[]>
+  listPeople(): Promise<{ id: string; fullName: string }[]>
+  listForAddenda(addendumIds: string[]): Promise<Map<string, ApprovalDTO[]>>
+  createAddendumPlan(addendumId: string, plan: ApprovalInstance[]): Promise<void>
+  saveAddendumDecision(addendumId: string, step: ApprovalInstance): Promise<void>
 }
 
 export interface ApprovalRepository {
@@ -437,6 +459,35 @@ export interface FileStorage {
   remove(path: string): Promise<void>
 }
 
+// ----------------------------------------------------------------------------- custos fora de escopo
+/** Conteúdo gravado de um custo fora de escopo (o total é calculado: quantidade × unitário) */
+export interface OutOfScopeWrite {
+  code: string | null
+  description: string
+  unit: string
+  quantity: string
+  unitCost: string
+  wbs: string | null
+  wbsDescription: string | null
+  planningCode: string | null
+  planningDescription: string | null
+  category: OutOfScopeCostDTO['category']
+  justification: string
+  requestedBy: string | null
+  occurredOn: string
+  /** QC a que a solicitação se refere */
+  competitionId: string | null
+}
+
+export interface OutOfScopeRepository {
+  list(workId: string): Promise<OutOfScopeCostDTO[]>
+  get(id: string): Promise<(OutOfScopeCostDTO & { workId: string }) | null>
+  /** Número sequencial da obra atribuído na gravação */
+  create(workId: string, data: OutOfScopeWrite, actorId: string): Promise<{ id: string; number: number }>
+  update(id: string, data: OutOfScopeWrite, actorId: string): Promise<void>
+  delete(id: string): Promise<void>
+}
+
 export interface Repositories {
   identity: IdentityRepository
   attachments: AttachmentRepository
@@ -451,4 +502,6 @@ export interface Repositories {
   budgetWriter: BudgetWriter
   budgetMappings: BudgetMappingRepository
   indirect: IndirectRepository
+  outOfScope: OutOfScopeRepository
+  approvalFlows: ApprovalFlowRepository
 }

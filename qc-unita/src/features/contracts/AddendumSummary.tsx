@@ -65,6 +65,17 @@ export function AddendumTotals({ summary, title }: { summary: AddendumSummary; t
           Lançamentos anteriores <strong className="text-text">{formatBRL(summary.previousTotal)}</strong>
         </span>
       )}
+      {/* Remanejamento: aditivo com acréscimos e reduções mostra as duas pontas e o líquido */}
+      {summary.increases.isPositive() && summary.decreases.isNegative() && (
+        <>
+          <span className="text-text-muted">
+            Acréscimos <strong className="text-text">{formatBRL(summary.increases)}</strong>
+          </span>
+          <span className="text-text-muted">
+            Reduções <strong className="text-error">{formatBRL(summary.decreases)}</strong>
+          </span>
+        </>
+      )}
       <span className="text-text-muted">
         Total do {title} <strong className={summary.totalDelta.isNegative() ? 'text-error' : 'text-text'}>{formatBRL(summary.totalDelta)}</strong>
       </span>

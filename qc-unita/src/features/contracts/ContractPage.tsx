@@ -1,14 +1,14 @@
 /**
  * Solicitação de Contrato: formulário (seções da planilha), itens com vínculos e aditivos.
- *   rascunho → enviada a Contratos → no ERP → assinado   (cancelável até ir ao ERP)
+ *   rascunho → concluída (ao enviar; a aprovação já aconteceu no QC). Sem assinatura nem ERP.
  */
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Ban, ClipboardList, FileSignature, FileStack, Paperclip, Send, Server, Table2 } from 'lucide-react'
+import { AlertTriangle, Ban, ClipboardList, FileStack, Paperclip, Send, Server, Table2 } from 'lucide-react'
 import { Decimal } from '@shared/domain/decimal'
 import { currentEndOn } from '@shared/domain/contract/addendum'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { Alert, Badge, Button, ConfirmDialog, Dialog, Field, Input, KpiStrip, Skeleton, Tabs, Textarea, toneClasses } from '@/components/ui'
+import { Alert, Badge, Button, ConfirmDialog, Dialog, Field, KpiStrip, Skeleton, Tabs, Textarea, toneClasses } from '@/components/ui'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/utils/cn'
 import { formatBRL, formatDate, formatDateTime, formatPercent, formatRevision } from '@/utils/format'
@@ -28,10 +28,8 @@ export function ContractPage() {
   const setTab = (k: TabKey) => setParams((p) => (p.set('aba', k), p), { replace: true })
   const q = useContract(id)
   const m = useContractMutations(id)
-  const [dialog, setDialog] = useState<'submit' | 'cancel' | 'sign' | 'erp' | null>(null)
+  const [dialog, setDialog] = useState<'submit' | 'cancel' | null>(null)
   const [cancelReason, setCancelReason] = useState('')
-  const [signedOn, setSignedOn] = useState(new Date().toISOString().slice(0, 10))
-  const [erpId, setErpId] = useState('')
 
   const anyError = Object.values(m).map((x) => x.error).find(Boolean) as ApiError | undefined
 
@@ -81,7 +79,6 @@ export function ContractPage() {
               {c.competition.code} {formatRevision(c.revision.number)}
             </Link>
             {c.submittedAt && <> · enviada em {formatDateTime(c.submittedAt)}{c.submittedByName && ` por ${c.submittedByName}`}</>}
-            {c.signedOn && <> · assinado em {formatDate(c.signedOn)}</>}
           </span>
         }
         actions={
@@ -91,19 +88,9 @@ export function ContractPage() {
                 Cancelar solicitação
               </Button>
             )}
-            {c.can.sign && (
-              <Button icon={<FileSignature className="size-4" />} onClick={() => (setErpId(c.erpContractId ?? ''), setDialog('sign'))}>
-                Registrar assinatura
-              </Button>
-            )}
-            {c.can.pushToErp && (
-              <Button variant="primary" icon={<Server className="size-4" />} onClick={() => setDialog('erp')}>
-                Enviar ao ERP
-              </Button>
-            )}
             {c.can.submit && (
               <Button variant="primary" icon={<Send className="size-4" />} onClick={() => setDialog('submit')}>
-                Enviar a Contratos
+                Enviar e concluir
               </Button>
             )}
           </>
@@ -122,7 +109,7 @@ export function ContractPage() {
           </div>
         )}
         {c.status !== 'draft' && c.status !== 'cancelled' && (
-          <p className="text-xs text-text-muted">Solicitação enviada: dados e itens bloqueados. Alterações de quantidade, preço ou prazo seguem por aditivo.</p>
+          <p className="text-xs text-text-muted">Contrato concluído: dados e itens bloqueados. Alterações de quantidade, preço ou prazo seguem por aditivo.</p>
         )}
         {anyError && (
           <Alert tone="error" title={anyError.message}>
@@ -191,25 +178,15 @@ export function ContractPage() {
 
       <ConfirmDialog
         open={dialog === 'submit'}
-        title="Enviar a solicitação a Contratos?"
-        description="Os dados e itens ficam bloqueados; a concorrência passa a “Contratada”. Mudanças posteriores seguem por aditivo."
-        confirmLabel="Enviar"
+        title="Enviar e concluir o contrato?"
+        description="O contrato passa a “Concluído”: dados e itens ficam bloqueados e a concorrência passa a “Contratada”. Mudanças posteriores seguem por aditivo."
+        confirmLabel="Enviar e concluir"
         loading={m.submit.isPending}
         onCancel={close}
         onConfirm={() => run(() => m.submit.mutateAsync())}
       >
         {c.issues.length > 0 && <Alert tone="warning" title="Há pendências">O envio será recusado até que sejam resolvidas.</Alert>}
       </ConfirmDialog>
-
-      <ConfirmDialog
-        open={dialog === 'erp'}
-        title="Enviar o contrato ao ERP?"
-        description={`Cria o contrato no ERP com ${c.items.length} item(ns) e registra o log de integração. Obra ${c.work.erpId ?? 'sem código ERP'} · fornecedor ${c.supplier.erpId ?? 'sem código ERP'}.`}
-        confirmLabel="Enviar ao ERP"
-        loading={m.pushToErp.isPending}
-        onCancel={close}
-        onConfirm={() => run(() => m.pushToErp.mutateAsync())}
-      />
 
       <Dialog
         open={dialog === 'cancel'}
@@ -230,28 +207,6 @@ export function ContractPage() {
         </Field>
       </Dialog>
 
-      <Dialog
-        open={dialog === 'sign'}
-        onClose={close}
-        title="Registrar assinatura do contrato"
-        footer={
-          <>
-            <Button variant="ghost" className="mr-auto" onClick={close}>Voltar</Button>
-            <Button variant="primary" disabled={!signedOn} loading={m.sign.isPending} onClick={() => run(() => m.sign.mutateAsync({ signedOn, erpContractId: erpId.trim() || undefined }))}>
-              Registrar
-            </Button>
-          </>
-        }
-      >
-        <div className="grid gap-3">
-          <Field label="Data da assinatura" required>
-            <Input type="date" value={signedOn} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setSignedOn(e.target.value)} />
-          </Field>
-          <Field label="Nº do contrato no ERP (UAU)" hint={c.erpContractId ? 'Preenchido pelo envio ao ERP.' : 'Opcional quando o contrato foi lançado manualmente.'}>
-            <Input value={erpId} disabled={!!c.erpContractId} onChange={(e) => setErpId(e.target.value)} />
-          </Field>
-        </div>
-      </Dialog>
     </div>
   )
 }

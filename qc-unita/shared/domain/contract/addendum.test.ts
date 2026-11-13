@@ -59,6 +59,26 @@ describe('Aditivos e distratos', () => {
     expect(messages(validateAddendum(args('termination'), newItem, ctx()))).toContain('só reduz itens do contrato')
   })
 
+  it('aditivo com remanejamento: zera uma linha e acrescenta em outra, total líquido', () => {
+    expect(signedQuantity('addendum', D('5'), true).toDb()).toBe('-5.0000')
+    // Zera B (10 × 50 = −500) e acrescenta 40 em A (× 10 = +400)
+    const s = computeAddendum(contract, [], [line('b', 'B', '-10', '50', [['IP03', '-10']]), line('a', 'A', '40', '10', [['IP01', '24'], ['IP02', '16']])])
+    expect(validateAddendum(args('addendum'), s, ctx())).toEqual([])
+    expect([s.increases.toDb(), s.decreases.toDb(), s.totalDelta.toDb()]).toEqual(['400.0000', '-500.0000', '-100.0000'])
+    expect(s.lines[0]!.quantityAfter.toDb()).toBe('0.0000')
+  })
+
+  it('aditivo: a redução segue as regras do distrato (item do contrato, quantidade e IP vigentes)', () => {
+    const over = computeAddendum(contract, [], [line('b', 'B', '-11', '50', [['IP03', '-11']])])
+    expect(messages(validateAddendum(args('addendum'), over, ctx()))).toContain('A redução passa da quantidade contratada em B')
+    const overIp = computeAddendum(contract, [], [line('a', 'A', '-50', '10', [['IP02', '-50']])])
+    expect(messages(validateAddendum(args('addendum'), overIp, ctx()))).toContain('A redução passa da quantidade vigente do IP em A')
+    const newItem = computeAddendum(contract, [], [line(null, 'X', '-1', '1', [['IP01', '-1']])])
+    expect(messages(validateAddendum(args('addendum'), newItem, ctx()))).toContain('Só itens do contrato podem ser reduzidos')
+    const zero = computeAddendum(contract, [], [line('a', 'A', '0', '10', [])])
+    expect(messages(validateAddendum(args('addendum'), zero, ctx()))).toContain('Quantidade inválida em A')
+  })
+
   it('distrato considera aditivos aprovados no IP', () => {
     const previous = [line('b', 'B', '5', '50', [['IP04', '5']])]
     expect([...currentAllocations(contract[1]!, previous)].map(([k, q]) => `${k}=${q.toDb()}`)).toEqual(['IP03=10.0000', 'IP04=5.0000'])

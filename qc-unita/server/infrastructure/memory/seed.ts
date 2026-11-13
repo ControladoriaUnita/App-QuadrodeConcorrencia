@@ -7,6 +7,7 @@ import { Decimal } from '../../../shared/domain/decimal'
 import type { RequestContext } from '../../application/context'
 import * as addenda from '../../application/use-cases/addenda'
 import * as contracts from '../../application/use-cases/contracts'
+import * as outOfScope from '../../application/use-cases/out-of-scope'
 import { currentAllocations, suggestAllocations } from '../../../shared/domain/contract/addendum'
 import * as qc from '../../application/use-cases/competitions'
 import { buildQcMap } from '../../../shared/domain/competition/qc-map'
@@ -36,13 +37,13 @@ const ROLES = [
 const ALL_PERMS = [
   'work.read', 'work.manage', 'budget.read', 'catalog.manage', 'supplier.read', 'supplier.manage', 'competition.read',
   'competition.create', 'competition.edit', 'proposal.edit', 'competition.submit', 'approval.decide', 'contract.read',
-  'contract.manage', 'attachment.upload', 'audit.read', 'integration.read', 'integration.run', 'budget.import',
+  'contract.manage', 'attachment.upload', 'audit.read', 'integration.read', 'integration.run', 'budget.import', 'out_of_scope.manage',
 ]
 
 const MATRIX: Record<string, string[]> = {
   admin: ALL_PERMS,
-  procurement: ['work.read', 'budget.read', 'budget.import', 'supplier.read', 'supplier.manage', 'competition.read', 'competition.create', 'competition.edit', 'proposal.edit', 'competition.submit', 'approval.decide', 'contract.read', 'contract.manage', 'attachment.upload', 'audit.read'],
-  engineering: ['work.read', 'budget.read', 'budget.import', 'supplier.read', 'competition.read', 'competition.edit', 'approval.decide', 'contract.read', 'attachment.upload'],
+  procurement: ['work.read', 'budget.read', 'budget.import', 'out_of_scope.manage', 'supplier.read', 'supplier.manage', 'competition.read', 'competition.create', 'competition.edit', 'proposal.edit', 'competition.submit', 'approval.decide', 'contract.read', 'contract.manage', 'attachment.upload', 'audit.read'],
+  engineering: ['work.read', 'budget.read', 'budget.import', 'out_of_scope.manage', 'supplier.read', 'competition.read', 'competition.edit', 'approval.decide', 'contract.read', 'attachment.upload'],
   manager: ['work.read', 'budget.read', 'supplier.read', 'competition.read', 'approval.decide', 'contract.read', 'audit.read'],
   director: ['work.read', 'budget.read', 'supplier.read', 'competition.read', 'approval.decide', 'contract.read', 'audit.read'],
   viewer: ['work.read', 'budget.read', 'competition.read'],
@@ -95,6 +96,27 @@ async function seed(db: MemoryDb) {
   ].forEach(([order, name, role, min]) =>
     db.put('approval_steps', { id: uid(), stepOrder: order, name, roleId: roleIds[role as string], minAmount: min, active: true }),
   )
+  // Diretores e fluxos iniciais (espelho da migration 028). RT tem usuário ligado (Helena Duarte).
+  const directors = { RT: uid(), SR: uid() }
+  db.put('approval_directors', { id: directors.RT, code: 'RT', name: 'Diretor RT', userId: DEMO_USERS[4].id, active: true })
+  db.put('approval_directors', { id: directors.SR, code: 'SR', name: 'Diretor SR', userId: null, active: true })
+  const flow = (kind: string, name: string, directorId: string | null, steps: [string, string, string | null, boolean][]) => {
+    const flowId = uid()
+    db.put('approval_flows', { id: flowId, kind, name, origin: null, requestKind: null, directorId, active: true })
+    steps.forEach(([stepName, role, min, director], k) =>
+      db.put('approval_flow_steps', { id: uid(), flowId, stepOrder: k + 1, name: stepName, roleId: roleIds[role], director, minAmount: min, active: true }),
+    )
+  }
+  const base: [string, string, string | null, boolean][] = [
+    ['Suprimentos', 'procurement', null, false],
+    ['Engenharia', 'engineering', null, false],
+    ['Gerente / Coordenador de Obra', 'manager', null, false],
+  ]
+  flow('competition', 'Contratação (padrão)', null, [...base, ['Diretoria', 'director', '500000', false]])
+  for (const [code, id] of Object.entries(directors)) flow('competition', `Contratação de serviço (${code})`, id, [...base, [`Diretor responsável (${code})`, 'director', null, true]])
+  flow('deviation', 'Desvio de custo ou quantidade', null, [['Diretor responsável (desvio)', 'director', null, true]])
+  flow('addendum', 'Aditivo / distrato', null, [['Gerente / Coordenador de Obra', 'manager', null, false]])
+  flow('deadline', 'Aditivo de prazo contratual', null, [['Gerente / Coordenador de Obra', 'manager', null, false]])
   for (const [code, name] of CONTRACT_TYPES) db.put('contract_types', { id: uid(), code, name, directBilling: code === 'CTD04' || code === 'CTD10' })
 
   // ------------------------------------------------------------------ ERP mock
@@ -253,6 +275,21 @@ async function seed(db: MemoryDb) {
 
     await qc.createRevision(s.repos, s.ctx, competitionId, 'Inclusão de volume adicional de bota-fora apontado pela engenharia.')
   }
+
+  // Custos fora de escopo da obra 2041 (itens que o orçamento não previu)
+  const today = new Date().toISOString().slice(0, 10)
+  const terraplenagem = (await s.repos.competitions.list({ workId: alpha.id })).find((c) => c.title.startsWith('Terraplenagem'))
+  await outOfScope.createOutOfScope(s.repos, s.ctx, alpha.id, {
+    code: 'IS00017', description: 'Transporte de bota-fora adicional — solo contaminado', unit: 'm³', quantity: '48', unitCost: '95.5',
+    wbs: '02.02', planningCode: 'IP00104', planningDescription: 'Terraplenagem', category: 'technical_requirement',
+    justification: 'Sondagem complementar encontrou solo contaminado; o descarte exige aterro licenciado, não previsto no orçamento.',
+    requestedBy: 'Eng. Marina Costa', occurredOn: today, competitionId: terraplenagem?.id ?? null,
+  })
+  await outOfScope.createOutOfScope(s.repos, s.ctx, alpha.id, {
+    code: null, description: 'Fechamento provisório do passeio para a concessionária', unit: 'vb', quantity: '1', unitCost: '4200',
+    wbs: null, category: 'regulatory', justification: 'Exigência da concessionária de energia para a ligação provisória da obra.',
+    requestedBy: null, occurredOn: today,
+  })
 
   void admin
   void director

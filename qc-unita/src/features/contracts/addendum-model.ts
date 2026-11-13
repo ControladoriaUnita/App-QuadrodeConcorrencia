@@ -7,7 +7,7 @@ import { Decimal } from '@shared/domain/decimal'
 import { type AddendumLine, type ContractItemBase } from '@shared/domain/contract/addendum'
 
 export const KIND_TEXT: Record<AddendumKind, { title: string; plural: string; qty: string; tone: 'info' | 'warning' }> = {
-  addendum: { title: 'aditivo', plural: 'aditivos', qty: 'Qtd a aditivar', tone: 'info' },
+  addendum: { title: 'aditivo', plural: 'aditivos', qty: 'Acrescentar (+) / reduzir (−)', tone: 'info' },
   termination: { title: 'distrato', plural: 'distratos', qty: 'Qtd a distratar', tone: 'warning' },
 }
 

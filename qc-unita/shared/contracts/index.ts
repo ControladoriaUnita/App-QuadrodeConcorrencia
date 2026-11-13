@@ -143,6 +143,11 @@ export interface QcItemDTO {
   referenceIds: string[]
   /** Fornecedor escolhido para contratar o item (cenário "Cotação escolhida"); null = sem escolha */
   chosenSupplierId: string | null
+  /**
+   * Quantidade fora de escopo (não prevista no orçamento) informada à mão; null = automática
+   * (insumo sem referência do orçamento é 100% fora de escopo). Ver shared/domain/competition/scope.ts.
+   */
+  outOfScopeQuantity: string | null
 }
 
 /** Insumo referência: insumo do orçamento puxado pelo QC (suas linhas e % ficam nos vínculos) */
@@ -220,6 +225,11 @@ export interface ApprovalDTO {
   stepName: string
   roleId: string
   roleName: string
+  /** Etapa do diretor responsável (só ele decide quando o diretor tem usuário ligado) */
+  directorId?: string | null
+  directorName?: string | null
+  /** Usuário ligado ao diretor da etapa (só ele decide); null = qualquer um com o papel */
+  directorUserId?: string | null
   status: 'pending' | 'approved' | 'rejected' | 'skipped'
   decidedById: string | null
   decidedByName: string | null
@@ -358,6 +368,13 @@ export interface CompetitionDetailDTO {
     /** Engenheiro e suprimentos responsáveis, digitados por extenso */
     engineeringOwnerName: string | null
     procurementOwnerName: string | null
+    /** Pedido de material ou de mão de obra (null em QCs anteriores aos fluxos) */
+    requestKind: RequestKind | null
+    /** Quem abriu o pedido: a obra ou o time de Suprimentos */
+    origin: RequestOrigin | null
+    /** Diretor aprovador escolhido (RT, SR…) */
+    directorId: string | null
+    directorName: string | null
   }
   revision: RevisionDTO
   revisions: Pick<RevisionDTO, 'id' | 'number' | 'status' | 'decidedAt' | 'createdAt' | 'reason'>[]
@@ -434,6 +451,10 @@ export const createCompetitionSchema = z
     lineShares: z.record(uuid, ratioString).optional(),
     materialCodes: z.array(z.string().trim().min(1)).max(500).optional(),
     requestedOn: isoDate.optional(),
+    /** Pedido de material ou de mão de obra, origem e diretor: escolhem o fluxo de aprovação */
+    requestKind: z.enum(['material', 'labor']).nullable().optional(),
+    origin: z.enum(['work', 'procurement']).nullable().optional(),
+    directorId: uuid.nullable().optional(),
   })
   .refine((v) => v.packageCodes?.length || v.lineIds?.length || v.materialCodes?.length, {
     message: 'Selecione ao menos um IP de planejamento ou linhas do orçamento',
@@ -456,6 +477,10 @@ export const updateRevisionSchema = z
     procurementOwnerId: uuid.nullable(),
     engineeringOwnerName: z.string().trim().max(200).nullable(),
     procurementOwnerName: z.string().trim().max(200).nullable(),
+    /** Pedido (vale para o QC): escolhe o fluxo do próximo envio */
+    requestKind: z.enum(['material', 'labor']).nullable(),
+    origin: z.enum(['work', 'procurement']).nullable(),
+    directorId: uuid.nullable(),
   })
   .partial()
 export type UpdateRevisionInput = z.infer<typeof updateRevisionSchema>
@@ -477,6 +502,8 @@ export const updateItemSchema = z
     planningDescription: z.string().trim().max(300).nullable(),
     /** Fornecedor (competition_supplier) escolhido para contratar o item; null desmarca */
     chosenSupplierId: uuid.nullable(),
+    /** Quantidade fora de escopo; null volta à regra automática */
+    outOfScopeQuantity: nonNegativeDecimal('Quantidade fora de escopo não pode ser negativa').nullable(),
   })
   .partial()
 export type UpdateItemInput = z.infer<typeof updateItemSchema>
@@ -595,6 +622,168 @@ export interface WorkListDTO<T> {
   warning: string | null
   items: T[]
 }
+
+// ----------------------------------------------------------------------------- fluxos de aprovação
+export type RequestKind = 'material' | 'labor'
+export type RequestOrigin = 'work' | 'procurement'
+/** competition = contratação; deviation = desvio (somado à contratação); addendum = aditivo/distrato; deadline = só prazo */
+export type ApprovalFlowKind = 'competition' | 'deviation' | 'addendum' | 'deadline'
+
+export interface ApprovalDirectorDTO {
+  id: string
+  code: string
+  name: string
+  userId: string | null
+  userName: string | null
+  active: boolean
+}
+
+export interface ApprovalFlowStepDTO {
+  stepOrder: number
+  name: string
+  roleId: string
+  roleName: string
+  /** Etapa do diretor responsável do pedido */
+  director: boolean
+  minAmount: string | null
+  active: boolean
+}
+
+export interface ApprovalFlowDTO {
+  id: string
+  kind: ApprovalFlowKind
+  name: string
+  /** Critérios (null = qualquer) */
+  origin: RequestOrigin | null
+  requestKind: RequestKind | null
+  directorId: string | null
+  active: boolean
+  steps: ApprovalFlowStepDTO[]
+}
+
+export interface ApprovalConfigDTO {
+  flows: ApprovalFlowDTO[]
+  directors: ApprovalDirectorDTO[]
+  roles: { id: string; key: string; name: string }[]
+  people: { id: string; fullName: string }[]
+  canManage: boolean
+}
+
+export const saveApprovalFlowSchema = z.object({
+  kind: z.enum(['competition', 'deviation', 'addendum', 'deadline']),
+  name: z.string().trim().min(3, 'Dê um nome ao fluxo').max(120),
+  origin: z.enum(['work', 'procurement']).nullable(),
+  requestKind: z.enum(['material', 'labor']).nullable(),
+  directorId: uuid.nullable(),
+  active: z.boolean(),
+  steps: z
+    .array(
+      z.object({
+        name: z.string().trim().min(2, 'Dê um nome à etapa').max(120),
+        roleId: uuid,
+        director: z.boolean(),
+        minAmount: nonNegativeDecimal('Alçada não pode ser negativa').nullable(),
+        active: z.boolean(),
+      }),
+    )
+    .min(1, 'O fluxo precisa de ao menos uma etapa')
+    .max(20),
+})
+export type SaveApprovalFlowInput = z.infer<typeof saveApprovalFlowSchema>
+
+export const saveDirectorSchema = z.object({
+  code: z.string().trim().min(1, 'Informe a sigla').max(10),
+  name: z.string().trim().min(2, 'Informe o nome').max(120),
+  userId: uuid.nullable(),
+  active: z.boolean(),
+})
+export type SaveDirectorInput = z.infer<typeof saveDirectorSchema>
+
+// ----------------------------------------------------------------------------- custos fora de escopo
+export type OutOfScopeCategoryKey = 'client_request' | 'budget_omission' | 'design_change' | 'technical_requirement' | 'regulatory' | 'other'
+
+/** Item de custo não previsto no orçamento da obra */
+export interface OutOfScopeCostDTO {
+  id: string
+  /** Sequencial da obra (FE-001…) */
+  number: number
+  /** Código do insumo (cadastro UAU / orçamento), quando houver */
+  code: string | null
+  description: string
+  unit: string
+  quantity: string
+  unitCost: string
+  total: string
+  /** Item da EAP do orçamento onde o custo se encaixa (opcional) */
+  wbs: string | null
+  wbsDescription: string | null
+  planningCode: string | null
+  planningDescription: string | null
+  category: OutOfScopeCategoryKey
+  justification: string
+  /** Quem pediu/apontou o custo (texto livre) */
+  requestedBy: string | null
+  occurredOn: string
+  /** Concorrência (QC) a que a solicitação se refere */
+  competition: { id: string; code: string; title: string } | null
+  createdByName: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Linha fora de escopo apontada no mapa de um QC (automática: vem da revisão corrente e
+ * acompanha o mapa; não se edita na aba Fora de escopo).
+ */
+export interface OutOfScopeQcLineDTO {
+  competitionId: string
+  competitionCode: string
+  competitionTitle: string
+  revisionId: string
+  revisionNumber: number
+  revisionStatus: RevisionStatus
+  itemId: string
+  code: string
+  description: string
+  unit: string
+  /** Quant. FE da linha */
+  quantity: string
+  /** Unit. FE = preço contratado (null sem preço) */
+  unitCost: string | null
+  total: string
+  /** Quant. FE informada à mão (false = automática: insumo sem referência do orçamento) */
+  informed: boolean
+}
+
+export interface OutOfScopeListDTO {
+  items: OutOfScopeCostDTO[]
+  /** Linhas fora de escopo dos mapas dos QCs da obra */
+  fromCompetitions: OutOfScopeQcLineDTO[]
+  /** QCs da obra para relacionar a solicitação manual */
+  competitions: { id: string; code: string; title: string }[]
+  /** Orçamento vigente da obra (null sem orçamento) */
+  budgetTotal: string | null
+  canManage: boolean
+}
+
+export const saveOutOfScopeSchema = z
+  .object({
+    code: z.string().trim().max(40).nullable().optional(),
+    description: z.string().trim().min(3, 'Descreva o item').max(500),
+    unit: z.string().trim().min(1, 'Informe a unidade').max(20),
+    quantity: decimalString.refine((v) => Number(v) > 0, 'Quantidade deve ser maior que zero'),
+    unitCost: decimalString.refine((v) => Number(v) >= 0, 'Custo unitário não pode ser negativo'),
+    wbs: z.string().trim().regex(/^\d+(\.\d+)*$/, 'Item da EAP inválido').nullable().optional(),
+    planningCode: z.string().trim().max(30).nullable().optional(),
+    planningDescription: z.string().trim().max(500).nullable().optional(),
+    category: z.enum(['client_request', 'budget_omission', 'design_change', 'technical_requirement', 'regulatory', 'other']),
+    justification: z.string().trim().min(5, 'Justifique por que o custo não estava no orçamento').max(4000),
+    requestedBy: z.string().trim().max(200).nullable().optional(),
+    occurredOn: isoDate,
+    /** QC a que a solicitação se refere */
+    competitionId: uuid.nullable().optional(),
+  })
+export type SaveOutOfScopeInput = z.infer<typeof saveOutOfScopeSchema>
 
 // Cadastro manual de obra (obras do ERP chegam pela sincronização)
 export const createWorkSchema = z
@@ -969,6 +1158,8 @@ export interface AddendumDTO {
   decisionComment: string | null
   createdAt: string
   items: AddendumItemDTO[]
+  /** Etapas do fluxo de aprovação (vazio no rascunho) */
+  approvals: ApprovalDTO[]
 }
 
 export interface ContractListItemDTO {
@@ -1028,7 +1219,7 @@ export interface ContractRequestDTO {
   contractTypes: ContractTypeDTO[]
   /** Pendências para envio (somente em rascunho) */
   issues: { field: string; message: string }[]
-  can: { manage: boolean; edit: boolean; submit: boolean; cancel: boolean; pushToErp: boolean; sign: boolean; addendum: boolean; decideAddendum: boolean }
+  can: { manage: boolean; edit: boolean; submit: boolean; cancel: boolean; addendum: boolean; decideAddendum: boolean }
 }
 
 export const createContractRequestSchema = z.object({ competitionId: uuid })
@@ -1060,7 +1251,6 @@ export const updateContractItemSchema = z
 export type UpdateContractItemInput = z.infer<typeof updateContractItemSchema>
 
 export const cancelContractSchema = z.object({ reason: z.string().trim().min(5, 'Explique o motivo do cancelamento').max(1000) })
-export const signContractSchema = z.object({ signedOn: isoDate, erpContractId: z.string().trim().max(60).optional() })
 
 /** Quantidade digitada: sempre positiva; o sinal vem do tipo (aditivo +, distrato −). */
 const positiveQuantity = decimalString.refine((v) => !v.startsWith('-') && !/^0+(\.0+)?$/.test(v), 'Informe uma quantidade maior que zero')
@@ -1075,7 +1265,9 @@ const addendumItemSchema = z.union([
   z.object({
     contractItemId: uuid,
     quantity: positiveQuantity,
-    /** Só no aditivo; o distrato usa o preço contratado */
+    /** Só no aditivo: true reduz o item (remanejamento), ao preço contratado */
+    reduce: z.boolean().optional(),
+    /** Só no acréscimo do aditivo; distrato e redução usam o preço contratado */
     unitPrice: decimalString.optional(),
     allocations: z.array(addendumAllocationSchema).max(100),
   }),

@@ -164,6 +164,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
         decidedAt: (a.decided_at as string) ?? null,
         decidedByName: who.get(a.decided_by as string) ?? null,
         decisionComment: (a.decision_comment as string) ?? null,
+        approvals: [],
         createdAt: a.created_at as string,
         items: ((a.contract_addendum_items as Json[]) ?? [])
           .sort((x, y) => (x.sort_order as number) - (y.sort_order as number))

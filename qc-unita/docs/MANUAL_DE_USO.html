@@ -231,12 +231,13 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
       <p>No topo, escolha a obra; o menu segue a ordem do fluxo de trabalho. O botão <b>Tela cheia</b> (ícone de quadrado, à direita) faz o app ocupar a tela inteira, bom para apresentar o orçamento ou o mapa; clique de novo ou aperte <b>Esc</b> para sair.</p>
       <div class="grid2">
         <div class="card"><h3>1 · Orçamento</h3><p>Tela inicial da obra: o orçamento na estrutura da EAP (Item → composição → insumos), com o que cada concorrência já comprometeu e o saldo livre.</p></div>
-        <div class="card"><h3>2 · Concorrências</h3><p>Quadro (kanban) com os QCs da obra por situação: em cotação, em aprovação, aprovados e contratados. Daqui se cria uma concorrência nova.</p></div>
-        <div class="card"><h3>3 · Fornecedores</h3><p>Cadastro de fornecedores (vindos da UAU) com busca por nome ou CNPJ, contato e validade da CND.</p></div>
+        <div class="card"><h3>2 · Fora de escopo</h3><p>Custos que a obra precisa e que não estão previstos no orçamento, com motivo, justificativa, o total e o peso sobre o orçamento.</p></div>
+        <div class="card"><h3>3 · Concorrências</h3><p>Quadro (kanban) com os QCs da obra por situação: em cotação, em aprovação, aprovados e contratados. Daqui se cria uma concorrência nova.</p></div>
+        <div class="card"><h3>4 · Fornecedores</h3><p>Cadastro de fornecedores (vindos da UAU) com busca por nome ou CNPJ, contato e validade da CND.</p></div>
         <div class="card"><h3>Consulta UAU</h3><p>Todos os vínculos de planejamento (IPs) e insumos do cadastro da UAU, com busca por código ou descrição e a data da última sincronização.</p></div>
         <div class="card"><h3>De-para</h3><p>Nome e IP de cada Item da EAP e IP de cada insumo do indireto: a primeira visão de toda obra vinda do SharePoint (quem mantém o cadastro).</p></div>
-        <div class="card"><h3>4 · Contratos e aditivos</h3><p>Solicitações de contrato geradas dos QCs aprovados, com aditivos e distratos.</p></div>
-        <div class="card"><h3>5 · Integração ERP</h3><p>Sincronização com a UAU e o registro de cada execução (só administrador).</p></div>
+        <div class="card"><h3>5 · Contratos e aditivos</h3><p>Solicitações de contrato geradas dos QCs aprovados, com aditivos e distratos.</p></div>
+        <div class="card"><h3>6 · Integração ERP</h3><p>Sincronização com a UAU e o registro de cada execução (só administrador).</p></div>
       </div>
       <div class="tbl">
         <table>
@@ -337,12 +338,18 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
           <p>O SharePoint traz o indireto fechado (um valor por item). Em <b>Importar indireto (Excel)</b>, envie o arquivo de custo indireto da obra. São lidas as abas Equipamentos, Instalação da Obra, Servs. Terceirizados, Consumos Permanentes, M.O.I. (separada em CLT e PJ), M.O.D., Tarifas e Ligações e Habite-se, com a aba “Total Indiretos” como resumo; cada insumo soma as fases (FASE 01, FASE 02, Instaladora). Cada aba vai para o item do orçamento com o mesmo tipo de custo na descrição da UAU (ex.: M.O.I (PJ) - (INDIRETO)) e entra aberta, insumo a insumo, no lugar do valor fechado; a prévia mostra o valor de cada item no arquivo e no orçamento. Os insumos com IP no De-para entram vinculados; os demais ficam sem IP. O indireto fica guardado e volta a cada <b>Atualizar dados</b>.</p>
         </div>
         <div class="card">
+          <h3>Custos fora de escopo</h3>
+          <p>Na aba <b>Fora de escopo</b>, lance o que a obra precisa e que não está previsto no orçamento: <b>Novo custo fora de escopo</b> pede o insumo (do cadastro ou livre), unidade, quantidade, custo unitário, data, o <b>motivo</b> (solicitação do cliente, omissão do orçamento, alteração de projeto, exigência técnica, exigência legal ou concessionária, outros) e a <b>justificativa</b>; o Item da EAP e o IP são opcionais. Cada lançamento ganha um número da obra (FE-001, FE-002…). A tela mostra o total, o peso sobre o orçamento vigente, o resumo por motivo e por Item, e cada lançamento pode ser editado ou excluído por quem mantém o orçamento (Suprimentos, Engenharia e administrador). Os demais perfis só consultam. Cada solicitação aponta a <b>concorrência (QC)</b> a que se refere, e a lista tem o link para ela.</p>
+          <p>No <b>mapa de cotação</b>, cada insumo tem as colunas <b>Quant. FE</b> (quanto do insumo não está no orçamento) e <b>Unit. FE</b> (o preço contratado). Insumo sem referência do orçamento já vem 100% fora de escopo; para um insumo orçado, digite a parte nova (apagar volta ao automático). O rodapé mostra o fora de escopo, o total e o resultado <b>sem</b> fora de escopo, além dos totais com ele. Essas linhas aparecem sozinhas na aba Fora de escopo, em <b>Apontados nos QCs</b>, com link para o QC de origem.</p>
+          <p><b>Desvio</b> é outra coisa: preço ou quantidade acima do orçado num insumo que <i>está</i> no orçamento. O mapa marca a própria linha com <b>desvio de preço</b> ou <b>desvio de quantidade</b>.</p>
+        </div>
+        <div class="card">
           <h3>Excluir obra (administrador)</h3>
           <p>No orçamento da obra (ou em <b>Arquivadas</b>), <b>Excluir obra</b> apaga a obra de vez, com orçamentos, concorrências, contratos, aditivos e anexos. Para confirmar, digite o número da obra. Não há como desfazer: fica só o registro da exclusão na auditoria. Para só tirar a obra das listas sem apagar nada, use <b>Arquivar obra</b>.</p>
         </div>
         <div class="card">
           <h3>Simulado (administrador)</h3>
-          <p><b>Gerar simulado</b> apaga as concorrências, contratos, aditivos e anexos da obra (a obra e o orçamento ficam) e cria, a partir do orçamento dela, uma concorrência em cada estágio do app: em cotação (convite e propostas, com cotação escolhida em andamento), em aprovação parada em cada alçada, reprovada, aprovada, cotação escolhida com uma solicitação por empresa, solicitação enviada, contrato assinado, aditivo aguardando e aprovado, distrato, solicitação cancelada e contratado com nova revisão. Os títulos começam com “Simulado NN”. Digite o número da obra para confirmar; o andamento aparece cenário a cenário, com o link de cada QC. A alçada da Diretoria só é gerada se o saldo livre do orçamento passar do valor dela.</p>
+          <p><b>Gerar simulado</b> apaga as concorrências, contratos, aditivos e anexos da obra (a obra e o orçamento ficam) e cria, a partir do orçamento dela, uma concorrência em cada estágio do app: em cotação (convite e propostas, com cotação escolhida em andamento), em aprovação parada em cada alçada, reprovada, aprovada, cotação escolhida com uma solicitação por empresa, contrato concluído, aditivo aguardando e aprovado, distrato, solicitação cancelada e contratado com nova revisão. Os títulos começam com “Simulado NN”. Digite o número da obra para confirmar; o andamento aparece cenário a cenário, com o link de cada QC. A alçada da Diretoria só é gerada se o saldo livre do orçamento passar do valor dela.</p>
         </div>
       </div>
     </section>
@@ -352,8 +359,8 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
       <div class="lede"><p class="eyebrow">Criação</p><h2>Nova concorrência</h2></div>
       <ol class="steps">
         <li><div>
-          <h3>Informar o objeto e a data</h3>
-          <p>Ex.: “Fornecimento e instalação de esquadrias de alumínio”. Se o orçamento não estiver 100% com IP e nomes dos Itens, a tela mostra o que falta e não cria a concorrência.</p>
+          <h3>Informar o objeto, a data e o pedido</h3>
+          <p>O pedido tem três campos obrigatórios: <b>tipo</b> (material ou mão de obra), <b>origem</b> (obra ou Suprimentos) e <b>diretor aprovador</b> (RT, SR…). Eles escolhem o fluxo de aprovação, que a tela mostra logo abaixo com as etapas. Ex. de objeto: “Fornecimento e instalação de esquadrias de alumínio”. Se o orçamento não estiver 100% com IP e nomes dos Itens, a tela mostra o que falta e não cria a concorrência.</p>
         </div></li>
         <li><div>
           <h3>Marcar os insumos no orçamento</h3>
@@ -450,6 +457,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
     <!-- ───────────────────────────── APROVAÇÃO -->
     <section id="aprovacao">
       <div class="lede"><p class="eyebrow">Alçada</p><h2>Aprovação e revisões</h2></div>
+      <p>As etapas vêm do <b>fluxo de aprovação</b> do pedido. Ele é escolhido pelo tipo, pela origem e pelo diretor e é cadastrado na tela <b>Aprovações</b> pelo administrador. Se alguma linha do mapa tem <b>desvio de preço ou de quantidade</b>, as etapas do fluxo de desvio entram no fim. A etapa do diretor responsável só é decidida pelo diretor ligado a ela. A tabela abaixo mostra as etapas gerais, que valem quando não há fluxo configurado. Aditivos, distratos e aditivos de prazo também seguem fluxos próprios e só ficam aprovados na última etapa.</p>
       <div class="tbl">
         <table>
           <thead><tr><th>Etapa</th><th>Papel</th><th class="r">Entra a partir de</th></tr></thead>
@@ -477,16 +485,14 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
         <div class="card"><h3>Com cotação escolhida</h3><p>Se a revisão aprovada tem insumos com empresa escolhida no mapa, nasce <b>uma solicitação por empresa escolhida</b>, cada uma só com os insumos dela, ao preço dela. Insumos sem escolha ficam de fora e são anotados nas observações. O QC mostra um botão para cada solicitação; se uma for cancelada, <b>Gerar solicitação de contrato</b> volta e gera só a que falta.</p></div>
         <div class="card"><h3>Vínculos por insumo</h3><p>Cada insumo leva os vínculos <b>IP · Qtd · Valor</b>: herdados das referências (pela verba das linhas) ou o IP manual. Abaixo de cada insumo aparecem as referências usadas, com IP e verba.</p></div>
         <div class="card"><h3>Distribuição</h3><p>% material, % equipamento e % MDO/serviço do contrato, ponderados pelo valor de cada insumo.</p></div>
-        <div class="card"><h3>Envio</h3><p>Complete tipo, vigência, critérios de medição e, com faturamento direto, os materiais faturados à contratante. <b>Enviar a Contratos</b>; depois, registre a assinatura.</p></div>
+        <div class="card"><h3>Envio</h3><p>Complete tipo, vigência, critérios de medição e, com faturamento direto, os materiais faturados à contratante. <b>Enviar e concluir</b>: a aprovação já aconteceu no QC, então o contrato passa direto a Concluído. Não há assinatura nem envio ao ERP.</p></div>
       </div>
       <div class="tbl">
         <table>
           <thead><tr><th>Situação</th><th>Significado</th></tr></thead>
           <tbody>
             <tr><td><span class="badge">Rascunho</span></td><td>Em preenchimento.</td></tr>
-            <tr><td><span class="badge b-warn">Enviada a Contratos</span></td><td>Dados e itens bloqueados; mudanças de quantidade, preço ou prazo seguem por aditivo.</td></tr>
-            <tr><td><span class="badge b-info">No ERP</span></td><td>Contrato criado no ERP.</td></tr>
-            <tr><td><span class="badge b-ok">Assinado</span></td><td>Contrato assinado.</td></tr>
+            <tr><td><span class="badge b-ok">Concluído</span></td><td>Enviado. Dados e itens bloqueados; mudanças de quantidade, preço ou prazo seguem por aditivo.</td></tr>
             <tr><td><span class="badge">Cancelada</span></td><td>Solicitação cancelada, com motivo.</td></tr>
           </tbody>
         </table>
@@ -497,7 +503,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
     <section id="aditivos">
       <div class="lede"><p class="eyebrow">Contrato em andamento</p><h2>Aditivos e distratos</h2></div>
       <div class="prose">
-        <p>Na solicitação de contrato, aba <b>Aditivos e distratos</b>. O <b>aditivo</b> soma quantidades (ou inclui itens novos) e pode mudar o término; o <b>distrato</b> subtrai quantidades de itens existentes. Cada item leva o motivo e os vínculos de IP com a quantidade de cada um.</p>
+        <p>Na solicitação de contrato, aba <b>Aditivos e distratos</b>. O <b>aditivo</b> soma quantidades (ou inclui itens novos) e pode mudar o término. No mesmo aditivo, cada item do contrato pode <b>acrescentar (+)</b> ou <b>reduzir (−)</b>: é o remanejamento, por exemplo zerar uma linha (botão <b>zerar</b>) e acrescentar a quantidade em outra. A redução usa o preço contratado, e o total mostra acréscimos, reduções e o líquido. O <b>distrato</b> subtrai quantidades de itens existentes. Cada item leva o motivo e os vínculos de IP com a quantidade de cada um.</p>
         <p>Depois de aprovado, o aditivo entra no “Contratado” da obra: <b>novo total = contrato inicial + aditivos aprovados − distratos</b>.</p>
       </div>
     </section>

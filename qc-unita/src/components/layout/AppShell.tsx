@@ -20,7 +20,7 @@ interface NavItem {
 
 /**
  * Header grafite fixo (56px) com borda laranja de 2px — DESIGN_SYSTEM §7.
- * Abas na ordem do fluxo de criação: Orçamento → Concorrências → Fornecedores → Contratos e aditivos → Integração.
+ * Abas na ordem do fluxo de criação: Orçamento → Fora de escopo → Concorrências → Fornecedores → Contratos e aditivos → Integração.
  */
 export function AppShell() {
   const { user, demo, signOut, can } = useAuth()
@@ -35,12 +35,14 @@ export function AppShell() {
 
   const nav: NavItem[] = [
     { label: 'Orçamento', to: wid && workPath.budget(wid), match: /^\/obras\/[^/]+\/orcamento/ },
+    { label: 'Fora de escopo', to: wid && workPath.outOfScope(wid), match: /^\/obras\/[^/]+\/fora-de-escopo/, permission: 'budget.read' },
     { label: 'Concorrências', to: wid && workPath.competitions(wid), match: /^\/obras\/[^/]+\/(concorrencias|qc)|^\/concorrencias/ },
     { label: 'Fornecedores', to: '/fornecedores', match: /^\/fornecedores/ },
     { label: 'Consulta UAU', to: '/consulta-uau', match: /^\/consulta-uau/, permission: 'budget.read' },
     { label: 'De-para', to: '/de-para', match: /^\/de-para/, permission: 'catalog.manage' },
     { label: 'Contratos e aditivos', to: wid && workPath.contracts(wid), match: /^\/obras\/[^/]+\/contratos/, permission: 'contract.read' },
     { label: 'Integração ERP', to: '/integracao', match: /^\/integracao/, permission: 'integration.read' },
+    { label: 'Aprovações', to: '/aprovacoes', match: /^\/aprovacoes/, permission: 'competition.read' },
   ]
 
   return (
@@ -63,7 +65,13 @@ export function AppShell() {
                 const id = e.target.value
                 if (!id) return navigate('/obras')
                 // Mantém a aba atual ao trocar de obra
-                const tab = /\/(concorrencias|qc)/.test(pathname) ? workPath.competitions(id) : /\/contratos/.test(pathname) ? workPath.contracts(id) : workPath.budget(id)
+                const tab = /\/(concorrencias|qc)/.test(pathname)
+                  ? workPath.competitions(id)
+                  : /\/contratos/.test(pathname)
+                    ? workPath.contracts(id)
+                    : /\/fora-de-escopo/.test(pathname)
+                      ? workPath.outOfScope(id)
+                      : workPath.budget(id)
                 navigate(tab)
               }}
             >

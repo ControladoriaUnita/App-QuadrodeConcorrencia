@@ -209,6 +209,14 @@ export function contractBudgetShare(draft: Pick<ContractDraft, 'budgetTotal'>, m
  * Próximo número de solicitação da obra (SC-<obra>-NNN): o maior existente + 1. Pela contagem, um
  * número que faltasse na sequência fazia o próximo repetir um já usado.
  */
+/**
+ * Solicitação concluída: enviada (a aprovação já aconteceu no QC). sent_to_erp e signed são
+ * estados de contratos antigos, do tempo em que havia envio ao ERP e assinatura.
+ */
+export function isConcluded(status: string): boolean {
+  return status === 'submitted' || status === 'sent_to_erp' || status === 'signed'
+}
+
 export function nextContractCode(workCode: string, existing: string[]): string {
   const n = existing.reduce((max, code) => Math.max(max, Number(/-(\d+)$/.exec(code)?.[1] ?? 0)), 0)
   return `SC-${workCode}-${String(n + 1).padStart(3, '0')}`

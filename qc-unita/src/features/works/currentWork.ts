@@ -27,6 +27,7 @@ export function setLastWorkId(id: string | null) {
 /** Abas da obra, na ordem do fluxo: orçamento → concorrências → contratos. */
 export const workPath = {
   budget: (id: string) => `/obras/${id}/orcamento`,
+  outOfScope: (id: string) => `/obras/${id}/fora-de-escopo`,
   competitions: (id: string) => `/obras/${id}/concorrencias`,
   newCompetition: (id: string) => `/obras/${id}/concorrencias/nova`,
   competition: (id: string, qcId: string) => `/obras/${id}/qc/${qcId}`,

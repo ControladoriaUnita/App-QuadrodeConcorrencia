@@ -1,7 +1,10 @@
 /**
  * Casos de uso de aditivos e distratos da Solicitação de Contrato.
  *
- *   draft ──submit──▶ submitted ──Gerente/Diretoria──▶ approved | rejected
+ *   draft ──submit──▶ submitted ──etapas do fluxo──▶ approved | rejected
+ *
+ * O envio monta o plano pelo fluxo configurado (aditivo/distrato ou só prazo, com os critérios do QC);
+ * cada etapa é decidida em ordem e o aditivo só fica aprovado na última.
  *
  * Aditivo soma e distrato subtrai, sempre item a item e com os vínculos de planejamento (IP) de cada
  * item. Regras de cálculo e validação em shared/domain/contract/addendum.ts.
@@ -19,9 +22,13 @@ import {
   type AddendumLine,
   type ContractItemBase,
 } from '../../../shared/domain/contract/addendum'
-import { AppError, notFound, type RequestContext } from '../context'
+import { currentStep, decide } from '../../../shared/domain/approval/approval-flow'
+import { planFromFlows } from '../../../shared/domain/approval/flows'
+import { AppError, can, notFound, roleIdsFor, type RequestContext } from '../context'
 import type { AddendumContent, ContractData, NewAddendumItem, Repositories } from '../ports'
+import { isConcluded } from '../../../shared/domain/contract/contract-request'
 import { canDecideAddendum, loadContract } from './contracts'
+import { directorUsers, flowContextOf, toInstances } from './approval-flows'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 const isOpen = (a: ContractData['addenda'][number]) => a.status === 'draft' || a.status === 'submitted'
@@ -51,9 +58,9 @@ const approvedLines = (c: ContractData, exceptId?: string) =>
 function resolveItems(c: ContractData, kind: AddendumKind, items: AddendumItemInput[]): NewAddendumItem[] {
   const byId = new Map(c.items.map((i) => [i.id, i]))
   const seen = new Set<string>()
-  const signed = (v: string) => signedQuantity(kind, Decimal.from(v)).round(4).toDb()
-  const allocationsOf = (it: AddendumItemInput) =>
-    it.allocations.map((a) => ({ packageCode: a.packageCode.trim(), locationCode: a.locationCode?.trim() || null, quantity: signed(a.quantity) }))
+  const signed = (v: string, reduce: boolean) => signedQuantity(kind, Decimal.from(v), reduce).round(4).toDb()
+  const allocationsOf = (it: AddendumItemInput, reduce: boolean) =>
+    it.allocations.map((a) => ({ packageCode: a.packageCode.trim(), locationCode: a.locationCode?.trim() || null, quantity: signed(a.quantity, reduce) }))
 
   return items.map((it) => {
     if (it.contractItemId) {
@@ -61,18 +68,19 @@ function resolveItems(c: ContractData, kind: AddendumKind, items: AddendumItemIn
       if (!ci) throw new AppError('ADDENDUM_ITEM', 'Item não pertence a este contrato.', 422)
       if (seen.has(ci.id)) throw new AppError('ADDENDUM_ITEM_DUPLICATED', `O item ${ci.code} foi informado duas vezes.`, 422)
       seen.add(ci.id)
-      // Distrato devolve ao preço contratado; aditivo pode renegociar o unitário
-      const unitPrice = kind === 'termination' ? ci.unitPrice : (it.unitPrice ?? ci.unitPrice)
+      // Distrato e redução (remanejamento) devolvem ao preço contratado; o acréscimo pode renegociar o unitário
+      const reduce = 'reduce' in it && it.reduce === true
+      const unitPrice = kind === 'termination' || reduce ? ci.unitPrice : (it.unitPrice ?? ci.unitPrice)
       return {
         contractItemId: ci.id, materialId: ci.materialId, code: ci.code, description: ci.description, unit: ci.unit,
-        quantityDelta: signed(it.quantity), unitPrice: Decimal.from(unitPrice).round(4).toDb(), allocations: allocationsOf(it),
+        quantityDelta: signed(it.quantity, reduce), unitPrice: Decimal.from(unitPrice).round(4).toDb(), allocations: allocationsOf(it, reduce),
       }
     }
     if (kind === 'termination') throw new AppError('ADDENDUM_ITEM', 'O distrato só reduz itens do contrato.', 422)
     const n = it as Extract<AddendumItemInput, { code: string }>
     return {
       contractItemId: null, materialId: null, code: n.code, description: n.description, unit: n.unit,
-      quantityDelta: signed(n.quantity), unitPrice: Decimal.from(n.unitPrice).round(4).toDb(), allocations: allocationsOf(n),
+      quantityDelta: signed(n.quantity, false), unitPrice: Decimal.from(n.unitPrice).round(4).toDb(), allocations: allocationsOf(n, false),
     }
   })
 }
@@ -101,7 +109,7 @@ async function loadAddendum(repos: Repositories, ctx: RequestContext, addendumId
 // ----------------------------------------------------------------------------- casos de uso
 export async function createAddendum(repos: Repositories, ctx: RequestContext, contractId: string, input: SaveAddendumData) {
   const c = await loadContract(repos, ctx, contractId, 'contract.manage')
-  if (!['submitted', 'sent_to_erp', 'signed'].includes(c.status)) {
+  if (!isConcluded(c.status)) {
     throw new DomainError('CONTRACT_STATUS', 'Aditivos e distratos só podem ser solicitados para contratos já enviados.', { status: c.status })
   }
   if (c.addenda.some(isOpen)) {
@@ -139,18 +147,54 @@ export async function submitAddendum(repos: Repositories, ctx: RequestContext, a
     { contractItems, previous },
   )
   if (issues.length) throw new AppError('ADDENDUM_INVALID', `Existem pendências no ${label}.`, 422, issues)
+
+  // Fluxo: só prazo (sem itens, com nova data) → aditivo de prazo; senão aditivo/distrato. Os critérios
+  // (origem, tipo, diretor) são os do QC de origem. Sem fluxo configurado, vale a decisão única antiga.
+  const qc = await repos.competitions.getData(c.competition.id)
+  const flowKind = !a.items.length && a.newEndOn ? 'deadline' : 'addendum'
+  const amount = summary.totalDelta.abs()
+  const plan = qc ? planFromFlows(await repos.approvalFlows.listFlows(), flowKind, flowContextOf(qc.competition), amount) : null
+  if (plan) await repos.approvalFlows.createAddendumPlan(addendumId, plan.approvals)
   await repos.contracts.updateAddendum(addendumId, { status: 'submitted', submittedAt: ctx.now().toISOString(), submittedBy: ctx.actor.id })
-  return { status: 'submitted' as const }
+  return { status: 'submitted' as const, steps: plan?.approvals.length ?? 1 }
 }
 
 export async function decideAddendum(repos: Repositories, ctx: RequestContext, addendumId: string, input: { decision: 'approved' | 'rejected'; comment?: string | null }) {
   const { c, a, label } = await loadAddendum(repos, ctx, addendumId, 'contract.read')
-  if (!canDecideAddendum(ctx.actor, c.work.id)) {
-    throw new AppError('FORBIDDEN', 'Aditivos e distratos são aprovados pela Gerência ou Diretoria.', 403)
-  }
   if (a.status !== 'submitted') throw new DomainError('ADDENDUM_NOT_SUBMITTED', `O ${label} não está aguardando aprovação.`)
   const comment = input.comment?.trim() || null
   if (input.decision === 'rejected' && !comment) throw new DomainError('ADDENDUM_REJECT_COMMENT', 'Informe o motivo da reprovação.')
-  await repos.contracts.updateAddendum(addendumId, { status: input.decision, decidedAt: ctx.now().toISOString(), decidedBy: ctx.actor.id, decisionComment: comment })
-  return { status: input.decision }
+  const nowIso = ctx.now().toISOString()
+
+  const approvals = (await repos.approvalFlows.listForAddenda([addendumId])).get(addendumId) ?? []
+  if (!approvals.length) {
+    // Enviado antes dos fluxos: decisão única da Gerência/Diretoria
+    if (!canDecideAddendum(ctx.actor, c.work.id)) {
+      throw new AppError('FORBIDDEN', 'Aditivos e distratos são aprovados pela Gerência ou Diretoria.', 403)
+    }
+    await repos.contracts.updateAddendum(addendumId, { status: input.decision, decidedAt: nowIso, decidedBy: ctx.actor.id, decisionComment: comment })
+    return { status: input.decision }
+  }
+
+  if (!can(ctx.actor, 'approval.decide', c.work.id)) throw new AppError('FORBIDDEN', 'Você não pode aprovar etapas.', 403)
+  const current = toInstances(approvals)
+  const step = currentStep(current)
+  if (!step) throw new DomainError('APPROVAL_CLOSED', 'Não há etapas pendentes.')
+  const result = decide(current, {
+    stepOrder: step.stepOrder,
+    decision: input.decision,
+    comment,
+    actorId: ctx.actor.id,
+    actorRoleIds: roleIdsFor(ctx.actor, c.work.id),
+    now: nowIso,
+    directorUsers: await directorUsers(repos),
+  })
+  for (const s of result.approvals) {
+    if (current.find((x) => x.stepOrder === s.stepOrder)!.status !== s.status) await repos.approvalFlows.saveAddendumDecision(addendumId, s)
+  }
+  // O aditivo só muda de situação na última aprovação (ou na primeira reprovação)
+  if (result.outcome !== 'pending') {
+    await repos.contracts.updateAddendum(addendumId, { status: result.outcome, decidedAt: nowIso, decidedBy: ctx.actor.id, decisionComment: comment })
+  }
+  return { status: result.outcome === 'pending' ? ('submitted' as const) : result.outcome }
 }

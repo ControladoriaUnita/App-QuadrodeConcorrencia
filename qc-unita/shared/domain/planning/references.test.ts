@@ -11,7 +11,7 @@ const link = (id: string, referenceId: string, pkg: string, budgetValue: string)
 const item = (id: string, quantity: string, referenceIds: string[], extra: Partial<QcItemDTO> = {}): QcItemDTO => ({
   id, sortOrder: 1, materialId: null, code: id.toUpperCase(), description: id, unit: 'un', quantity,
   scopeDescription: null, contractNotes: null, pctMaterial: '0', pctEquipment: '0', pctRetention: '0',
-  origin: 'manual', planningCode: null, planningDescription: null, referenceIds, chosenSupplierId: null, ...extra,
+  origin: 'manual', planningCode: null, planningDescription: null, referenceIds, chosenSupplierId: null, outOfScopeQuantity: null, ...extra,
 })
 
 function source(items: QcItemDTO[], links: QcLinkDTO[], prices: [string, string][]): QcMapSource {
@@ -19,6 +19,7 @@ function source(items: QcItemDTO[], links: QcLinkDTO[], prices: [string, string]
     competition: {
       id: 'c', code: 'QC-1', title: 'T', description: null, status: 'open', packageCode: null, requestedOn: '2026-10-01', workId: 'w',
       workCode: '1', workName: 'W', budgetId: 'b', engineeringOwner: null, procurementOwner: null, engineeringOwnerName: null, procurementOwnerName: null,
+      requestKind: null, origin: null, directorId: null, directorName: null,
     },
     revision: {
       id: 'r', number: 0, status: 'draft', reason: null, serviceStartOn: null, serviceEndOn: null, budgetAmount: '1000',

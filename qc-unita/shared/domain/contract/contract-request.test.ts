@@ -9,7 +9,7 @@ function source(): QcMapSource {
   const item = (id: string, code: string, quantity: string, pctMaterial = '0') => ({
     id, sortOrder: 1, materialId: `m-${id}`, code, description: `Insumo ${code}`, unit: 'm³',
     quantity, scopeDescription: `Escopo ${code}`, contractNotes: null, pctMaterial, pctEquipment: '0', pctRetention: '0.05',
-    origin: 'reference' as const, planningCode: null, planningDescription: null, referenceIds: id === 'i1' ? ['r1'] : [], chosenSupplierId: null,
+    origin: 'reference' as const, planningCode: null, planningDescription: null, referenceIds: id === 'i1' ? ['r1'] : [], chosenSupplierId: null, outOfScopeQuantity: null,
   })
   const sup = (id: string, supplierId: string) => ({
     id, supplierId, sortOrder: 1, status: 'responded' as const, legalName: supplierId, tradeName: null, taxId: '1', contactName: null, phone: null,
@@ -20,6 +20,7 @@ function source(): QcMapSource {
     competition: {
       id: 'c', code: 'QC-1', title: 'T', description: null, status: 'approved', packageCode: null, requestedOn: '2026-09-01', workId: 'w',
       workCode: '1', workName: 'W', budgetId: 'b', engineeringOwner: null, procurementOwner: null, engineeringOwnerName: null, procurementOwnerName: null,
+      requestKind: null, origin: null, directorId: null, directorName: null,
     },
     revision: {
       id: 'r', number: 0, status: 'approved', reason: null, serviceStartOn: '2026-10-01', serviceEndOn: '2026-12-31', budgetAmount: '3000.0000',

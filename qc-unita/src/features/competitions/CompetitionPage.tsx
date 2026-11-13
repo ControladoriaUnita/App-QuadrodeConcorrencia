@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { REQUEST_KIND_LABEL, REQUEST_ORIGIN_LABEL } from '@shared/domain/approval/flows'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ChevronDown, ClipboardList, FileSignature, Link2, FilePlus2, GitBranch, History, Lock, Paperclip, Send, ShieldCheck, Table2, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -78,6 +79,9 @@ export function CompetitionPage() {
           <>
             <Badge tone={competitionStatus[c.status].tone}>{competitionStatus[c.status].label}</Badge>
             <Badge tone={rs.tone}>{formatRevision(r.number)} · {rs.label}</Badge>
+            {c.requestKind && <Badge tone="neutral">{REQUEST_KIND_LABEL[c.requestKind]}</Badge>}
+            {c.origin && <Badge tone="neutral">Origem: {REQUEST_ORIGIN_LABEL[c.origin]}</Badge>}
+            {c.directorName && <Badge tone="info">Diretor: {c.directorName}</Badge>}
           </>
         }
         description={
@@ -267,7 +271,7 @@ export function CompetitionPage() {
       <ConfirmDialog
         open={confirmSubmit}
         title="Enviar para aprovação?"
-        description="A revisão fica bloqueada para edição enquanto estiver em aprovação. As etapas são definidas pela alçada do valor."
+        description="A revisão fica bloqueada para edição enquanto estiver em aprovação. As etapas vêm do fluxo do pedido (tipo, origem e diretor) e da alçada do valor; com desvio de custo ou quantidade em alguma linha do mapa, entram também as etapas de desvio."
         confirmLabel="Enviar"
         loading={m.submit.isPending}
         onCancel={() => setConfirmSubmit(false)}

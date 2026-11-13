@@ -35,19 +35,23 @@ import {
   createContractRequestSchema,
   decideAddendumSchema,
   saveAddendumSchema,
-  signContractSchema,
   updateContractItemSchema,
   updateContractRequestSchema,
   ATTACHMENT_ENTITIES,
   confirmUploadSchema,
   requestUploadSchema,
   type ApiErrorBody,
+  saveOutOfScopeSchema,
+  saveApprovalFlowSchema,
+  saveDirectorSchema,
 } from '../../shared/contracts'
 import { AppError, requireGlobalAdmin, toAppError, type RequestContext } from '../application/context'
 import type { Repositories } from '../application/ports'
 import * as addenda from '../application/use-cases/addenda'
 import * as attachments from '../application/use-cases/attachments'
 import * as budgetMappings from '../application/use-cases/budget-mappings'
+import * as outOfScope from '../application/use-cases/out-of-scope'
+import * as approvalFlows from '../application/use-cases/approval-flows'
 import * as catalog from '../application/use-cases/catalog'
 import * as contracts from '../application/use-cases/contracts'
 import * as simulation from '../application/use-cases/simulation'
@@ -135,6 +139,31 @@ route('GET', '/budget-mappings', async ({ repos, ctx }) => budgetMappings.getBud
 route('PUT', '/budget-mappings/items', async ({ repos, ctx, body }) => budgetMappings.setItemMapping(repos, ctx, parse(setItemMappingSchema, await body())))
 route('PUT', '/budget-mappings/indirect', async ({ repos, ctx, body }) =>
   budgetMappings.setIndirectMapping(repos, ctx, parse(setIndirectMappingSchema, await body())))
+// Custos fora de escopo da obra (itens não previstos no orçamento)
+// Fluxos de aprovação e diretores (leitura: todos; gravação: administrador)
+route('GET', '/approval-config', async ({ repos, ctx }) => approvalFlows.getApprovalConfig(repos, ctx))
+route('POST', '/approval-flows', async ({ repos, ctx, body }) => approvalFlows.saveApprovalFlow(repos, ctx, null, parse(saveApprovalFlowSchema, await body())), 201)
+route('PUT', '/approval-flows/:id', async ({ repos, ctx, params, body }) =>
+  approvalFlows.saveApprovalFlow(repos, ctx, parse(uuidParam, params.id), parse(saveApprovalFlowSchema, await body())))
+route('DELETE', '/approval-flows/:id', async ({ repos, ctx, params }) => {
+  await approvalFlows.deleteApprovalFlow(repos, ctx, parse(uuidParam, params.id))
+  return { ok: true }
+})
+route('POST', '/approval-directors', async ({ repos, ctx, body }) => approvalFlows.saveDirector(repos, ctx, null, parse(saveDirectorSchema, await body())), 201)
+route('PUT', '/approval-directors/:id', async ({ repos, ctx, params, body }) =>
+  approvalFlows.saveDirector(repos, ctx, parse(uuidParam, params.id), parse(saveDirectorSchema, await body())))
+
+route('GET', '/works/:id/out-of-scope', async ({ repos, ctx, params }) => outOfScope.listOutOfScope(repos, ctx, parse(uuidParam, params.id)))
+route('POST', '/works/:id/out-of-scope', async ({ repos, ctx, params, body }) =>
+  outOfScope.createOutOfScope(repos, ctx, parse(uuidParam, params.id), parse(saveOutOfScopeSchema, await body())), 201)
+route('PUT', '/works/:id/out-of-scope/:costId', async ({ repos, ctx, params, body }) => {
+  await outOfScope.updateOutOfScope(repos, ctx, parse(uuidParam, params.id), parse(uuidParam, params.costId), parse(saveOutOfScopeSchema, await body()))
+  return { ok: true }
+})
+route('DELETE', '/works/:id/out-of-scope/:costId', async ({ repos, ctx, params }) => {
+  await outOfScope.deleteOutOfScope(repos, ctx, parse(uuidParam, params.id), parse(uuidParam, params.costId))
+  return { ok: true }
+})
 route('GET', '/works/:id/overview', async ({ repos, ctx, params }) => works.getWorkOverview(repos, ctx, parse(uuidParam, params.id)))
 route('GET', '/works/:id/packages', async ({ repos, ctx, params }) => catalog.listPackages(repos, ctx, parse(uuidParam, params.id)))
 // IPs (vínculos de planejamento) e insumos da obra: UAU, ou o orçamento importado como alternativa
@@ -221,7 +250,7 @@ route('GET', '/contracts', async ({ repos, ctx, url }) =>
 )
 route('POST', '/contracts', async ({ repos, ctx, body }) =>
   contracts.createContractRequest(repos, ctx, parse(createContractRequestSchema, await body()).competitionId), 201)
-route('GET', '/contracts/:id', async ({ repos, ctx, params }) => contracts.getContract(repos, getErpProvider(), ctx, parse(uuidParam, params.id)))
+route('GET', '/contracts/:id', async ({ repos, ctx, params }) => contracts.getContract(repos, ctx, parse(uuidParam, params.id)))
 route('PATCH', '/contracts/:id', async ({ repos, ctx, params, body }) => {
   await contracts.updateContractRequest(repos, ctx, parse(uuidParam, params.id), parse(updateContractRequestSchema, await body()))
   return { ok: true }
@@ -233,9 +262,6 @@ route('PATCH', '/contracts/:id/items/:itemId', async ({ repos, ctx, params, body
 route('POST', '/contracts/:id/submit', async ({ repos, ctx, params }) => contracts.submitContractRequest(repos, ctx, parse(uuidParam, params.id)))
 route('POST', '/contracts/:id/cancel', async ({ repos, ctx, params, body }) =>
   contracts.cancelContractRequest(repos, ctx, parse(uuidParam, params.id), parse(cancelContractSchema, await body()).reason))
-route('POST', '/contracts/:id/erp-push', async ({ repos, ctx, params }) => contracts.pushContractToErp(repos, getErpProvider(), ctx, parse(uuidParam, params.id)))
-route('POST', '/contracts/:id/sign', async ({ repos, ctx, params, body }) =>
-  contracts.signContract(repos, ctx, parse(uuidParam, params.id), parse(signContractSchema, await body())))
 route('POST', '/contracts/:id/addenda', async ({ repos, ctx, params, body }) =>
   addenda.createAddendum(repos, ctx, parse(uuidParam, params.id), parse(saveAddendumSchema, await body())), 201)
 route('PUT', '/addenda/:aid', async ({ repos, ctx, params, body }) => {

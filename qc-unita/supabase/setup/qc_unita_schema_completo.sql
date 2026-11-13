@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Quadro de Concorrência · Unità Engenharia — schema completo
--- GERADO por scripts/build-db-setup.mjs a partir de 24 migrations
--- (001_initial_schema.sql … 024_purge_work.sql). Não edite à mão: altere a migration e rode npm run db:bundle.
+-- GERADO por scripts/build-db-setup.mjs a partir de 28 migrations
+-- (001_initial_schema.sql … 028_approval_flows.sql). Não edite à mão: altere a migration e rode npm run db:bundle.
 --
 -- Como usar: Supabase → SQL Editor → New query → cole tudo → Run.
 -- Roda numa única transação: se algo falhar, nada fica pela metade.
@@ -3396,6 +3396,451 @@ $$;
 revoke all on function public.qc_purge_work(uuid, uuid, boolean) from public, anon, authenticated;
 grant execute on function public.qc_purge_work(uuid, uuid, boolean) to service_role;
 
+-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 025_out_of_scope_costs.sql
+-- =============================================================================
+-- 025_out_of_scope_costs.sql
+-- Custos fora de escopo: itens que não estão previstos no orçamento da obra.
+--
+--   * out_of_scope_costs: um lançamento por item (insumo, quantidade, custo unitário, motivo,
+--     justificativa, Item da EAP e IP opcionais). Numeração sequencial por obra (FE-001…),
+--     atribuída no insert.
+--   * Leitura: quem vê o orçamento da obra (budget.read). Gravação: permissão nova
+--     out_of_scope.manage, concedida aos papéis que já mantêm o orçamento (budget.import).
+--   * Auditoria campo a campo pelo trigger audit_row_changes (work_id na própria linha).
+--   * Excluir a obra (qc_purge_work) leva os lançamentos junto (on delete cascade); o simulado
+--     mantém a obra e, portanto, os lançamentos.
+-- =============================================================================
+
+create table if not exists public.out_of_scope_costs (
+  id                    uuid primary key default gen_random_uuid(),
+  work_id               uuid not null references public.works (id) on delete cascade,
+  number                integer not null,
+  code                  text check (code is null or length(trim(code)) between 1 and 40),
+  description           text not null check (length(trim(description)) >= 3),
+  unit                  text not null check (length(trim(unit)) >= 1),
+  quantity              public.qty4 not null check (quantity > 0),
+  unit_cost             public.money4 not null check (unit_cost >= 0),
+  total_cost            public.money4 generated always as (round(quantity * unit_cost, 4)) stored,
+  wbs_code              text check (wbs_code is null or wbs_code ~ '^\d+(\.\d+)*$'),
+  wbs_description       text,
+  planning_code         text,
+  planning_description  text,
+  category              text not null check (category in
+                          ('client_request', 'budget_omission', 'design_change', 'technical_requirement', 'regulatory', 'other')),
+  justification         text not null check (length(trim(justification)) >= 5),
+  requested_by_name     text,
+  occurred_on           date not null default current_date,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+  created_by            uuid references auth.users (id),
+  updated_by            uuid references auth.users (id),
+  unique (work_id, number)
+);
+create index if not exists out_of_scope_costs_work_idx on public.out_of_scope_costs (work_id, number);
+
+-- Número sequencial por obra (o maior + 1). A trava consultiva da transação serializa lançamentos
+-- simultâneos da mesma obra sem exigir permissão de alterar a obra.
+create or replace function public.out_of_scope_next_number()
+returns trigger language plpgsql
+as $$
+begin
+  if new.number is null or new.number <= 0 then
+    perform pg_advisory_xact_lock(hashtext('out_of_scope_costs:' || new.work_id::text));
+    select coalesce(max(number), 0) + 1 into new.number from public.out_of_scope_costs where work_id = new.work_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists out_of_scope_costs_number on public.out_of_scope_costs;
+create trigger out_of_scope_costs_number before insert on public.out_of_scope_costs
+  for each row execute function public.out_of_scope_next_number();
+drop trigger if exists out_of_scope_costs_set_updated_at on public.out_of_scope_costs;
+create trigger out_of_scope_costs_set_updated_at before update on public.out_of_scope_costs
+  for each row execute function public.set_updated_at();
+drop trigger if exists out_of_scope_costs_audit on public.out_of_scope_costs;
+create trigger out_of_scope_costs_audit after insert or update or delete on public.out_of_scope_costs
+  for each row execute function public.audit_row_changes();
+
+-- Permissão ------------------------------------------------------------------------
+insert into public.permissions (key, description) values ('out_of_scope.manage', 'Lançar custos fora de escopo da obra')
+on conflict (key) do nothing;
+insert into public.role_permissions (role_id, permission_id)
+select rp.role_id, p.id
+  from public.role_permissions rp
+  join public.permissions b on b.id = rp.permission_id and b.key = 'budget.import'
+  cross join public.permissions p
+ where p.key = 'out_of_scope.manage'
+on conflict do nothing;
+
+-- RLS ------------------------------------------------------------------------------
+alter table public.out_of_scope_costs enable row level security;
+drop policy if exists out_of_scope_costs_select on public.out_of_scope_costs;
+create policy out_of_scope_costs_select on public.out_of_scope_costs for select to authenticated
+  using (public.auth_has_permission('budget.read', work_id));
+drop policy if exists out_of_scope_costs_write on public.out_of_scope_costs;
+create policy out_of_scope_costs_write on public.out_of_scope_costs for all to authenticated
+  using (public.auth_has_permission('out_of_scope.manage', work_id))
+  with check (public.auth_has_permission('out_of_scope.manage', work_id));
+
+grant select, insert, update, delete on public.out_of_scope_costs to authenticated;
+
+-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 026_addendum_reduce_lines.sql
+-- =============================================================================
+-- 026_addendum_reduce_lines.sql
+-- Aditivo com acréscimo e redução na mesma solicitação (remanejamento entre linhas).
+--
+--   * No aditivo, cada item pode acrescentar (quantidade positiva) ou reduzir (negativa). A redução
+--     é só de itens do contrato. O total do aditivo é o líquido.
+--   * O distrato continua só reduzindo itens do contrato.
+--   * Nada muda nas tabelas: só a regra de sinal do trigger.
+-- =============================================================================
+
+create or replace function public.check_addendum_item_sign()
+returns trigger language plpgsql
+as $$
+declare v_kind public.addendum_kind;
+begin
+  select kind into v_kind from public.contract_addenda where id = new.addendum_id;
+  if new.quantity_delta = 0 then
+    raise exception 'ADDENDUM_SIGN: a quantidade do item % não pode ser zero', new.code using errcode = 'P0001';
+  end if;
+  if new.quantity_delta < 0 and new.contract_request_item_id is null then
+    raise exception 'ADDENDUM_SIGN: só itens do contrato podem ser reduzidos (%)', new.code using errcode = 'P0001';
+  end if;
+  if v_kind = 'termination' and new.quantity_delta > 0 then
+    raise exception 'ADDENDUM_SIGN: no distrato o item % deve ter quantidade negativa', new.code using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
+-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 027_qc_out_of_scope.sql
+-- =============================================================================
+-- 027_qc_out_of_scope.sql
+-- Fora de escopo ligado ao QC.
+--
+--   * competition_items.out_of_scope_quantity: quantidade do insumo do mapa que não está no
+--     orçamento, informada à mão; null = automática (insumo sem referência é 100% fora de escopo).
+--     Unitário, totais e desvio por linha são calculados (shared/domain/competition/scope.ts).
+--   * qc_clone_revision copia a coluna para a nova revisão.
+--   * out_of_scope_costs.competition_id: QC a que a solicitação manual se refere (opcional).
+-- =============================================================================
+
+alter table public.competition_items
+  add column if not exists out_of_scope_quantity public.qty4 check (out_of_scope_quantity is null or out_of_scope_quantity >= 0);
+
+alter table public.out_of_scope_costs
+  add column if not exists competition_id uuid references public.competitions (id) on delete set null;
+create index if not exists out_of_scope_costs_competition_idx on public.out_of_scope_costs (competition_id) where competition_id is not null;
+
+-- A solicitação só aponta QC da mesma obra
+create or replace function public.out_of_scope_check_competition()
+returns trigger language plpgsql
+as $$
+begin
+  if new.competition_id is not null
+     and not exists (select 1 from public.competitions c where c.id = new.competition_id and c.work_id = new.work_id) then
+    raise exception 'OUT_OF_SCOPE_COMPETITION: a concorrência não é desta obra' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists out_of_scope_costs_competition on public.out_of_scope_costs;
+create trigger out_of_scope_costs_competition before insert or update of competition_id, work_id on public.out_of_scope_costs
+  for each row execute function public.out_of_scope_check_competition();
+
+-- Nova revisão copia a quantidade fora de escopo de cada insumo
+create or replace function public.qc_clone_revision(p_revision_id uuid, p_reason text)
+returns uuid
+language plpgsql security invoker set search_path = public
+as $$
+declare
+  v_src  public.competition_revisions;
+  v_new  uuid := gen_random_uuid();
+  v_next integer;
+begin
+  select * into v_src from public.competition_revisions where id = p_revision_id;
+  if not found then
+    raise exception 'QC_REVISION_NOT_FOUND' using errcode = 'P0002';
+  end if;
+
+  select coalesce(max(number), -1) + 1 into v_next
+    from public.competition_revisions where competition_id = v_src.competition_id;
+
+  insert into public.competition_revisions (
+    id, competition_id, number, status, based_on_revision_id, reason,
+    service_start_on, service_end_on, budget_amount, budget_used_amount, budget_adjustment_amount,
+    engineering_notes, procurement_notes, contract_type_id, created_by)
+  values (
+    v_new, v_src.competition_id, v_next, 'draft', v_src.id, p_reason,
+    v_src.service_start_on, v_src.service_end_on, v_src.budget_amount, v_src.budget_used_amount,
+    v_src.budget_adjustment_amount, v_src.engineering_notes, v_src.procurement_notes,
+    v_src.contract_type_id, auth.uid());
+
+  create temporary table _item_map (old_id uuid, new_id uuid) on commit drop;
+  insert into _item_map select id, gen_random_uuid() from public.competition_items where revision_id = v_src.id;
+
+  insert into public.competition_items (
+    id, revision_id, material_id, sort_order, code, description, unit, budget_quantity, budget_unit_cost,
+    quantity, scope_description, contract_notes, pct_material, pct_equipment, pct_retention,
+    origin, planning_code, planning_description, out_of_scope_quantity)
+  select m.new_id, v_new, i.material_id, i.sort_order, i.code, i.description, i.unit, i.budget_quantity,
+         i.budget_unit_cost, i.quantity, i.scope_description, i.contract_notes, i.pct_material,
+         i.pct_equipment, i.pct_retention, i.origin, i.planning_code, i.planning_description, i.out_of_scope_quantity
+    from public.competition_items i join _item_map m on m.old_id = i.id;
+
+  create temporary table _ref_map (old_id uuid, new_id uuid) on commit drop;
+  insert into _ref_map select id, gen_random_uuid() from public.competition_references where revision_id = v_src.id;
+
+  insert into public.competition_references (id, revision_id, material_id, sort_order, code, description, unit)
+  select m.new_id, v_new, r.material_id, r.sort_order, r.code, r.description, r.unit
+    from public.competition_references r join _ref_map m on m.old_id = r.id;
+
+  insert into public.competition_item_references (revision_id, competition_item_id, reference_id)
+  select v_new, im.new_id, rm.new_id
+    from public.competition_item_references x
+    join _item_map im on im.old_id = x.competition_item_id
+    join _ref_map rm on rm.old_id = x.reference_id;
+
+  create temporary table _sup_map (old_id uuid, new_id uuid) on commit drop;
+  insert into _sup_map select id, gen_random_uuid() from public.competition_suppliers where revision_id = v_src.id;
+
+  insert into public.competition_suppliers (
+    id, revision_id, supplier_id, sort_order, status, legal_name, trade_name, tax_id, contact_name, phone,
+    email, cnd_valid_until, delivery_terms, payment_terms, readjustment_terms, notes, strengths, weaknesses)
+  select m.new_id, v_new, s.supplier_id, s.sort_order, s.status, s.legal_name, s.trade_name, s.tax_id,
+         s.contact_name, s.phone, s.email, s.cnd_valid_until, s.delivery_terms, s.payment_terms,
+         s.readjustment_terms, s.notes, s.strengths, s.weaknesses
+    from public.competition_suppliers s join _sup_map m on m.old_id = s.id;
+
+  update public.competition_items ni
+     set chosen_supplier_id = sm.new_id
+    from _item_map im
+    join public.competition_items oi on oi.id = im.old_id
+    join _sup_map sm on sm.old_id = oi.chosen_supplier_id
+   where ni.id = im.new_id;
+
+  create temporary table _prop_map (old_id uuid, new_id uuid) on commit drop;
+  insert into _prop_map select id, gen_random_uuid() from public.supplier_proposals where revision_id = v_src.id;
+
+  insert into public.supplier_proposals (
+    id, revision_id, competition_supplier_id, proposal_ref, received_on, valid_until, total_amount, notes, created_by)
+  select pm.new_id, v_new, sm.new_id, p.proposal_ref, p.received_on, p.valid_until, p.total_amount, p.notes, auth.uid()
+    from public.supplier_proposals p
+    join _prop_map pm on pm.old_id = p.id
+    join _sup_map sm on sm.old_id = p.competition_supplier_id;
+
+  insert into public.supplier_proposal_items (proposal_id, competition_item_id, unit_price, total_price, notes)
+  select pm.new_id, im.new_id, pi.unit_price, pi.total_price, pi.notes
+    from public.supplier_proposal_items pi
+    join _prop_map pm on pm.old_id = pi.proposal_id
+    join _item_map im on im.old_id = pi.competition_item_id;
+
+  -- Linhas do orçamento acompanham as referências
+  insert into public.competition_item_links (
+    revision_id, reference_id, material_id, package_code, package_description, quantity, budget_unit_cost,
+    awarded_unit_price, awarded_total, sort_order, activity_item_id, line_key, budget_share, budget_value)
+  select v_new, rm.new_id, l.material_id, l.package_code, l.package_description, l.quantity, l.budget_unit_cost,
+         l.awarded_unit_price, l.awarded_total, l.sort_order, l.activity_item_id, l.line_key, l.budget_share, l.budget_value
+    from public.competition_item_links l
+    join _ref_map rm on rm.old_id = l.reference_id;
+
+  update public.competition_revisions
+     set awarded_total = (select awarded_total from public.competition_revisions where id = v_src.id)
+   where id = v_new;
+
+  update public.competitions set current_revision_id = v_new, status = 'open' where id = v_src.competition_id;
+
+  return v_new;
+end;
+$$;
+
+-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 028_approval_flows.sql
+-- =============================================================================
+-- 028_approval_flows.sql
+-- Fluxos de aprovação configuráveis, tipo/origem/diretor do pedido e aprovação de aditivos
+-- em etapas.
+--
+--   * approval_directors: diretores aprovadores (RT, SR…), escolhidos pelo solicitante na criação
+--     do QC. Não ficam presos às obras. Com usuário ligado, só ele decide as etapas de diretor.
+--   * competitions.request_kind (material | labor), origin (work | procurement), director_id.
+--   * approval_flows + approval_flow_steps: fluxo por tipo de solicitação:
+--       competition (contratação), deviation (desvio de custo/quantidade, somado ao fluxo da
+--       contratação quando o mapa tem desvio), addendum (aditivo/distrato), deadline (só prazo).
+--     O fluxo vale para a origem, o tipo e o diretor informados (null = qualquer). O mais
+--     específico vence. Cada etapa: papel, alçada mínima e se é a etapa do diretor responsável.
+--   * approvals.director_id e addendum_approvals: a etapa do diretor fica com o diretor do QC.
+--   * Sem fluxo de contratação configurado, vale approval_steps (comportamento anterior).
+--   * Configurar fluxos e diretores: administrador.
+-- =============================================================================
+
+-- Diretores ---------------------------------------------------------------------------
+create table if not exists public.approval_directors (
+  id          uuid primary key default gen_random_uuid(),
+  code        text not null unique check (length(trim(code)) between 1 and 10),
+  name        text not null check (length(trim(name)) >= 2),
+  user_id     uuid references auth.users (id) on delete set null,
+  active      boolean not null default true,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+insert into public.approval_directors (code, name) values ('RT', 'Diretor RT'), ('SR', 'Diretor SR')
+on conflict (code) do nothing;
+
+-- Pedido: tipo, origem e diretor -------------------------------------------------------
+alter table public.competitions
+  add column if not exists request_kind text check (request_kind is null or request_kind in ('material', 'labor')),
+  add column if not exists origin text check (origin is null or origin in ('work', 'procurement')),
+  add column if not exists director_id uuid references public.approval_directors (id);
+
+-- Fluxos --------------------------------------------------------------------------------
+create table if not exists public.approval_flows (
+  id            uuid primary key default gen_random_uuid(),
+  kind          text not null check (kind in ('competition', 'deviation', 'addendum', 'deadline')),
+  name          text not null check (length(trim(name)) >= 3),
+  origin        text check (origin is null or origin in ('work', 'procurement')),
+  request_kind  text check (request_kind is null or request_kind in ('material', 'labor')),
+  director_id   uuid references public.approval_directors (id) on delete cascade,
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create table if not exists public.approval_flow_steps (
+  id          uuid primary key default gen_random_uuid(),
+  flow_id     uuid not null references public.approval_flows (id) on delete cascade,
+  step_order  integer not null check (step_order >= 1),
+  name        text not null check (length(trim(name)) >= 2),
+  role_id     uuid not null references public.roles (id),
+  director    boolean not null default false,
+  min_amount  public.money4,
+  active      boolean not null default true,
+  unique (flow_id, step_order)
+);
+
+-- Etapa do diretor responsável nas instâncias
+alter table public.approvals add column if not exists director_id uuid references public.approval_directors (id);
+
+-- Aprovação de aditivos/distratos em etapas
+create table if not exists public.addendum_approvals (
+  id           uuid primary key default gen_random_uuid(),
+  addendum_id  uuid not null references public.contract_addenda (id) on delete cascade,
+  step_order   integer not null,
+  step_name    text not null,
+  role_id      uuid not null references public.roles (id),
+  director_id  uuid references public.approval_directors (id),
+  status       public.approval_status not null default 'pending',
+  decided_by   uuid references auth.users (id),
+  decided_at   timestamptz,
+  comment      text,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  unique (addendum_id, step_order),
+  constraint addendum_approvals_decision_consistent check (
+    (status in ('pending', 'skipped') and decided_at is null)
+    or (status in ('approved', 'rejected') and decided_at is not null and decided_by is not null)
+  ),
+  constraint addendum_approvals_reject_needs_comment check (status <> 'rejected' or coalesce(trim(comment), '') <> '')
+);
+
+-- updated_at e auditoria
+do $$
+declare t text;
+begin
+  foreach t in array array['approval_directors', 'approval_flows', 'addendum_approvals'] loop
+    execute format('drop trigger if exists %1$s_set_updated_at on public.%1$s', t);
+    execute format('create trigger %1$s_set_updated_at before update on public.%1$s for each row execute function public.set_updated_at()', t);
+  end loop;
+end $$;
+
+-- Fluxos iniciais (os aprovadores definitivos são cadastrados depois, na tela de fluxos) --
+do $$
+declare
+  v_flow uuid;
+  v_director_role uuid := (select id from public.roles where key = 'director');
+  v_manager_role  uuid := (select id from public.roles where key = 'manager');
+  v_dir record;
+begin
+  if exists (select 1 from public.approval_flows) then
+    return;
+  end if;
+
+  -- Contratação (padrão): as etapas atuais de approval_steps
+  insert into public.approval_flows (kind, name) values ('competition', 'Contratação (padrão)') returning id into v_flow;
+  insert into public.approval_flow_steps (flow_id, step_order, name, role_id, min_amount, active)
+  select v_flow, step_order, name, role_id, min_amount, active from public.approval_steps;
+
+  -- Contratação de serviço (RT / SR): as etapas atuais + o diretor responsável
+  for v_dir in select id, code from public.approval_directors order by code loop
+    insert into public.approval_flows (kind, name, director_id)
+    values ('competition', 'Contratação de serviço (' || v_dir.code || ')', v_dir.id) returning id into v_flow;
+    insert into public.approval_flow_steps (flow_id, step_order, name, role_id, min_amount, active)
+    select v_flow, step_order, name, role_id, min_amount, active from public.approval_steps where role_id <> v_director_role;
+    insert into public.approval_flow_steps (flow_id, step_order, name, role_id, director)
+    values (v_flow, (select coalesce(max(step_order), 0) + 1 from public.approval_flow_steps where flow_id = v_flow),
+            'Diretor responsável (' || v_dir.code || ')', v_director_role, true);
+  end loop;
+
+  insert into public.approval_flows (kind, name) values ('deviation', 'Desvio de custo ou quantidade') returning id into v_flow;
+  insert into public.approval_flow_steps (flow_id, step_order, name, role_id, director)
+  values (v_flow, 1, 'Diretor responsável (desvio)', v_director_role, true);
+
+  insert into public.approval_flows (kind, name) values ('addendum', 'Aditivo / distrato') returning id into v_flow;
+  insert into public.approval_flow_steps (flow_id, step_order, name, role_id)
+  values (v_flow, 1, 'Gerente / Coordenador de Obra', v_manager_role);
+
+  insert into public.approval_flows (kind, name) values ('deadline', 'Aditivo de prazo contratual') returning id into v_flow;
+  insert into public.approval_flow_steps (flow_id, step_order, name, role_id)
+  values (v_flow, 1, 'Gerente / Coordenador de Obra', v_manager_role);
+end $$;
+
+-- RLS -----------------------------------------------------------------------------------
+alter table public.approval_directors enable row level security;
+alter table public.approval_flows enable row level security;
+alter table public.approval_flow_steps enable row level security;
+alter table public.addendum_approvals enable row level security;
+
+drop policy if exists approval_directors_select on public.approval_directors;
+create policy approval_directors_select on public.approval_directors for select to authenticated using (true);
+drop policy if exists approval_directors_admin on public.approval_directors;
+create policy approval_directors_admin on public.approval_directors for all to authenticated
+  using (public.auth_is_admin()) with check (public.auth_is_admin());
+
+drop policy if exists approval_flows_select on public.approval_flows;
+create policy approval_flows_select on public.approval_flows for select to authenticated using (true);
+drop policy if exists approval_flows_admin on public.approval_flows;
+create policy approval_flows_admin on public.approval_flows for all to authenticated
+  using (public.auth_is_admin()) with check (public.auth_is_admin());
+
+drop policy if exists approval_flow_steps_select on public.approval_flow_steps;
+create policy approval_flow_steps_select on public.approval_flow_steps for select to authenticated using (true);
+drop policy if exists approval_flow_steps_admin on public.approval_flow_steps;
+create policy approval_flow_steps_admin on public.approval_flow_steps for all to authenticated
+  using (public.auth_is_admin()) with check (public.auth_is_admin());
+
+drop policy if exists addendum_approvals_select on public.addendum_approvals;
+create policy addendum_approvals_select on public.addendum_approvals for select to authenticated
+  using (public.auth_has_permission('contract.read', public.addendum_work_id(addendum_id)));
+drop policy if exists addendum_approvals_insert on public.addendum_approvals;
+create policy addendum_approvals_insert on public.addendum_approvals for insert to authenticated
+  with check (public.auth_has_permission('contract.manage', public.addendum_work_id(addendum_id)));
+-- Só decide quem tem o papel da etapa + approval.decide (o diretor ligado é conferido pela API)
+drop policy if exists addendum_approvals_decide on public.addendum_approvals;
+create policy addendum_approvals_decide on public.addendum_approvals for update to authenticated
+  using (status = 'pending'
+         and public.auth_has_role(role_id, public.addendum_work_id(addendum_id))
+         and public.auth_has_permission('approval.decide', public.addendum_work_id(addendum_id)))
+  with check (public.auth_has_role(role_id, public.addendum_work_id(addendum_id)));
+-- Reenvio do rascunho refaz o plano
+drop policy if exists addendum_approvals_reset on public.addendum_approvals;
+create policy addendum_approvals_reset on public.addendum_approvals for delete to authenticated
+  using (public.auth_has_permission('contract.manage', public.addendum_work_id(addendum_id)));
+
+grant select on public.approval_directors, public.approval_flows, public.approval_flow_steps to authenticated;
+grant insert, update, delete on public.approval_directors, public.approval_flows, public.approval_flow_steps to authenticated;
+grant select, insert, update, delete on public.addendum_approvals to authenticated;
+
 -- Registro das migrations aplicadas (para o Supabase CLI não reaplicar com db push)
 create schema if not exists supabase_migrations;
 create table if not exists supabase_migrations.schema_migrations (version text primary key, statements text[], name text);
@@ -3423,7 +3868,11 @@ insert into supabase_migrations.schema_migrations (version, name) values
   ('021', 'work_archive'),
   ('022', 'budget_mappings_indirect'),
   ('023', 'item_choice_owner_names'),
-  ('024', 'purge_work')
+  ('024', 'purge_work'),
+  ('025', 'out_of_scope_costs'),
+  ('026', 'addendum_reduce_lines'),
+  ('027', 'qc_out_of_scope'),
+  ('028', 'approval_flows')
 on conflict (version) do nothing;
 
 commit;

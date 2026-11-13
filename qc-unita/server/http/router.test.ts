@@ -8,7 +8,7 @@ import { buildQcMap } from '../../shared/domain/competition/qc-map'
 import { DEMO_USERS } from '../infrastructure/memory/seed'
 import { handle } from './router'
 
-const [ADMIN, PROC, ENG, MGR] = DEMO_USERS.map((u) => u.id)
+const [ADMIN, PROC, ENG, MGR, DIR] = DEMO_USERS.map((u) => u.id)
 
 async function call<T = unknown>(method: string, path: string, body?: unknown, user = PROC): Promise<{ status: number; data: T }> {
   const res = await handle(
@@ -82,8 +82,14 @@ describe('API modo memória', () => {
     expect((await call('POST', `/revisions/${rid}/approvals`, { stepOrder: 3, decision: 'approved' }, MGR)).status).toBe(409)
     expect((await call('POST', `/revisions/${rid}/approvals`, { stepOrder: 2, decision: 'approved' }, MGR)).status).toBe(403)
     expect((await call('POST', `/revisions/${rid}/approvals`, { stepOrder: 2, decision: 'approved' }, ENG)).status).toBe(200)
-    const done = await call<{ outcome: string }>('POST', `/revisions/${rid}/approvals`, { stepOrder: 3, decision: 'approved' }, MGR)
-    expect(done.data.outcome).toBe('approved')
+    // O mapa tem desvio de preço em alguma linha: o fluxo de desvio soma a etapa do diretor no fim
+    const steps = d.approvals.map((a) => a.stepName)
+    expect(steps.at(-1)).toBe('Diretor responsável (desvio)')
+    let outcome = (await call<{ outcome: string }>('POST', `/revisions/${rid}/approvals`, { stepOrder: 3, decision: 'approved' }, MGR)).data.outcome
+    expect(outcome).toBe('pending')
+    expect((await call('POST', `/revisions/${rid}/approvals`, { stepOrder: steps.length, decision: 'approved' }, MGR)).status).toBe(403)
+    outcome = (await call<{ outcome: string }>('POST', `/revisions/${rid}/approvals`, { stepOrder: steps.length, decision: 'approved' }, DIR)).data.outcome
+    expect(outcome).toBe('approved')
 
     const { data: frozen } = await call<CompetitionDetailDTO>('GET', `/competitions/${comp.id}`)
     expect(frozen.revision.status).toBe('approved')

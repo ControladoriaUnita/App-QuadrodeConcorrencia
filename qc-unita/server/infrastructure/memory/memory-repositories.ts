@@ -26,6 +26,8 @@ import { uid, type AuditCtx, type MemoryDb, type Row } from './memory-db'
 import { assignLineKeys } from '../../../shared/domain/budget/excel-import'
 import { createMemoryAttachments, createMemoryStorage } from './memory-attachments'
 import { createMemoryBudgetMappings, createMemoryIndirect } from './memory-budget-mappings'
+import { createMemoryApprovalFlows } from './memory-approval-flows'
+import { createMemoryOutOfScope } from './memory-out-of-scope'
 import { createMemoryContracts } from './memory-contracts'
 
 type R<T> = T & Row
@@ -210,6 +212,9 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
         stepName: a.stepName as string,
         roleId: a.roleId as string,
         roleName: (db.get('roles', a.roleId as string)?.name as string) ?? '',
+        directorId: (a.directorId as string) ?? null,
+        directorName: typeof a.directorId === 'string' ? ((db.get('approval_directors', a.directorId)?.name as string) ?? null) : null,
+        directorUserId: typeof a.directorId === 'string' ? ((db.get('approval_directors', a.directorId)?.userId as string) ?? null) : null,
         status: a.status as ApprovalDTO['status'],
         decidedById: (a.decidedBy as string) ?? null,
         decidedByName: profileRef(a.decidedBy)?.fullName ?? null,
@@ -223,6 +228,8 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
     storage: createMemoryStorage(),
     budgetMappings: createMemoryBudgetMappings(db),
     indirect: createMemoryIndirect(db),
+    outOfScope: createMemoryOutOfScope(db, audit),
+    approvalFlows: createMemoryApprovalFlows(db, audit),
 
     // ------------------------------------------------------------------ identidade
     identity: {
@@ -445,6 +452,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
           id: competitionId, workId: data.workId, budgetId: data.budgetId, code: data.code, title: data.title,
           description: data.description, status: 'open', packageCode: data.packageCode, requestedOn: data.requestedOn,
           currentRevisionId: revisionId, engineeringOwnerId: null, procurementOwnerId: data.procurementOwnerId, createdBy: actorId,
+          requestKind: data.requestKind, origin: data.origin, directorId: data.directorId,
         }, audit, scope)
         db.insert('competition_revisions', {
           id: revisionId, competitionId, number: 0, status: 'draft', reason: null, serviceStartOn: null, serviceEndOn: null,
@@ -473,6 +481,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
             planningCode: i.planningCode ?? null,
             planningDescription: i.planningDescription ?? null,
             chosenSupplierId: i.chosenSupplierId ?? null,
+            outOfScopeQuantity: i.outOfScopeQuantity ?? null,
             referenceIds: itemRefs.filter((x) => x.itemId === i.id).map((x) => x.referenceId as string),
           }) as QcItemDTO)
         const references = db
@@ -520,6 +529,10 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
             procurementOwner: profileRef(c.procurementOwnerId),
             engineeringOwnerName: (c.engineeringOwnerName as string) ?? profileRef(c.engineeringOwnerId)?.fullName ?? null,
             procurementOwnerName: (c.procurementOwnerName as string) ?? profileRef(c.procurementOwnerId)?.fullName ?? null,
+            requestKind: (c.requestKind as CompetitionData['competition']['requestKind']) ?? null,
+            origin: (c.origin as CompetitionData['competition']['origin']) ?? null,
+            directorId: (c.directorId as string) ?? null,
+            directorName: typeof c.directorId === 'string' ? ((db.get('approval_directors', c.directorId)?.name as string) ?? null) : null,
           },
           revision: revision as unknown as RevisionDTO,
           revisions,
