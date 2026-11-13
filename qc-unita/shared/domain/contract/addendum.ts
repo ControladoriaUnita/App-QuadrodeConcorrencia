@@ -4,8 +4,11 @@
  * Regras
  *  - Lançamento é item a item: o valor do aditamento é sempre a soma dos itens (Δ quant. × R$ unit.),
  *    nunca um valor geral do contrato.
- *  - Aditivo soma quantidade (itens do contrato ou itens novos); distrato subtrai, só de itens do contrato
- *    e ao preço contratado. Quem digita informa a quantidade positiva; o sinal vem do tipo.
+ *  - Aditivo acrescenta quantidade (itens do contrato ou itens novos) e, na mesma solicitação, pode
+ *    reduzir outros itens do contrato (remanejamento: zerar uma linha e acrescentar em outra). A redução
+ *    é só de itens do contrato e ao preço contratado. O total é o líquido (acréscimos − reduções).
+ *  - Distrato só subtrai, de itens do contrato e ao preço contratado.
+ *  - Quem digita informa a quantidade positiva; o sinal vem do tipo (distrato) ou da linha (reduzir).
  *  - Cada item é distribuído entre os IPs (vínculos de planejamento), para o planejamento vincular no ERP.
  *    A soma dos vínculos fecha com a quantidade do item; no distrato, nenhum IP fica negativo.
  *  - A quantidade acumulada do item (contrato + lançamentos aprovados + este) não pode ficar negativa.
@@ -23,9 +26,9 @@ export const ADDENDUM_KIND_LABEL: Record<AddendumKind, { singular: string; verb:
   termination: { singular: 'distrato', verb: 'distratar' },
 }
 
-/** Aplica o sinal do tipo a uma quantidade informada como positiva. */
-export function signedQuantity(kind: AddendumKind, quantity: Decimal): Decimal {
-  return kind === 'termination' ? quantity.abs().neg() : quantity.abs()
+/** Aplica o sinal a uma quantidade informada como positiva: negativa no distrato e nas linhas reduzidas do aditivo. */
+export function signedQuantity(kind: AddendumKind, quantity: Decimal, reduce = false): Decimal {
+  return kind === 'termination' || reduce ? quantity.abs().neg() : quantity.abs()
 }
 
 export interface AddendumAllocation {
@@ -55,8 +58,12 @@ export interface AddendumSummary {
   initialTotal: Decimal
   /** Σ lançamentos aprovados anteriores (aditivos − distratos) */
   previousTotal: Decimal
-  /** Total deste lançamento (soma dos itens) */
+  /** Total deste lançamento (soma dos itens: acréscimos − reduções) */
   totalDelta: Decimal
+  /** Soma das linhas que acrescentam */
+  increases: Decimal
+  /** Soma das linhas que reduzem (valor negativo) */
+  decreases: Decimal
   /** Novo total do contrato (inicial + anteriores + este) */
   newTotal: Decimal
 }
@@ -82,7 +89,9 @@ export function computeAddendum(contractItems: ContractItemBase[], previous: Add
   const initialTotal = Decimal.sum(contractItems.map((i) => i.totalPrice))
   const previousTotal = Decimal.sum(previous.map((p) => lineTotal(p.unitPrice, p.quantityDelta)))
   const totalDelta = Decimal.sum(result.map((r) => r.totalDelta))
-  return { lines: result, initialTotal, previousTotal, totalDelta, newTotal: initialTotal.plus(previousTotal).plus(totalDelta) }
+  const increases = Decimal.sum(result.filter((r) => r.totalDelta.isPositive()).map((r) => r.totalDelta))
+  const decreases = Decimal.sum(result.filter((r) => r.totalDelta.isNegative()).map((r) => r.totalDelta))
+  return { lines: result, initialTotal, previousTotal, totalDelta, increases, decreases, newTotal: initialTotal.plus(previousTotal).plus(totalDelta) }
 }
 
 /** Quantidade vigente de cada IP de um item do contrato: vínculos do contrato + lançamentos aprovados. */
@@ -132,13 +141,14 @@ export function validateAddendum(
   if (a.newEndOn && a.newEndOn < a.contractStartOn) issues.push({ field: 'newEndOn', message: 'A nova data de término é anterior ao início do contrato.' })
   if (a.newEndOn && a.newEndOn === a.currentEndOn) issues.push({ field: 'newEndOn', message: 'A nova data de término é igual à vigente.' })
 
-  const wrongSign = summary.lines.filter((l) => (a.kind === 'addendum' ? !l.quantityDelta.isPositive() : !l.quantityDelta.isNegative()))
+  const reduction = a.kind === 'termination' ? 'O distrato' : 'A redução'
+  const wrongSign = summary.lines.filter((l) => (a.kind === 'addendum' ? l.quantityDelta.isZero() : !l.quantityDelta.isNegative()))
   if (wrongSign.length) issues.push({ field: 'items', message: `Quantidade inválida em ${codes(wrongSign)}: informe um valor maior que zero.` })
-  if (a.kind === 'termination' && summary.lines.some((l) => !l.contractItemId)) {
-    issues.push({ field: 'items', message: 'O distrato só reduz itens do contrato.' })
+  if (summary.lines.some((l) => l.quantityDelta.isNegative() && !l.contractItemId)) {
+    issues.push({ field: 'items', message: a.kind === 'termination' ? 'O distrato só reduz itens do contrato.' : 'Só itens do contrato podem ser reduzidos.' })
   }
   const negative = summary.lines.filter((l) => l.quantityAfter.isNegative())
-  if (negative.length) issues.push({ field: 'items', message: `O distrato passa da quantidade contratada em ${codes(negative)}.` })
+  if (negative.length) issues.push({ field: 'items', message: `${reduction} passa da quantidade contratada em ${codes(negative)}.` })
   if (summary.lines.some((l) => l.unitPrice.isNegative())) issues.push({ field: 'items', message: 'R$ unitário não pode ser negativo.' })
 
   // Vínculos de planejamento: todo item distribuído entre IPs, soma igual à quantidade do item
@@ -151,15 +161,16 @@ export function validateAddendum(
   if (summary.lines.some((l) => l.allocations.some((x) => !x.packageCode.trim()))) {
     issues.push({ field: 'allocations', message: 'Todo vínculo precisa de um IP.' })
   }
-  if (a.kind === 'termination') {
+  // Toda redução (distrato ou linha reduzida do aditivo) respeita a quantidade vigente de cada IP
+  {
     const items = new Map(context.contractItems.map((i) => [i.id, i]))
     const over = summary.lines.filter((l) => {
       const item = l.contractItemId ? items.get(l.contractItemId) : undefined
-      if (!item) return false
+      if (!item || !l.quantityDelta.isNegative()) return false
       const current = currentAllocations(item, context.previous)
       return l.allocations.some((x) => (current.get(x.packageCode) ?? ZERO).plus(x.quantity).isNegative())
     })
-    if (over.length) issues.push({ field: 'allocations', message: `O distrato passa da quantidade vigente do IP em ${codes(over)}.` })
+    if (over.length) issues.push({ field: 'allocations', message: `${reduction} passa da quantidade vigente do IP em ${codes(over)}.` })
   }
   return issues
 }

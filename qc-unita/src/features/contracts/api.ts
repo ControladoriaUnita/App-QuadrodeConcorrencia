@@ -60,11 +60,6 @@ export function useContractMutations(id: string) {
     }),
     submit: useMutation({ mutationFn: () => api(`${base}/submit`, { method: 'POST' }), ...opts }),
     cancel: useMutation({ mutationFn: (reason: string) => api(`${base}/cancel`, { method: 'POST', body: { reason } }), ...opts }),
-    pushToErp: useMutation({ mutationFn: () => api<{ erpContractId: string }>(`${base}/erp-push`, { method: 'POST' }), ...opts }),
-    sign: useMutation({
-      mutationFn: (b: { signedOn: string; erpContractId?: string }) => api(`${base}/sign`, { method: 'POST', body: b }),
-      ...opts,
-    }),
     createAddendum: useMutation({
       mutationFn: (b: SaveAddendumInput) => api<{ id: string; number: number }>(`${base}/addenda`, { method: 'POST', body: b }),
       ...opts,

@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Quadro de Concorrência · Unità Engenharia — schema completo
--- GERADO por scripts/build-db-setup.mjs a partir de 25 migrations
--- (001_initial_schema.sql … 025_out_of_scope_costs.sql). Não edite à mão: altere a migration e rode npm run db:bundle.
+-- GERADO por scripts/build-db-setup.mjs a partir de 26 migrations
+-- (001_initial_schema.sql … 026_addendum_reduce_lines.sql). Não edite à mão: altere a migration e rode npm run db:bundle.
 --
 -- Como usar: Supabase → SQL Editor → New query → cole tudo → Run.
 -- Roda numa única transação: se algo falhar, nada fica pela metade.
@@ -3485,6 +3485,36 @@ create policy out_of_scope_costs_write on public.out_of_scope_costs for all to a
 
 grant select, insert, update, delete on public.out_of_scope_costs to authenticated;
 
+-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 026_addendum_reduce_lines.sql
+-- =============================================================================
+-- 026_addendum_reduce_lines.sql
+-- Aditivo com acréscimo e redução na mesma solicitação (remanejamento entre linhas).
+--
+--   * No aditivo, cada item pode acrescentar (quantidade positiva) ou reduzir (negativa). A redução
+--     é só de itens do contrato. O total do aditivo é o líquido.
+--   * O distrato continua só reduzindo itens do contrato.
+--   * Nada muda nas tabelas: só a regra de sinal do trigger.
+-- =============================================================================
+
+create or replace function public.check_addendum_item_sign()
+returns trigger language plpgsql
+as $$
+declare v_kind public.addendum_kind;
+begin
+  select kind into v_kind from public.contract_addenda where id = new.addendum_id;
+  if new.quantity_delta = 0 then
+    raise exception 'ADDENDUM_SIGN: a quantidade do item % não pode ser zero', new.code using errcode = 'P0001';
+  end if;
+  if new.quantity_delta < 0 and new.contract_request_item_id is null then
+    raise exception 'ADDENDUM_SIGN: só itens do contrato podem ser reduzidos (%)', new.code using errcode = 'P0001';
+  end if;
+  if v_kind = 'termination' and new.quantity_delta > 0 then
+    raise exception 'ADDENDUM_SIGN: no distrato o item % deve ter quantidade negativa', new.code using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
 -- Registro das migrations aplicadas (para o Supabase CLI não reaplicar com db push)
 create schema if not exists supabase_migrations;
 create table if not exists supabase_migrations.schema_migrations (version text primary key, statements text[], name text);
@@ -3513,7 +3543,8 @@ insert into supabase_migrations.schema_migrations (version, name) values
   ('022', 'budget_mappings_indirect'),
   ('023', 'item_choice_owner_names'),
   ('024', 'purge_work'),
-  ('025', 'out_of_scope_costs')
+  ('025', 'out_of_scope_costs'),
+  ('026', 'addendum_reduce_lines')
 on conflict (version) do nothing;
 
 commit;

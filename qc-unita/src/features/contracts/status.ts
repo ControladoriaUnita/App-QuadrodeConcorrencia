@@ -3,9 +3,10 @@ import type { Tone } from '@/components/ui'
 
 export const contractStatus: Record<ContractRequestStatus, { label: string; tone: Tone }> = {
   draft: { label: 'Rascunho', tone: 'neutral' },
-  submitted: { label: 'Enviada a Contratos', tone: 'warning' },
-  sent_to_erp: { label: 'No ERP', tone: 'info' },
-  signed: { label: 'Assinado', tone: 'success' },
+  // sent_to_erp e signed: contratos antigos (antes de sair a assinatura); todos contam como concluídos
+  submitted: { label: 'Concluído', tone: 'success' },
+  sent_to_erp: { label: 'Concluído', tone: 'success' },
+  signed: { label: 'Concluído', tone: 'success' },
   cancelled: { label: 'Cancelada', tone: 'neutral' },
 }
 

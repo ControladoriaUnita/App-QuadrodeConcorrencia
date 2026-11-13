@@ -21,7 +21,17 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 | Ambiente | Versão |
 |---|---|
 | produção | v11 |
-| dev | v12 |
+| dev | v13 |
+
+## v13 — dev (2026-11-13)
+
+- **Contrato sem assinatura e sem ERP:** a aprovação acontece no QC, então a solicitação de contrato passa direto a **Concluído** ao clicar em **Enviar e concluir**. Saíram os botões **Registrar assinatura** e **Enviar ao ERP** e as rotas deles (não há API de contrato na UAU). Contratos antigos "No ERP" ou "Assinado" aparecem como Concluído e continuam aceitando aditivos.
+- **Aditivo com acréscimo e redução (remanejamento):** no mesmo aditivo, cada item do contrato pode **acrescentar (+)** ou **reduzir (−)**. Exemplo: zerar uma linha (botão **zerar**) e acrescentar a quantidade em outra linha ou num item novo. A redução:
+  - usa o preço contratado;
+  - não passa da quantidade vigente do item nem da de cada IP.
+- O aditivo mostra acréscimos, reduções e o líquido; o líquido é o que entra no contrato. A transferência de saldo é digitada pelo usuário, sem cálculo automático.
+- Simulado: o cenário "contrato assinado" virou "contrato concluído".
+- Banco: migration `026_addendum_reduce_lines.sql` (só a regra de sinal dos itens do aditivo). Rodar no Supabase antes de liberar. Também é preciso rodar a `025` da v12.
 
 ## v12 — dev (2026-11-12)
 

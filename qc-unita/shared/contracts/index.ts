@@ -1082,7 +1082,7 @@ export interface ContractRequestDTO {
   contractTypes: ContractTypeDTO[]
   /** Pendências para envio (somente em rascunho) */
   issues: { field: string; message: string }[]
-  can: { manage: boolean; edit: boolean; submit: boolean; cancel: boolean; pushToErp: boolean; sign: boolean; addendum: boolean; decideAddendum: boolean }
+  can: { manage: boolean; edit: boolean; submit: boolean; cancel: boolean; addendum: boolean; decideAddendum: boolean }
 }
 
 export const createContractRequestSchema = z.object({ competitionId: uuid })
@@ -1114,7 +1114,6 @@ export const updateContractItemSchema = z
 export type UpdateContractItemInput = z.infer<typeof updateContractItemSchema>
 
 export const cancelContractSchema = z.object({ reason: z.string().trim().min(5, 'Explique o motivo do cancelamento').max(1000) })
-export const signContractSchema = z.object({ signedOn: isoDate, erpContractId: z.string().trim().max(60).optional() })
 
 /** Quantidade digitada: sempre positiva; o sinal vem do tipo (aditivo +, distrato −). */
 const positiveQuantity = decimalString.refine((v) => !v.startsWith('-') && !/^0+(\.0+)?$/.test(v), 'Informe uma quantidade maior que zero')
@@ -1129,7 +1128,9 @@ const addendumItemSchema = z.union([
   z.object({
     contractItemId: uuid,
     quantity: positiveQuantity,
-    /** Só no aditivo; o distrato usa o preço contratado */
+    /** Só no aditivo: true reduz o item (remanejamento), ao preço contratado */
+    reduce: z.boolean().optional(),
+    /** Só no acréscimo do aditivo; distrato e redução usam o preço contratado */
     unitPrice: decimalString.optional(),
     allocations: z.array(addendumAllocationSchema).max(100),
   }),

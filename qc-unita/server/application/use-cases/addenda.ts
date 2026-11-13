@@ -21,6 +21,7 @@ import {
 } from '../../../shared/domain/contract/addendum'
 import { AppError, notFound, type RequestContext } from '../context'
 import type { AddendumContent, ContractData, NewAddendumItem, Repositories } from '../ports'
+import { isConcluded } from '../../../shared/domain/contract/contract-request'
 import { canDecideAddendum, loadContract } from './contracts'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
@@ -51,9 +52,9 @@ const approvedLines = (c: ContractData, exceptId?: string) =>
 function resolveItems(c: ContractData, kind: AddendumKind, items: AddendumItemInput[]): NewAddendumItem[] {
   const byId = new Map(c.items.map((i) => [i.id, i]))
   const seen = new Set<string>()
-  const signed = (v: string) => signedQuantity(kind, Decimal.from(v)).round(4).toDb()
-  const allocationsOf = (it: AddendumItemInput) =>
-    it.allocations.map((a) => ({ packageCode: a.packageCode.trim(), locationCode: a.locationCode?.trim() || null, quantity: signed(a.quantity) }))
+  const signed = (v: string, reduce: boolean) => signedQuantity(kind, Decimal.from(v), reduce).round(4).toDb()
+  const allocationsOf = (it: AddendumItemInput, reduce: boolean) =>
+    it.allocations.map((a) => ({ packageCode: a.packageCode.trim(), locationCode: a.locationCode?.trim() || null, quantity: signed(a.quantity, reduce) }))
 
   return items.map((it) => {
     if (it.contractItemId) {
@@ -61,18 +62,19 @@ function resolveItems(c: ContractData, kind: AddendumKind, items: AddendumItemIn
       if (!ci) throw new AppError('ADDENDUM_ITEM', 'Item não pertence a este contrato.', 422)
       if (seen.has(ci.id)) throw new AppError('ADDENDUM_ITEM_DUPLICATED', `O item ${ci.code} foi informado duas vezes.`, 422)
       seen.add(ci.id)
-      // Distrato devolve ao preço contratado; aditivo pode renegociar o unitário
-      const unitPrice = kind === 'termination' ? ci.unitPrice : (it.unitPrice ?? ci.unitPrice)
+      // Distrato e redução (remanejamento) devolvem ao preço contratado; o acréscimo pode renegociar o unitário
+      const reduce = 'reduce' in it && it.reduce === true
+      const unitPrice = kind === 'termination' || reduce ? ci.unitPrice : (it.unitPrice ?? ci.unitPrice)
       return {
         contractItemId: ci.id, materialId: ci.materialId, code: ci.code, description: ci.description, unit: ci.unit,
-        quantityDelta: signed(it.quantity), unitPrice: Decimal.from(unitPrice).round(4).toDb(), allocations: allocationsOf(it),
+        quantityDelta: signed(it.quantity, reduce), unitPrice: Decimal.from(unitPrice).round(4).toDb(), allocations: allocationsOf(it, reduce),
       }
     }
     if (kind === 'termination') throw new AppError('ADDENDUM_ITEM', 'O distrato só reduz itens do contrato.', 422)
     const n = it as Extract<AddendumItemInput, { code: string }>
     return {
       contractItemId: null, materialId: null, code: n.code, description: n.description, unit: n.unit,
-      quantityDelta: signed(n.quantity), unitPrice: Decimal.from(n.unitPrice).round(4).toDb(), allocations: allocationsOf(n),
+      quantityDelta: signed(n.quantity, false), unitPrice: Decimal.from(n.unitPrice).round(4).toDb(), allocations: allocationsOf(n, false),
     }
   })
 }
@@ -101,7 +103,7 @@ async function loadAddendum(repos: Repositories, ctx: RequestContext, addendumId
 // ----------------------------------------------------------------------------- casos de uso
 export async function createAddendum(repos: Repositories, ctx: RequestContext, contractId: string, input: SaveAddendumData) {
   const c = await loadContract(repos, ctx, contractId, 'contract.manage')
-  if (!['submitted', 'sent_to_erp', 'signed'].includes(c.status)) {
+  if (!isConcluded(c.status)) {
     throw new DomainError('CONTRACT_STATUS', 'Aditivos e distratos só podem ser solicitados para contratos já enviados.', { status: c.status })
   }
   if (c.addenda.some(isOpen)) {

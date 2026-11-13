@@ -347,7 +347,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
         </div>
         <div class="card">
           <h3>Simulado (administrador)</h3>
-          <p><b>Gerar simulado</b> apaga as concorrências, contratos, aditivos e anexos da obra (a obra e o orçamento ficam) e cria, a partir do orçamento dela, uma concorrência em cada estágio do app: em cotação (convite e propostas, com cotação escolhida em andamento), em aprovação parada em cada alçada, reprovada, aprovada, cotação escolhida com uma solicitação por empresa, solicitação enviada, contrato assinado, aditivo aguardando e aprovado, distrato, solicitação cancelada e contratado com nova revisão. Os títulos começam com “Simulado NN”. Digite o número da obra para confirmar; o andamento aparece cenário a cenário, com o link de cada QC. A alçada da Diretoria só é gerada se o saldo livre do orçamento passar do valor dela.</p>
+          <p><b>Gerar simulado</b> apaga as concorrências, contratos, aditivos e anexos da obra (a obra e o orçamento ficam) e cria, a partir do orçamento dela, uma concorrência em cada estágio do app: em cotação (convite e propostas, com cotação escolhida em andamento), em aprovação parada em cada alçada, reprovada, aprovada, cotação escolhida com uma solicitação por empresa, contrato concluído, aditivo aguardando e aprovado, distrato, solicitação cancelada e contratado com nova revisão. Os títulos começam com “Simulado NN”. Digite o número da obra para confirmar; o andamento aparece cenário a cenário, com o link de cada QC. A alçada da Diretoria só é gerada se o saldo livre do orçamento passar do valor dela.</p>
         </div>
       </div>
     </section>
@@ -482,16 +482,14 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
         <div class="card"><h3>Com cotação escolhida</h3><p>Se a revisão aprovada tem insumos com empresa escolhida no mapa, nasce <b>uma solicitação por empresa escolhida</b>, cada uma só com os insumos dela, ao preço dela. Insumos sem escolha ficam de fora e são anotados nas observações. O QC mostra um botão para cada solicitação; se uma for cancelada, <b>Gerar solicitação de contrato</b> volta e gera só a que falta.</p></div>
         <div class="card"><h3>Vínculos por insumo</h3><p>Cada insumo leva os vínculos <b>IP · Qtd · Valor</b>: herdados das referências (pela verba das linhas) ou o IP manual. Abaixo de cada insumo aparecem as referências usadas, com IP e verba.</p></div>
         <div class="card"><h3>Distribuição</h3><p>% material, % equipamento e % MDO/serviço do contrato, ponderados pelo valor de cada insumo.</p></div>
-        <div class="card"><h3>Envio</h3><p>Complete tipo, vigência, critérios de medição e, com faturamento direto, os materiais faturados à contratante. <b>Enviar a Contratos</b>; depois, registre a assinatura.</p></div>
+        <div class="card"><h3>Envio</h3><p>Complete tipo, vigência, critérios de medição e, com faturamento direto, os materiais faturados à contratante. <b>Enviar e concluir</b>: a aprovação já aconteceu no QC, então o contrato passa direto a Concluído. Não há assinatura nem envio ao ERP.</p></div>
       </div>
       <div class="tbl">
         <table>
           <thead><tr><th>Situação</th><th>Significado</th></tr></thead>
           <tbody>
             <tr><td><span class="badge">Rascunho</span></td><td>Em preenchimento.</td></tr>
-            <tr><td><span class="badge b-warn">Enviada a Contratos</span></td><td>Dados e itens bloqueados; mudanças de quantidade, preço ou prazo seguem por aditivo.</td></tr>
-            <tr><td><span class="badge b-info">No ERP</span></td><td>Contrato criado no ERP.</td></tr>
-            <tr><td><span class="badge b-ok">Assinado</span></td><td>Contrato assinado.</td></tr>
+            <tr><td><span class="badge b-ok">Concluído</span></td><td>Enviado. Dados e itens bloqueados; mudanças de quantidade, preço ou prazo seguem por aditivo.</td></tr>
             <tr><td><span class="badge">Cancelada</span></td><td>Solicitação cancelada, com motivo.</td></tr>
           </tbody>
         </table>
@@ -502,7 +500,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
     <section id="aditivos">
       <div class="lede"><p class="eyebrow">Contrato em andamento</p><h2>Aditivos e distratos</h2></div>
       <div class="prose">
-        <p>Na solicitação de contrato, aba <b>Aditivos e distratos</b>. O <b>aditivo</b> soma quantidades (ou inclui itens novos) e pode mudar o término; o <b>distrato</b> subtrai quantidades de itens existentes. Cada item leva o motivo e os vínculos de IP com a quantidade de cada um.</p>
+        <p>Na solicitação de contrato, aba <b>Aditivos e distratos</b>. O <b>aditivo</b> soma quantidades (ou inclui itens novos) e pode mudar o término. No mesmo aditivo, cada item do contrato pode <b>acrescentar (+)</b> ou <b>reduzir (−)</b>: é o remanejamento, por exemplo zerar uma linha (botão <b>zerar</b>) e acrescentar a quantidade em outra. A redução usa o preço contratado, e o total mostra acréscimos, reduções e o líquido. O <b>distrato</b> subtrai quantidades de itens existentes. Cada item leva o motivo e os vínculos de IP com a quantidade de cada um.</p>
         <p>Depois de aprovado, o aditivo entra no “Contratado” da obra: <b>novo total = contrato inicial + aditivos aprovados − distratos</b>.</p>
       </div>
     </section>

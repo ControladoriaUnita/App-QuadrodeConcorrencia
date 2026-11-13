@@ -1,9 +1,13 @@
 /**
  * Casos de uso da Solicitação de Contrato (aditivos e distratos em ./addenda.ts).
  *
- *   draft ──submit──▶ submitted ──ERP──▶ sent_to_erp ──assinatura──▶ signed
+ *   draft ──enviar──▶ submitted (Concluído)
  *     │                   │
  *     └──── cancel ───────┘ (cancelled)
+ *
+ * A aprovação acontece no QC (a solicitação só nasce de revisão aprovada); enviar conclui.
+ * Não há assinatura nem envio ao ERP (sem API de contrato). sent_to_erp e signed são de
+ * contratos antigos e também valem como concluídos.
  */
 import type {
   ContractListItemDTO,
@@ -17,6 +21,7 @@ import { DomainError } from '../../../shared/domain/competition/revision'
 import {
   buildChosenContractDrafts,
   buildContractDraft,
+  isConcluded,
   contractBudgetShare,
   contractDistribution,
   hasChosenQuotation,
@@ -24,7 +29,6 @@ import {
   validateContractRequest,
   type ContractDraft,
 } from '../../../shared/domain/contract/contract-request'
-import { erpSupports, type ERPProvider } from '../../infrastructure/erp/erp-provider'
 import { AppError, can, notFound, requirePermission, type Actor, type RequestContext } from '../context'
 import type { ContractData, NewContractRequest, Repositories } from '../ports'
 
@@ -67,7 +71,7 @@ export async function listContracts(repos: Repositories, ctx: RequestContext, fi
   return all.filter((c) => can(ctx.actor, 'contract.read', c.workId))
 }
 
-export async function getContract(repos: Repositories, erp: ERPProvider, ctx: RequestContext, id: string): Promise<ContractRequestDTO> {
+export async function getContract(repos: Repositories, ctx: RequestContext, id: string): Promise<ContractRequestDTO> {
   const c = await loadContract(repos, ctx, id)
   const workId = c.work.id
   const manage = can(ctx.actor, 'contract.manage', workId)
@@ -83,10 +87,7 @@ export async function getContract(repos: Repositories, erp: ERPProvider, ctx: Re
       edit: manage && c.status === 'draft',
       submit: manage && c.status === 'draft',
       cancel: manage && (c.status === 'draft' || c.status === 'submitted'),
-      // Só quando o ERP configurado sabe criar contrato (a API da UAU não tem essa rota)
-      pushToErp: manage && c.status === 'submitted' && erpSupports(erp, 'pushContract'),
-      sign: manage && (c.status === 'submitted' || c.status === 'sent_to_erp'),
-      addendum: manage && ['submitted', 'sent_to_erp', 'signed'].includes(c.status) && !openAddendum,
+      addendum: manage && isConcluded(c.status) && !openAddendum,
       decideAddendum: canDecideAddendum(ctx.actor, workId) && c.addenda.some((a) => a.status === 'submitted'),
     },
   }
@@ -248,7 +249,7 @@ export async function submitContractRequest(repos: Repositories, ctx: RequestCon
 
 export async function cancelContractRequest(repos: Repositories, ctx: RequestContext, id: string, reason: string) {
   const c = await loadContract(repos, ctx, id, 'contract.manage')
-  assertStatus(c, ['draft', 'submitted'], 'Somente solicitações em rascunho ou enviadas (antes do ERP) podem ser canceladas.')
+  assertStatus(c, ['draft', 'submitted'], 'Somente solicitações em rascunho ou concluídas podem ser canceladas.')
   await repos.contracts.update(id, { status: 'cancelled', cancelReason: reason })
   const others = (await repos.contracts.list({ competitionId: c.competition.id })).filter((x) => x.id !== id && x.status !== 'cancelled' && x.status !== 'draft')
   if (c.status === 'submitted' && !others.length) {
@@ -259,46 +260,4 @@ export async function cancelContractRequest(repos: Repositories, ctx: RequestCon
     await repos.competitions.updateCompetition(c.competition.id, { status })
   }
   return { status: 'cancelled' as const }
-}
-
-/** Envia o contrato ao ERP (UAU/Senior via ERPProvider) e registra o integration_log. */
-export async function pushContractToErp(repos: Repositories, erp: ERPProvider, ctx: RequestContext, id: string) {
-  const c = await loadContract(repos, ctx, id, 'contract.manage')
-  assertStatus(c, ['submitted'], 'Somente solicitações enviadas podem ir para o ERP.')
-  if (!erpSupports(erp, 'pushContract')) {
-    throw new AppError('ERP_PUSH_UNAVAILABLE', `O ERP configurado (${erp.name}) não oferece criação de contrato pela API. Lance o contrato no ERP e registre a assinatura com o número dele.`, 501)
-  }
-  if (!c.work.erpId || !c.supplier.erpId) {
-    throw new DomainError('CONTRACT_ERP_IDS', 'Obra ou fornecedor sem código no ERP. Sincronize os cadastros antes de enviar.')
-  }
-  const logId = await repos.integrationLogs.start({
-    correlationId: ctx.correlationId, provider: erp.name, operation: 'push_contract', direction: 'outbound', triggeredBy: ctx.actor.id, integrationId: c.code,
-  })
-  try {
-    const { erpContractId } = await erp.pushContract({
-      contractRequestId: c.id,
-      workErpId: c.work.erpId,
-      supplierErpId: c.supplier.erpId,
-      contractTypeCode: c.contractType.code,
-      startOn: c.startOn,
-      endOn: c.endOn,
-      items: c.items.map((i) => ({ materialCode: i.code, quantity: i.quantity, unitPrice: i.unitPrice })),
-    })
-    await repos.contracts.update(id, { status: 'sent_to_erp', sentToErpAt: ctx.now().toISOString(), erpContractId })
-    await repos.integrationLogs.finish(logId, { status: 'success', recordsProcessed: c.items.length, recordsFailed: 0, message: `Contrato ${erpContractId} criado no ERP` })
-    return { erpContractId }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    await repos.integrationLogs.finish(logId, { status: 'error', recordsProcessed: 0, recordsFailed: c.items.length, message, errorDetail: { message } })
-    throw new AppError('ERP_PUSH_FAILED', `Falha ao enviar ao ERP: ${message}`, 502)
-  }
-}
-
-export async function signContract(repos: Repositories, ctx: RequestContext, id: string, input: { signedOn: string; erpContractId?: string }) {
-  const c = await loadContract(repos, ctx, id, 'contract.manage')
-  assertStatus(c, ['submitted', 'sent_to_erp'], 'A solicitação precisa estar enviada para registrar a assinatura.')
-  if (input.signedOn > today(ctx)) throw new DomainError('CONTRACT_SIGN_DATE', 'A data de assinatura não pode ser futura.')
-  const erpContractId = input.erpContractId?.trim() || c.erpContractId
-  await repos.contracts.update(id, { status: 'signed', signedOn: input.signedOn, ...(erpContractId !== c.erpContractId ? { erpContractId } : {}) })
-  return { status: 'signed' as const }
 }

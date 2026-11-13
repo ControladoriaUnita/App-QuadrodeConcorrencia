@@ -68,8 +68,7 @@ describe('simulado de todos os estágios', () => {
     const split = await byQc('cotacao-escolhida')
     expect(split.map((c) => c.status)).toEqual(['draft', 'draft'])
     expect(new Set(split.map((c) => c.supplierId)).size).toBe(2)
-    expect((await byQc('contrato-enviado')).map((c) => c.status)).toEqual(['submitted'])
-    expect((await byQc('contrato-assinado')).map((c) => c.status)).toEqual(['signed'])
+    expect((await byQc('contrato-concluido')).map((c) => c.status)).toEqual(['submitted'])
     expect((await byQc('contrato-cancelado')).map((c) => c.status)).toEqual(['cancelled'])
     const addendumOf = async (key: string) => (await call<ContractRequestDTO>('GET', `/contracts/${(await byQc(key))[0]!.id}`)).data.addenda
     expect((await addendumOf('aditivo-aguardando')).map((a) => [a.kind, a.status])).toEqual([['addendum', 'submitted']])

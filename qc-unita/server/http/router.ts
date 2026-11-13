@@ -35,7 +35,6 @@ import {
   createContractRequestSchema,
   decideAddendumSchema,
   saveAddendumSchema,
-  signContractSchema,
   updateContractItemSchema,
   updateContractRequestSchema,
   ATTACHMENT_ENTITIES,
@@ -235,7 +234,7 @@ route('GET', '/contracts', async ({ repos, ctx, url }) =>
 )
 route('POST', '/contracts', async ({ repos, ctx, body }) =>
   contracts.createContractRequest(repos, ctx, parse(createContractRequestSchema, await body()).competitionId), 201)
-route('GET', '/contracts/:id', async ({ repos, ctx, params }) => contracts.getContract(repos, getErpProvider(), ctx, parse(uuidParam, params.id)))
+route('GET', '/contracts/:id', async ({ repos, ctx, params }) => contracts.getContract(repos, ctx, parse(uuidParam, params.id)))
 route('PATCH', '/contracts/:id', async ({ repos, ctx, params, body }) => {
   await contracts.updateContractRequest(repos, ctx, parse(uuidParam, params.id), parse(updateContractRequestSchema, await body()))
   return { ok: true }
@@ -247,9 +246,6 @@ route('PATCH', '/contracts/:id/items/:itemId', async ({ repos, ctx, params, body
 route('POST', '/contracts/:id/submit', async ({ repos, ctx, params }) => contracts.submitContractRequest(repos, ctx, parse(uuidParam, params.id)))
 route('POST', '/contracts/:id/cancel', async ({ repos, ctx, params, body }) =>
   contracts.cancelContractRequest(repos, ctx, parse(uuidParam, params.id), parse(cancelContractSchema, await body()).reason))
-route('POST', '/contracts/:id/erp-push', async ({ repos, ctx, params }) => contracts.pushContractToErp(repos, getErpProvider(), ctx, parse(uuidParam, params.id)))
-route('POST', '/contracts/:id/sign', async ({ repos, ctx, params, body }) =>
-  contracts.signContract(repos, ctx, parse(uuidParam, params.id), parse(signContractSchema, await body())))
 route('POST', '/contracts/:id/addenda', async ({ repos, ctx, params, body }) =>
   addenda.createAddendum(repos, ctx, parse(uuidParam, params.id), parse(saveAddendumSchema, await body())), 201)
 route('PUT', '/addenda/:aid', async ({ repos, ctx, params, body }) => {

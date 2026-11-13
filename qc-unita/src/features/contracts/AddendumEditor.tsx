@@ -1,9 +1,10 @@
 /**
- * Editor de aditivo ou distrato, item a item. Quem digita informa quantidades positivas; o tipo define o sinal.
+ * Editor de aditivo ou distrato, item a item. Quem digita informa quantidades positivas; o sinal vem do tipo
+ * (distrato) ou da linha: no aditivo cada item do contrato pode acrescentar ou reduzir (remanejamento).
  * Cada item com quantidade é distribuído entre os IPs (sugestão proporcional ao IP vigente, editável).
  */
 import { useMemo, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Minus, Plus, Trash2 } from 'lucide-react'
 import type { AddendumDTO, AddendumKind, BudgetPackageDTO, ContractRequestDTO, SaveAddendumInput } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import { computeAddendum, currentAllocations, currentEndOn, signedQuantity, suggestAllocations } from '@shared/domain/contract/addendum'
@@ -20,6 +21,8 @@ interface ItemDraft {
   allocations: AllocationRow[]
   /** Vínculos ainda na sugestão automática (acompanham a quantidade) */
   auto: boolean
+  /** Só no aditivo: a linha reduz o item (ao preço contratado) */
+  reduce?: boolean
 }
 interface NewRow extends ItemDraft {
   key: number
@@ -54,7 +57,7 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
     Object.fromEntries(
       (addendum?.items ?? [])
         .filter((i) => i.contractItemId)
-        .map((i) => [i.contractItemId!, { quantity: abs(i.quantityDelta), unitPrice: i.unitPrice, auto: false, allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: abs(a.quantity) })) }]),
+        .map((i) => [i.contractItemId!, { quantity: abs(i.quantityDelta), unitPrice: i.unitPrice, auto: false, reduce: kind === 'addendum' && Decimal.from(i.quantityDelta).isNegative(), allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: abs(a.quantity) })) }]),
     ),
   )
   const [rows, setRows] = useState<NewRow[]>(() =>
@@ -69,12 +72,13 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
   // IPs vigentes por item (contrato + aprovados) e opções de IP
   const currentByItem = new Map(contractItems.map((i) => [i.id, currentAllocations(i, previousLines)]))
   const packageLabel = new Map(packages.map((p) => [p.packageCode, `${p.packageCode} — ${p.description}`]))
-  const optionsFor = (itemId: string | null): IpOption[] => {
+  const optionsFor = (itemId: string | null, reduce = false): IpOption[] => {
     const current = itemId ? currentByItem.get(itemId) : undefined
+    const reducing = isTermination || reduce
     const own = [...(current ?? new Map<string, Decimal>())]
       .filter(([k]) => k)
-      .map(([k, q]) => ({ packageCode: k, label: `${packageLabel.get(k) ?? k} · vigente ${formatQuantity(q)}`, available: isTermination ? q : undefined }))
-    if (isTermination) return own
+      .map(([k, q]) => ({ packageCode: k, label: `${packageLabel.get(k) ?? k} · vigente ${formatQuantity(q)}`, available: reducing ? q : undefined }))
+    if (reducing) return own
     const others = packages.filter((p) => !current?.has(p.packageCode)).map((p) => ({ packageCode: p.packageCode, label: packageLabel.get(p.packageCode)! }))
     return [...own, ...others]
   }
@@ -101,10 +105,12 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
           .filter((i) => drafts[i.id]?.quantity && Decimal.from(drafts[i.id]!.quantity!).isPositive())
           .map((i) => {
             const d = drafts[i.id]!
+            const reduce = !isTermination && !!d.reduce
             return {
               contractItemId: i.id,
               quantity: d.quantity!,
-              unitPrice: isTermination ? undefined : (d.unitPrice ?? i.unitPrice),
+              ...(reduce ? { reduce: true } : {}),
+              unitPrice: isTermination || reduce ? undefined : (d.unitPrice ?? i.unitPrice),
               allocations: d.allocations.filter((a) => a.packageCode && a.quantity).map((a) => ({ packageCode: a.packageCode, quantity: a.quantity! })),
             }
           }),
@@ -123,17 +129,20 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
     [kind, reason, requestedOn, newEndOn, drafts, rows, c.items, isTermination],
   )
 
-  const sign = (v: string) => signedQuantity(kind, Decimal.from(v))
   const summary = computeAddendum(
     contractItems,
     previousLines,
-    input.items.map((i) => ({
-      contractItemId: i.contractItemId ?? null,
-      code: 'code' in i ? i.code : '',
-      quantityDelta: sign(i.quantity),
-      unitPrice: Decimal.from(i.unitPrice ?? c.items.find((x) => x.id === i.contractItemId)?.unitPrice ?? '0'),
-      allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: sign(a.quantity) })),
-    })),
+    input.items.map((i) => {
+      const reduce = 'reduce' in i && i.reduce === true
+      const sign = (v: string) => signedQuantity(kind, Decimal.from(v), reduce)
+      return {
+        contractItemId: i.contractItemId ?? null,
+        code: 'code' in i ? i.code : '',
+        quantityDelta: sign(i.quantity),
+        unitPrice: Decimal.from(i.unitPrice ?? c.items.find((x) => x.id === i.contractItemId)?.unitPrice ?? '0'),
+        allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: sign(a.quantity) })),
+      }
+    }),
   )
   const qtyNow = new Map(contractItems.map((i) => [i.id, i.quantity]))
   for (const l of previousLines) if (l.contractItemId) qtyNow.set(l.contractItemId, (qtyNow.get(l.contractItemId) ?? Decimal.ZERO).plus(l.quantityDelta))
@@ -148,7 +157,7 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
         description={
           isTermination
             ? 'Informe quanto será retirado de cada item do contrato (ao preço contratado) e de quais IPs.'
-            : 'Informe a quantidade a aditivar por item (ou itens novos), o R$ unitário se mudar e os IPs de cada item.'
+            : 'Em cada item escolha acrescentar (+) ou reduzir (−) e informe a quantidade. Dá para zerar uma linha e acrescentar em outra no mesmo aditivo. A redução usa o preço contratado; o acréscimo aceita novo R$ unitário e itens novos.'
         }
         actions={
           <>
@@ -190,32 +199,77 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
               {c.items.map((i) => {
                 const d = drafts[i.id]
                 const qty = d?.quantity ? Decimal.from(d.quantity) : Decimal.ZERO
-                const delta = signedQuantity(kind, qty)
-                const price = Decimal.from(isTermination ? i.unitPrice : (d?.unitPrice ?? i.unitPrice))
+                const reduce = isTermination || !!d?.reduce
+                const delta = signedQuantity(kind, qty, reduce)
+                const price = Decimal.from(reduce ? i.unitPrice : (d?.unitPrice ?? i.unitPrice))
                 const before = qtyNow.get(i.id) ?? Decimal.ZERO
                 const after = before.plus(delta)
                 const active = qty.isPositive()
+                // Trocar acrescentar ↔ reduzir refaz a sugestão de IPs (a base muda: vigente × disponível)
+                const toggle = (next: boolean) =>
+                  setDrafts((s) => {
+                    const prev = s[i.id] ?? { quantity: null, unitPrice: null, allocations: [], auto: true }
+                    const allocations = prev.quantity ? toRows(suggestAllocations(currentByItem.get(i.id) ?? new Map(), Decimal.from(prev.quantity))) : []
+                    return { ...s, [i.id]: { ...prev, reduce: next, auto: true, allocations } }
+                  })
                 return [
-                  <tr key={i.id} className={cn(active && (isTermination ? 'bg-warning-soft/40' : 'bg-primary-soft/40'))}>
+                  <tr key={i.id} className={cn(active && (reduce ? 'bg-warning-soft/40' : 'bg-primary-soft/40'))}>
                     <td className={cn(td, 'max-w-72')}>
                       <p className="truncate" title={i.description}>{i.description}</p>
                       <p className="text-[11px] text-text-muted">{i.code}</p>
                     </td>
                     <td className={cn(td, 'text-right text-text-muted')}>{formatQuantity(before)} {i.unit}</td>
                     <td className={cn(td, 'px-1')}>
-                      <DecimalInput
-                        value={d?.quantity ?? null}
-                        fractionDigits={4}
-                        trimZeros
-                        max={isTermination ? before.toDb() : undefined}
-                        gridColumn="addendum-qty"
-                        aria-label={`${text.qty} de ${i.code}`}
-                        onCommit={(v) => setItem(i.id, { quantity: v })}
-                      />
+                      <div className="flex items-center gap-1">
+                        {!isTermination && (
+                          <div className="flex shrink-0 overflow-hidden rounded-control border border-border" role="group" aria-label={`Movimento de ${i.code}`}>
+                            <button
+                              type="button"
+                              aria-pressed={!reduce}
+                              aria-label={`Acrescentar em ${i.code}`}
+                              title="Acrescentar"
+                              className={cn('p-1.5', !reduce ? 'bg-primary text-white' : 'text-ink-500 hover:bg-ink-50')}
+                              onClick={() => toggle(false)}
+                            >
+                              <Plus className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={reduce}
+                              aria-label={`Reduzir ${i.code}`}
+                              title="Reduzir (remanejamento)"
+                              className={cn('border-l border-border p-1.5', reduce ? 'bg-warning text-white' : 'text-ink-500 hover:bg-ink-50')}
+                              onClick={() => toggle(true)}
+                            >
+                              <Minus className="size-3.5" />
+                            </button>
+                          </div>
+                        )}
+                        <DecimalInput
+                          value={d?.quantity ?? null}
+                          fractionDigits={4}
+                          trimZeros
+                          max={reduce ? before.toDb() : undefined}
+                          gridColumn="addendum-qty"
+                          aria-label={`${isTermination ? text.qty : 'Quantidade'} de ${i.code}`}
+                          onCommit={(v) => setItem(i.id, { quantity: v })}
+                        />
+                        {reduce && before.isPositive() && (
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-control px-1.5 py-1 text-[11px] font-medium text-warning hover:bg-warning-soft"
+                            title="Reduzir toda a quantidade vigente"
+                            aria-label={`Zerar ${i.code}`}
+                            onClick={() => setItem(i.id, { quantity: before.toDb() })}
+                          >
+                            zerar
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className={cn(td, 'text-right', after.isNegative() && 'font-semibold text-error')}>{formatQuantity(after)}</td>
                     <td className={cn(td, 'px-1')}>
-                      {isTermination ? (
+                      {reduce ? (
                         <p className="py-1.5 text-right text-text-muted">{formatBRL(i.unitPrice)}</p>
                       ) : (
                         <DecimalInput
@@ -234,7 +288,7 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
                       <td colSpan={6} className="border-b border-border bg-ink-50/60 px-3 py-2">
                         <AllocationsEditor
                           rows={d!.allocations}
-                          options={optionsFor(i.id)}
+                          options={optionsFor(i.id, reduce)}
                           target={qty}
                           unit={i.unit}
                           onChange={(allocations) => setItem(i.id, { allocations, auto: false })}
