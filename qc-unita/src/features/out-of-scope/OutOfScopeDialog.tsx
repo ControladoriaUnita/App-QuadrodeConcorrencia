@@ -1,6 +1,7 @@
 /**
  * Lançar / editar um custo fora de escopo: insumo (da obra ou livre), quantidade, custo unitário,
- * motivo e justificativa; Item da EAP e IP opcionais. Validação pelo mesmo schema da API.
+ * motivo e justificativa; Item da EAP e IP opcionais. A solicitação é amarrada ao QC a que se
+ * refere (obrigatório quando a obra tem concorrências). Validação pelo mesmo schema da API.
  */
 import { useMemo, useState } from 'react'
 import type { OutOfScopeCategoryKey, OutOfScopeCostDTO, SaveOutOfScopeInput } from '@shared/contracts'
@@ -16,6 +17,8 @@ interface Props {
   workId: string
   /** null = novo lançamento */
   cost: OutOfScopeCostDTO | null
+  /** QCs da obra para relacionar a solicitação */
+  competitions: { id: string; code: string; title: string }[]
   saving: boolean
   error: ApiError | null
   onClose: () => void
@@ -24,7 +27,7 @@ interface Props {
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export function OutOfScopeDialog({ workId, cost, saving, error, onClose, onSave }: Props) {
+export function OutOfScopeDialog({ workId, cost, competitions, saving, error, onClose, onSave }: Props) {
   const materials = useWorkMaterials(workId)
   const structure = useBudgetStructure(workId)
   const codes = usePlanningCodes(workId)
@@ -41,6 +44,7 @@ export function OutOfScopeDialog({ workId, cost, saving, error, onClose, onSave 
   const [justification, setJustification] = useState(cost?.justification ?? '')
   const [requestedBy, setRequestedBy] = useState(cost?.requestedBy ?? '')
   const [occurredOn, setOccurredOn] = useState(cost?.occurredOn ?? today())
+  const [competitionId, setCompetitionId] = useState(cost?.competition?.id ?? '')
   const [touched, setTouched] = useState(false)
 
   const materialOptions = useMemo(
@@ -71,11 +75,19 @@ export function OutOfScopeDialog({ workId, cost, saving, error, onClose, onSave 
     justification,
     requestedBy: requestedBy.trim() || null,
     occurredOn,
+    competitionId: competitionId || null,
   }
   const parsed = saveOutOfScopeSchema.safeParse(input)
-  const empty: Record<string, string | null> = { quantity: quantity ? null : 'Informe a quantidade', unitCost: unitCost ? null : 'Informe o custo unitário', category: category ? null : 'Escolha o motivo' }
+  // A solicitação precisa apontar o QC de origem sempre que a obra tem concorrências
+  const needsCompetition = competitions.length > 0 && !competitionId
+  const empty: Record<string, string | null> = {
+    quantity: quantity ? null : 'Informe a quantidade',
+    unitCost: unitCost ? null : 'Informe o custo unitário',
+    category: category ? null : 'Escolha o motivo',
+    competitionId: needsCompetition ? 'Escolha a concorrência (QC) a que a solicitação se refere' : null,
+  }
   const issue = (field: string) =>
-    touched && !parsed.success ? (empty[field] ?? parsed.error.issues.find((i) => i.path[0] === field)?.message ?? null) : null
+    touched && (!parsed.success || needsCompetition) ? (empty[field] ?? (parsed.success ? null : parsed.error.issues.find((i) => i.path[0] === field)?.message) ?? null) : null
   const total = quantity && unitCost ? outOfScopeTotal(quantity, unitCost) : null
   const fromList = !free && !!code
 
@@ -94,7 +106,7 @@ export function OutOfScopeDialog({ workId, cost, saving, error, onClose, onSave 
             loading={saving}
             onClick={async () => {
               setTouched(true)
-              if (!parsed.success) return
+              if (!parsed.success || needsCompetition) return
               try {
                 await onSave(parsed.data)
                 onClose()
@@ -110,6 +122,19 @@ export function OutOfScopeDialog({ workId, cost, saving, error, onClose, onSave 
     >
       <div className="grid gap-4">
         {error && <Alert tone="error" title={error.message} />}
+        <Field
+          label="Concorrência (QC)"
+          required={competitions.length > 0}
+          error={issue('competitionId')}
+          hint={competitions.length ? 'QC a que esta solicitação fora de escopo se refere.' : 'A obra ainda não tem concorrências.'}
+        >
+          <Select value={competitionId} onChange={(e) => setCompetitionId(e.target.value)} disabled={!competitions.length}>
+            <option value="">{competitions.length ? 'Selecione…' : 'Sem concorrência'}</option>
+            {competitions.map((c) => (
+              <option key={c.id} value={c.id}>{c.code} — {c.title}</option>
+            ))}
+          </Select>
+        </Field>
         <SegmentedControl
           label="Origem do insumo"
           items={[{ key: 'obra', label: 'Insumo cadastrado' }, { key: 'livre', label: 'Insumo livre' }]}

@@ -1,10 +1,12 @@
 /**
  * Custos fora de escopo da obra: itens que não estão previstos no orçamento. Mostra o total e o
- * peso sobre o orçamento vigente, o resumo por motivo e por Item da EAP, e a lista de lançamentos.
+ * peso sobre o orçamento vigente, o resumo por motivo e por Item da EAP, as linhas fora de escopo
+ * apontadas nos mapas dos QCs (automáticas, com link para o QC de origem) e os lançamentos manuais
+ * (cada um pode apontar o QC a que se refere).
  */
 import { useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
+import { ExternalLink, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import type { OutOfScopeCategoryKey, OutOfScopeCostDTO } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import { OUT_OF_SCOPE_CATEGORIES, outOfScopeCode, summarizeOutOfScope } from '@shared/domain/budget/out-of-scope'
@@ -44,11 +46,13 @@ export function OutOfScopePage() {
     return (wbs: string) => names.get(wbs) ?? null
   }, [structure.data])
   const summary = useMemo(() => summarizeOutOfScope(items, list.data?.budgetTotal ?? null, groupName), [items, list.data, groupName])
+  const qcLines = useMemo(() => list.data?.fromCompetitions ?? [], [list.data])
+  const qcTotal = useMemo(() => Decimal.sum(qcLines.map((l) => l.total)), [qcLines])
   const filtered = useMemo(() => {
     const terms = fold(search).split(/\s+/).filter(Boolean)
     return items.filter((i) => {
       if (category && i.category !== category) return false
-      const text = fold(`${outOfScopeCode(i.number)} ${i.code ?? ''} ${i.description} ${i.justification} ${i.wbs ?? ''} ${i.wbsDescription ?? ''} ${i.planningCode ?? ''} ${i.requestedBy ?? ''}`)
+      const text = fold(`${outOfScopeCode(i.number)} ${i.code ?? ''} ${i.description} ${i.justification} ${i.wbs ?? ''} ${i.wbsDescription ?? ''} ${i.planningCode ?? ''} ${i.requestedBy ?? ''} ${i.competition?.code ?? ''} ${i.competition?.title ?? ''}`)
       return terms.every((t) => text.includes(t))
     })
   }, [items, search, category])
@@ -58,6 +62,10 @@ export function OutOfScopePage() {
 
   const canManage = !!list.data?.canManage
   const budget = list.data?.budgetTotal ?? null
+  // Total da obra: lançamentos manuais + linhas fora de escopo dos QCs
+  const grandTotal = summary.total.plus(qcTotal)
+  const ratio = budget && !Decimal.from(budget).isZero() ? grandTotal.div(budget, 6) : null
+  const qcHref = (competitionId: string, revisionId?: string) => `/obras/${workId}/qc/${competitionId}${revisionId ? `?rev=${revisionId}` : ''}`
   const filteredTotal = Decimal.sum(filtered.map((i) => i.total))
   const saving = m.create.isPending || m.update.isPending
   const saveError = ((editing === 'new' ? m.create.error : m.update.error) as ApiError | null) ?? null
@@ -91,14 +99,19 @@ export function OutOfScopePage() {
         className="mb-3"
         items={[
           { label: 'Orçamento vigente', value: budget ? formatBRL(budget) : 'Sem orçamento' },
-          { label: 'Custos fora de escopo', value: formatBRL(summary.total), hint: `${summary.count} lançamento(s)`, emphasis: !summary.total.isZero() },
+          {
+            label: 'Custos fora de escopo',
+            value: formatBRL(grandTotal),
+            hint: `${summary.count} lançamento(s) · ${qcLines.length} linha(s) de QC`,
+            emphasis: !grandTotal.isZero(),
+          },
           {
             label: 'Sobre o orçamento',
-            value: summary.ratio ? formatPercent(summary.ratio, 2) : EMPTY,
-            tone: summary.ratio && summary.ratio.gt('0.05') ? 'error' : summary.ratio && !summary.ratio.isZero() ? 'warning' : undefined,
-            hint: summary.ratio && summary.ratio.gt('0.05') ? 'acima de 5%' : undefined,
+            value: ratio ? formatPercent(ratio, 2) : EMPTY,
+            tone: ratio && ratio.gt('0.05') ? 'error' : ratio && !ratio.isZero() ? 'warning' : undefined,
+            hint: ratio && ratio.gt('0.05') ? 'acima de 5%' : undefined,
           },
-          { label: 'Orçamento + fora de escopo', value: budget ? formatBRL(summary.budgetWithOutOfScope) : EMPTY },
+          { label: 'Orçamento + fora de escopo', value: budget ? formatBRL(Decimal.from(budget).plus(grandTotal)) : EMPTY },
         ]}
       />
 
@@ -143,6 +156,60 @@ export function OutOfScopePage() {
         </div>
       )}
 
+      {qcLines.length > 0 && (
+        <Card className="mb-3">
+          <CardHeader
+            title="Apontados nos QCs"
+            description="Linhas fora de escopo dos mapas de cotação (revisão corrente de cada QC). São automáticas: mudam junto com o mapa. Para alterar, abra o QC de origem."
+          />
+          <div className="overflow-auto">
+            <table className="tabular w-full border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr>
+                  <th className={cn(th, 'text-left')}>QC de origem</th>
+                  <th className={cn(th, 'text-left')}>Insumo do mapa</th>
+                  <th className={cn(th, 'text-right')}>Quant. FE</th>
+                  <th className={cn(th, 'text-right')}>Unit. FE</th>
+                  <th className={cn(th, 'text-right')}>Total</th>
+                  <th className={cn(th, 'text-left')}>Origem da quantidade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {qcLines.map((l) => (
+                  <tr key={`${l.competitionId}-${l.itemId}`} className="hover:bg-ink-50">
+                    <td className={cn(td, 'whitespace-nowrap')}>
+                      <Link className="inline-flex items-center gap-1 font-semibold text-primary hover:underline" to={qcHref(l.competitionId, l.revisionId)}>
+                        {l.competitionCode} <ExternalLink className="size-3.5" aria-hidden />
+                      </Link>
+                      <p className="max-w-56 truncate text-[11px] leading-4 text-text-muted" title={l.competitionTitle}>
+                        {l.competitionTitle} · rev{String(l.revisionNumber).padStart(2, '0')}
+                      </p>
+                    </td>
+                    <td className={cn(td, 'max-w-80')}>
+                      <p className="truncate font-medium" title={l.description}>{l.description}</p>
+                      <p className="text-[11px] leading-4 text-text-muted">{l.code} · {l.unit}</p>
+                    </td>
+                    <td className={cn(td, 'text-right whitespace-nowrap')}>{formatQuantity(l.quantity)}</td>
+                    <td className={cn(td, 'text-right whitespace-nowrap')}>{l.unitCost ? formatBRL(l.unitCost) : <span className="text-text-muted">sem preço</span>}</td>
+                    <td className={cn(td, 'text-right font-semibold whitespace-nowrap')}>{formatBRL(l.total)}</td>
+                    <td className={td}>
+                      <Badge tone={l.informed ? 'warning' : 'neutral'}>{l.informed ? 'informada no mapa' : 'sem referência do orçamento'}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="font-semibold">
+                <tr>
+                  <td className="bg-ink-50 px-3 py-2" colSpan={4}>Total dos QCs</td>
+                  <td className="bg-ink-50 px-3 py-2 text-right whitespace-nowrap">{formatBRL(qcTotal)}</td>
+                  <td className="bg-ink-50" />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+      )}
+
       <Card>
         <CardHeader
           title="Lançamentos"
@@ -183,6 +250,7 @@ export function OutOfScopePage() {
                   <th className={cn(th, 'text-left')}>Data</th>
                   <th className={cn(th, 'text-left')}>Insumo</th>
                   <th className={cn(th, 'text-left')}>Motivo</th>
+                  <th className={cn(th, 'text-left')}>QC</th>
                   <th className={cn(th, 'text-left')}>Item da EAP · IP</th>
                   <th className={cn(th, 'text-right')}>Quant.</th>
                   <th className={cn(th, 'text-right')}>Custo unit.</th>
@@ -202,6 +270,15 @@ export function OutOfScopePage() {
                     </td>
                     <td className={td}>
                       <Badge tone={CATEGORY_TONE[i.category]}>{OUT_OF_SCOPE_CATEGORIES[i.category]}</Badge>
+                    </td>
+                    <td className={cn(td, 'whitespace-nowrap')}>
+                      {i.competition ? (
+                        <Link className="font-medium text-primary hover:underline" to={qcHref(i.competition.id)} title={i.competition.title}>
+                          {i.competition.code}
+                        </Link>
+                      ) : (
+                        EMPTY
+                      )}
                     </td>
                     <td className={cn(td, 'max-w-60')}>
                       <p className="truncate" title={i.wbsDescription ?? undefined}>{i.wbs ? `${i.wbs} · ${i.wbsDescription ?? ''}` : EMPTY}</p>
@@ -243,13 +320,13 @@ export function OutOfScopePage() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={canManage ? 10 : 9} className="px-3 py-8 text-center text-text-muted">Nenhum lançamento com esse filtro.</td>
+                    <td colSpan={canManage ? 11 : 10} className="px-3 py-8 text-center text-text-muted">Nenhum lançamento com esse filtro.</td>
                   </tr>
                 )}
               </tbody>
               <tfoot className="font-semibold">
                 <tr>
-                  <td className="bg-ink-50 px-3 py-2" colSpan={7}>
+                  <td className="bg-ink-50 px-3 py-2" colSpan={8}>
                     {filtered.length === items.length ? 'Total' : `Total filtrado (${filtered.length} de ${items.length})`}
                   </td>
                   <td className="bg-ink-50 px-3 py-2 text-right whitespace-nowrap">{formatBRL(filteredTotal)}</td>
@@ -265,6 +342,7 @@ export function OutOfScopePage() {
         <OutOfScopeDialog
           workId={workId}
           cost={editing === 'new' ? null : editing}
+          competitions={list.data?.competitions ?? []}
           saving={saving}
           error={saveError}
           onClose={() => setEditing(null)}

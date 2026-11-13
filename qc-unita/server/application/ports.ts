@@ -454,6 +454,8 @@ export interface OutOfScopeWrite {
   justification: string
   requestedBy: string | null
   occurredOn: string
+  /** QC a que a solicitação se refere */
+  competitionId: string | null
 }
 
 export interface OutOfScopeRepository {

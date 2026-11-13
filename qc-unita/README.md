@@ -54,7 +54,13 @@ Itens que não estão previstos no orçamento da obra — não há linha do orç
 
 - A tela mostra o total fora de escopo, o peso sobre o orçamento vigente (destaque acima de 5%), o orçamento + fora de escopo, o resumo por motivo e por Item da EAP e a lista com busca e filtro por motivo.
 - Leitura: `budget.read`. Lançar, editar e excluir: permissão nova `out_of_scope.manage` (Administrador, Suprimentos e Engenharia — os papéis que mantêm o orçamento). Tudo na auditoria campo a campo.
-- Os lançamentos **ainda não entram** no consumo do orçamento (faixa "comprometido") nem nas concorrências: ficam à parte, para a próxima etapa definir como entram.
+- **Ligado ao QC** (migration `027_qc_out_of_scope.sql`, domínio em `shared/domain/competition/scope.ts`):
+  - cada lançamento manual aponta o QC a que se refere (`competition_id`, obrigatório na tela quando a obra tem concorrências; o banco recusa QC de outra obra);
+  - no mapa do QC cada insumo tem **Quant. FE** (`competition_items.out_of_scope_quantity`; vazio = automático: insumo sem referência do orçamento é 100% FE) e **Unit. FE** (preço contratado);
+  - o rodapé do mapa mostra fora de escopo, total e resultado **sem** fora de escopo, além dos totais com ele;
+  - as linhas FE dos mapas (revisão corrente de cada QC) aparecem na aba em "Apontados nos QCs", calculadas na leitura e com link para o QC de origem.
+- **Desvio** é diferente de fora de escopo: preço ou quantidade acima do orçado num insumo que está no orçamento. É apontado **por linha** no mapa ("desvio de preço" / "desvio de quantidade"), nunca por pacote ou Item da EAP. A quantidade só é comparada quando as referências são só daquele insumo e na mesma unidade.
+- Os lançamentos ainda não entram no consumo do orçamento (faixa "comprometido").
 - Banco: migration `025_out_of_scope_costs.sql` (tabela `out_of_scope_costs`, numeração por obra, RLS e auditoria). Domínio em `shared/domain/budget/out-of-scope.ts`.
 
 ### Anexos

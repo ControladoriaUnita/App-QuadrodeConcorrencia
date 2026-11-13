@@ -2,7 +2,7 @@
  * Custos fora de escopo pela API (modo memória).
  */
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { OutOfScopeListDTO, WorkDTO } from '../../shared/contracts'
+import type { CompetitionDetailDTO, CompetitionListItemDTO, OutOfScopeListDTO, WorkDTO } from '../../shared/contracts'
 import { DEMO_USERS } from '../infrastructure/memory/seed'
 import { handle } from './router'
 
@@ -80,5 +80,51 @@ describe('custos fora de escopo', () => {
     expect((await call('DELETE', `/works/${alpha}/out-of-scope/${target.id}`, undefined, MGR)).status).toBe(403)
     expect((await call('DELETE', `/works/${alpha}/out-of-scope/${target.id}`)).status).toBe(200)
     expect((await call<OutOfScopeListDTO>('GET', `/works/${alpha}/out-of-scope`)).data.items.some((i) => i.id === target.id)).toBe(false)
+  })
+})
+
+describe('fora de escopo ligado ao QC', () => {
+  it('solicitação manual aponta um QC da obra (de outra obra é recusado)', async () => {
+    const { data } = await call<OutOfScopeListDTO>('GET', `/works/${alpha}/out-of-scope`)
+    expect(data.competitions.length).toBeGreaterThan(0)
+    expect(data.items.find((i) => i.number === 1)!.competition?.title).toMatch(/^Terraplenagem/)
+    const qc = data.competitions[0]!
+    const created = await call<{ id: string }>('POST', `/works/${alpha}/out-of-scope`, { ...base, competitionId: qc.id })
+    expect(created.status).toBe(201)
+    const after = (await call<OutOfScopeListDTO>('GET', `/works/${alpha}/out-of-scope`)).data.items.find((i) => i.id === created.data.id)!
+    expect(after.competition).toEqual(qc)
+    const otherQc = (await call<CompetitionListItemDTO[]>('GET', `/competitions?workId=${other}`, undefined, ADMIN)).data[0]
+    if (otherQc) {
+      const bad = await call<{ error: { code: string } }>('POST', `/works/${alpha}/out-of-scope`, { ...base, competitionId: otherQc.id })
+      expect([bad.status, bad.data.error.code]).toEqual([422, 'OUT_OF_SCOPE_COMPETITION'])
+    }
+  })
+
+  it('quantidade fora de escopo informada no mapa aparece na aba, com o QC de origem', async () => {
+    const comps = (await call<CompetitionListItemDTO[]>('GET', `/competitions?workId=${alpha}`)).data
+    let detail: CompetitionDetailDTO | null = null
+    for (const c of comps.filter((x) => x.revisionStatus === 'draft')) {
+      const d = (await call<CompetitionDetailDTO>('GET', `/competitions/${c.id}`)).data
+      if (d.can.edit && d.items.some((i) => i.referenceIds.length && Number(i.quantity) > 1)) {
+        detail = d
+        break
+      }
+    }
+    expect(detail, 'precisa de um QC em rascunho com insumo orçado').not.toBeNull()
+    const item = detail!.items.find((i) => i.referenceIds.length && Number(i.quantity) > 1)!
+    const url = `/revisions/${detail!.revision.id}/items/${item.id}`
+
+    const over = await call<{ error: { code: string } }>('PATCH', url, { outOfScopeQuantity: String(Number(item.quantity) + 1) })
+    expect(over.data.error.code).toBe('OUT_OF_SCOPE_QTY')
+    expect((await call('PATCH', url, { outOfScopeQuantity: '1' })).status).toBe(200)
+
+    const lines = (await call<OutOfScopeListDTO>('GET', `/works/${alpha}/out-of-scope`)).data.fromCompetitions
+    const line = lines.find((l) => l.itemId === item.id)!
+    expect([line.competitionId, line.quantity, line.informed]).toEqual([detail!.competition.id, '1.0000', true])
+
+    // Apagar volta ao automático: insumo orçado sai da lista
+    expect((await call('PATCH', url, { outOfScopeQuantity: null })).status).toBe(200)
+    const again = (await call<OutOfScopeListDTO>('GET', `/works/${alpha}/out-of-scope`)).data.fromCompetitions
+    expect(again.some((l) => l.itemId === item.id)).toBe(false)
   })
 })

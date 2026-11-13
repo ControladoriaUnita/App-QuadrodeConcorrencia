@@ -9,12 +9,16 @@
  * "Cotação escolhida", que permite mais de uma empresa vencedora).
  * As colunas de distribuição (% material, % equipamento, % retenção, especificação e observações)
  * alimentam a Solicitação de Contrato e podem ser recolhidas.
+ * Fora de escopo (shared/domain/competition/scope.ts): Quant. FE por linha (informada; sem informar,
+ * insumo sem referência do orçamento é 100% FE) e Unit. FE (preço contratado). Desvio de preço ou
+ * quantidade é sinalizado na própria linha. O rodapé mostra os totais com e sem fora de escopo.
  */
 import { Fragment, useMemo, useState } from 'react'
 import { AlertTriangle, Columns3, Crown, Link2, ListPlus, Lock, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { AddQcItemInput, CompetitionDetailDTO, QcItemDTO, QcSupplierDTO, UpdateItemInput } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import { lineTotal } from '@shared/domain/competition/best-condition'
+import { computeScope } from '@shared/domain/competition/scope'
 import type { QcMap } from '@shared/domain/competition/qc-map'
 import { computeDistribution } from '@shared/domain/contract/distribution'
 import { Badge, Button, ConfirmDialog, DecimalInput, InlineTextInput } from '@/components/ui'
@@ -74,8 +78,10 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
     [map],
   )
   const chosen = map.chosen
-  /** Colunas antes do orçado: insumo, unidade, quantidade e distribuição (se aberta) */
-  const lead = 3 + (showDist ? 5 : 0)
+  const scope = useMemo(() => computeScope(detail, map), [detail, map])
+  const hasOutOfScope = scope.outOfScopeItems > 0
+  /** Colunas antes do orçado: insumo, unidade, quantidade, fora de escopo (2) e distribuição (se aberta) */
+  const lead = 5 + (showDist ? 5 : 0)
 
   return (
     <div className="grid gap-2">
@@ -115,6 +121,9 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
               <th rowSpan={2} className={cn(th, 'sticky left-0 z-10 min-w-80 text-left')}>Insumo do mapa</th>
               <th rowSpan={2} className={cn(th, 'text-left')}>Un</th>
               <th rowSpan={2} className={cn(th, 'min-w-28')}>Quant.</th>
+              <th colSpan={2} className={cn(th, 'border-l bg-warning-soft text-center text-warning')} title="Parte do insumo que não está prevista no orçamento">
+                Fora de escopo
+              </th>
               {showDist && <th colSpan={5} className={cn(th, 'border-l text-center')}>Distribuição e escopo</th>}
               <th colSpan={2} className={cn(th, 'border-l text-center')}>Orçado (referências)</th>
               {suppliers.map((s) => {
@@ -142,6 +151,8 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
             </tr>
             {/* Linha 2: subcolunas */}
             <tr>
+              <th className={cn(th, 'border-l min-w-28 bg-warning-soft')}>Quant. FE</th>
+              <th className={cn(th, 'min-w-28 bg-warning-soft')}>Unit. FE</th>
               {showDist && (
                 <>
                   {PCT.map((k, i) => <th key={k} className={cn(th, 'w-20', i === 0 && 'border-l')}>{PCT_LABEL[k]}</th>)}
@@ -186,6 +197,8 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
               const shared = (group?.itemIds.length ?? 0) > 1
               const pick = chosen.byItem.get(item.id)
               const pending = qty.isPositive() && !item.referenceIds.length && !item.planningCode
+              const sl = scope.byItem.get(item.id)!
+              const fe = sl.outOfScopeQuantity
               return (
                 <tr key={item.id} className="group">
                   <td className={cn(td, stickyFirst, 'min-w-80 max-w-96 text-left group-hover:bg-ink-50')}>
@@ -196,6 +209,21 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                         <p className="flex flex-wrap items-center gap-1 text-[11px] leading-4 text-text-muted">
                           {item.code}
                           {item.origin === 'manual' && <Badge tone="info" className="px-1.5 py-0 text-[10px]">criado no mapa</Badge>}
+                          {fe.isPositive() && (
+                            <Badge tone="warning" className="px-1.5 py-0 text-[10px]">
+                              {fe.eq(qty) ? 'fora de escopo' : `fora de escopo · ${formatQuantity(fe)}`}
+                            </Badge>
+                          )}
+                          {sl.priceDeviation && (
+                            <Badge tone="error" className="px-1.5 py-0 text-[10px]" title={`Preço contratado ${formatBRL(sl.unitPrice)} acima do unitário orçado ${formatBRL(sl.budgetUnit)}`}>
+                              desvio de preço
+                            </Badge>
+                          )}
+                          {sl.quantityDeviation && (
+                            <Badge tone="error" className="px-1.5 py-0 text-[10px]" title={`Quantidade no escopo ${formatQuantity(sl.inScopeQuantity)} acima da orçada ${formatQuantity(sl.budgetQuantity)}`}>
+                              desvio de quantidade
+                            </Badge>
+                          )}
                           <button
                             type="button"
                             onClick={() => setEditing(item)}
@@ -236,6 +264,28 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                     ) : (
                       <span className="px-2">{formatQuantity(item.quantity)}</span>
                     )}
+                  </td>
+                  <td
+                    className={cn(td, 'border-l px-1 group-hover:bg-ink-50', fe.isPositive() && 'bg-warning-soft/50')}
+                    title={sl.automatic ? (fe.isPositive() ? 'Automático: insumo sem referência do orçamento (100% fora de escopo). Digite para mudar.' : 'Informe a parte fora do orçamento') : 'Informado. Apague para voltar ao automático.'}
+                  >
+                    {can.edit ? (
+                      <DecimalInput
+                        value={item.outOfScopeQuantity}
+                        fractionDigits={4}
+                        trimZeros
+                        max={item.quantity}
+                        placeholder={sl.automatic && fe.isPositive() ? formatQuantity(fe) : '—'}
+                        gridColumn="oos-qty"
+                        aria-label={`Quantidade fora de escopo de ${item.code}`}
+                        onCommit={(v) => onUpdateItem(item.id, { outOfScopeQuantity: v })}
+                      />
+                    ) : (
+                      <span className="px-2">{fe.isPositive() ? formatQuantity(fe) : EMPTY}</span>
+                    )}
+                  </td>
+                  <td className={cn(td, 'group-hover:bg-ink-50', fe.isPositive() ? 'text-warning' : 'text-text-muted')}>
+                    {fe.isPositive() && sl.unitPrice ? formatDecimal(sl.unitPrice) : EMPTY}
                   </td>
 
                   {showDist && (
@@ -368,7 +418,7 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
 
           <tfoot className="font-semibold">
             <FooterRow
-              label="Total equalizado"
+              label={hasOutOfScope ? 'Total equalizado (com fora de escopo)' : 'Total equalizado'}
               before={lead}
               budget={formatBRL(map.budgetTotal)}
               cells={suppliers.map((s) => {
@@ -390,8 +440,58 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
                 </>
               }
             />
+            {hasOutOfScope && (
+              <>
+                <FooterRow
+                  label="Fora de escopo"
+                  hint={`${scope.outOfScopeItems} insumo(s) · preço de cada coluna × Quant. FE`}
+                  before={lead}
+                  budget={EMPTY}
+                  tone="warning"
+                  cells={suppliers.map((s) => (
+                    <Fragment key={s.id}>
+                      <td className={cn(td, 'border-l bg-warning-soft')} />
+                      <td className={cn(td, 'bg-warning-soft text-warning')}>{formatBRL(scope.bySupplier.get(s.id) ?? Decimal.ZERO)}</td>
+                    </Fragment>
+                  ))}
+                  best={<td colSpan={4} className={cn(td, 'border-l bg-warning-soft text-warning')}>{formatBRL(scope.best)}</td>}
+                  chosen={<td colSpan={4} className={cn(td, 'border-l bg-warning-soft text-warning')}>{formatBRL(scope.chosen)}</td>}
+                />
+                <FooterRow
+                  label="Total sem fora de escopo"
+                  hint="Total equalizado − fora de escopo"
+                  before={lead}
+                  budget={formatBRL(map.budgetTotal)}
+                  cells={suppliers.map((s) => (
+                    <Fragment key={s.id}>
+                      <td className={cn(td, 'border-l bg-ink-50')} />
+                      <td className={cn(td, 'bg-ink-50')}>{formatBRL(map.summaryBySupplier.get(s.id)!.total.minus(scope.bySupplier.get(s.id) ?? Decimal.ZERO))}</td>
+                    </Fragment>
+                  ))}
+                  best={<td colSpan={4} className={cn(td, 'border-l bg-success-soft text-success')}>{formatBRL(map.mixTotal.minus(scope.best))}</td>}
+                  chosen={<td colSpan={4} className={cn(td, 'border-l bg-info-soft text-info')}>{formatBRL(chosen.total.minus(scope.chosen))}</td>}
+                />
+                <FooterRow
+                  label="Resultado sem fora de escopo"
+                  hint="Verba disponível − total sem fora de escopo"
+                  before={lead}
+                  budget={formatBRL(map.available)}
+                  cells={suppliers.map((s) => {
+                    const result = map.available.minus(map.summaryBySupplier.get(s.id)!.total.minus(scope.bySupplier.get(s.id) ?? Decimal.ZERO))
+                    return (
+                      <Fragment key={s.id}>
+                        <td className={cn(td, 'border-l bg-ink-50')} />
+                        <td className={cn(td, 'bg-ink-50', result.isNegative() ? 'text-error' : 'text-success')}>{formatBRL(result)}</td>
+                      </Fragment>
+                    )
+                  })}
+                  best={<ResultCell value={map.available.minus(map.mixTotal.minus(scope.best))} className="bg-success-soft" />}
+                  chosen={<ResultCell value={map.available.minus(chosen.total.minus(scope.chosen))} className="bg-info-soft" />}
+                />
+              </>
+            )}
             <FooterRow
-              label="Resultado QC / Orçamento"
+              label={hasOutOfScope ? 'Resultado com fora de escopo' : 'Resultado QC / Orçamento'}
               hint="Verba disponível − total"
               before={lead}
               budget={formatBRL(map.available)}
@@ -450,10 +550,14 @@ export function QcGrid({ detail, map, today, saving, onPrice, onUpdateItem, onAd
   )
 }
 
-function FooterRow({ label, hint, before, budget, cells, best, chosen }: { label: string; hint?: string; before: number; budget: string; cells: React.ReactNode; best: React.ReactNode; chosen: React.ReactNode }) {
+function ResultCell({ value, className }: { value: Decimal; className: string }) {
+  return <td colSpan={4} className={cn(td, 'border-l', className, value.isNegative() ? 'text-error' : 'text-success')}>{formatBRL(value)}</td>
+}
+
+function FooterRow({ label, hint, before, budget, cells, best, chosen, tone }: { label: string; hint?: string; before: number; budget: string; cells: React.ReactNode; best: React.ReactNode; chosen: React.ReactNode; tone?: 'warning' }) {
   return (
     <tr>
-      <td className={cn(td, stickyFirst, 'bg-ink-50 text-left')}>
+      <td className={cn(td, stickyFirst, 'bg-ink-50 text-left', tone === 'warning' && 'text-warning')}>
         {label}
         {hint && <span className="block text-[11px] leading-4 font-normal text-text-muted">{hint}</span>}
       </td>

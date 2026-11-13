@@ -14,7 +14,8 @@ function must<T = any>(res: { data: unknown; error: { message: string } | null }
 }
 
 const COLS = `id, work_id, number, code, description, unit, quantity::text, unit_cost::text, total_cost::text, wbs_code, wbs_description,
-  planning_code, planning_description, category, justification, requested_by_name, occurred_on, created_by, created_at, updated_at`
+  planning_code, planning_description, category, justification, requested_by_name, occurred_on, created_by, created_at, updated_at,
+  competition_id, competitions!competition_id(id, code, title)`
 
 interface Row {
   id: string
@@ -34,6 +35,8 @@ interface Row {
   justification: string
   requested_by_name: string | null
   occurred_on: string
+  competition_id: string | null
+  competitions: { id: string; code: string; title: string } | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -43,6 +46,7 @@ const toRow = (d: OutOfScopeWrite) => ({
   code: d.code, description: d.description, unit: d.unit, quantity: d.quantity, unit_cost: d.unitCost, wbs_code: d.wbs,
   wbs_description: d.wbsDescription, planning_code: d.planningCode, planning_description: d.planningDescription,
   category: d.category, justification: d.justification, requested_by_name: d.requestedBy, occurred_on: d.occurredOn,
+  competition_id: d.competitionId,
 })
 
 export function createSupabaseOutOfScope(db: SupabaseClient): OutOfScopeRepository {
@@ -70,6 +74,7 @@ export function createSupabaseOutOfScope(db: SupabaseClient): OutOfScopeReposito
     justification: r.justification,
     requestedBy: r.requested_by_name,
     occurredOn: r.occurred_on,
+    competition: r.competitions ? { id: r.competitions.id, code: r.competitions.code, title: r.competitions.title } : null,
     createdByName: (r.created_by && who.get(r.created_by)) ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,

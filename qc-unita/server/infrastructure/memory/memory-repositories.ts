@@ -475,6 +475,7 @@ export function createMemoryRepositories(db: MemoryDb, audit: AuditCtx): Reposit
             planningCode: i.planningCode ?? null,
             planningDescription: i.planningDescription ?? null,
             chosenSupplierId: i.chosenSupplierId ?? null,
+            outOfScopeQuantity: i.outOfScopeQuantity ?? null,
             referenceIds: itemRefs.filter((x) => x.itemId === i.id).map((x) => x.referenceId as string),
           }) as QcItemDTO)
         const references = db

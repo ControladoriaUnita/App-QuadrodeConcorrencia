@@ -58,7 +58,8 @@ const REVISION_COLS = `id, number, status, reason, serviceStartOn:service_start_
 const ITEM_COLS = `id, sortOrder:sort_order, materialId:material_id, code, description, unit, quantity:quantity::text,
   scopeDescription:scope_description, contractNotes:contract_notes, pctMaterial:pct_material::text,
   pctEquipment:pct_equipment::text, pctRetention:pct_retention::text, origin, planningCode:planning_code,
-  planningDescription:planning_description, chosenSupplierId:chosen_supplier_id, competition_item_references(reference_id)`
+  planningDescription:planning_description, chosenSupplierId:chosen_supplier_id, outOfScopeQuantity:out_of_scope_quantity::text,
+  competition_item_references(reference_id)`
 const REF_COLS = 'id, sortOrder:sort_order, materialId:material_id, code, description, unit'
 const CS_COLS = `id, supplierId:supplier_id, sortOrder:sort_order, status, legalName:legal_name, tradeName:trade_name, taxId:tax_id,
   contactName:contact_name, phone, email, cndValidUntil:cnd_valid_until, deliveryTerms:delivery_terms,

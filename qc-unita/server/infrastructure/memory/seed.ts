@@ -257,11 +257,12 @@ async function seed(db: MemoryDb) {
 
   // Custos fora de escopo da obra 2041 (itens que o orçamento não previu)
   const today = new Date().toISOString().slice(0, 10)
+  const terraplenagem = (await s.repos.competitions.list({ workId: alpha.id })).find((c) => c.title.startsWith('Terraplenagem'))
   await outOfScope.createOutOfScope(s.repos, s.ctx, alpha.id, {
     code: 'IS00017', description: 'Transporte de bota-fora adicional — solo contaminado', unit: 'm³', quantity: '48', unitCost: '95.5',
     wbs: '02.02', planningCode: 'IP00104', planningDescription: 'Terraplenagem', category: 'technical_requirement',
     justification: 'Sondagem complementar encontrou solo contaminado; o descarte exige aterro licenciado, não previsto no orçamento.',
-    requestedBy: 'Eng. Marina Costa', occurredOn: today,
+    requestedBy: 'Eng. Marina Costa', occurredOn: today, competitionId: terraplenagem?.id ?? null,
   })
   await outOfScope.createOutOfScope(s.repos, s.ctx, alpha.id, {
     code: null, description: 'Fechamento provisório do passeio para a concessionária', unit: 'vb', quantity: '1', unitCost: '4200',

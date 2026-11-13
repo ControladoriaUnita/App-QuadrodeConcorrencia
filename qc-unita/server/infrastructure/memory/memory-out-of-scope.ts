@@ -10,6 +10,10 @@ import type { AuditCtx, MemoryDb, Row } from './memory-db'
 const TABLE = 'out_of_scope_costs'
 
 export function createMemoryOutOfScope(db: MemoryDb, audit: AuditCtx): OutOfScopeRepository {
+  const competitionOf = (id: string | null) => {
+    const c = id ? db.get('competitions', id) : null
+    return c ? { id: c.id, code: c.code as string, title: c.title as string } : null
+  }
   const toDto = (r: Row): OutOfScopeCostDTO & { workId: string } => ({
     id: r.id,
     workId: r.workId as string,
@@ -28,6 +32,7 @@ export function createMemoryOutOfScope(db: MemoryDb, audit: AuditCtx): OutOfScop
     justification: r.justification as string,
     requestedBy: (r.requestedBy as string) ?? null,
     occurredOn: r.occurredOn as string,
+    competition: competitionOf((r.competitionId as string) ?? null),
     createdByName: typeof r.createdBy === 'string' ? ((db.get('profiles', r.createdBy)?.fullName as string) ?? null) : null,
     createdAt: r.createdAt as string,
     updatedAt: r.updatedAt as string,

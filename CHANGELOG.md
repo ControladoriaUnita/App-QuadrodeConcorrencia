@@ -21,7 +21,20 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 | Ambiente | Versão |
 |---|---|
 | produção | v11 |
-| dev | v13 |
+| dev | v14 |
+
+## v14 — dev (2026-11-13)
+
+- **Fora de escopo ligado ao QC:**
+  - toda solicitação fora de escopo aponta a concorrência (QC) a que se refere. O campo é obrigatório na tela quando a obra tem concorrências, e a lista mostra o link para o QC;
+  - no **mapa de cotação**, cada insumo ganhou **Quant. FE** e **Unit. FE**. Insumo sem referência do orçamento já vem 100% fora de escopo; no insumo orçado, digita-se só a parte nova. Unit. FE é o preço contratado;
+  - o rodapé do mapa mostra o fora de escopo e o total e o resultado **sem** fora de escopo, além dos totais **com** ele;
+  - as linhas fora de escopo dos mapas aparecem sozinhas na aba **Fora de escopo**, em "Apontados nos QCs", com link para o QC de origem, e entram no total da obra.
+- **Desvio por linha:** o mapa marca na própria linha **desvio de preço** (preço contratado acima do unitário orçado) e **desvio de quantidade** (quantidade dentro do escopo acima da orçada), nunca por pacote ou Item da EAP. Desvio é diferente de fora de escopo: vale para insumos que estão no orçamento.
+- Banco: migration `027_qc_out_of_scope.sql`:
+  - coluna de quantidade fora de escopo no insumo do mapa, copiada para a nova revisão;
+  - ligação do lançamento ao QC.
+  Rodar no Supabase antes de liberar, depois da 025 e da 026.
 
 ## v13 — dev (2026-11-13)
 

@@ -263,6 +263,15 @@ export async function updateItem(repos: Repositories, ctx: RequestContext, revis
   if (input.chosenSupplierId && !data.suppliers.some((s) => s.id === input.chosenSupplierId)) {
     throw new DomainError('CHOSEN_SUPPLIER_INVALID', 'O fornecedor escolhido não participa desta revisão.')
   }
+  // Fora de escopo não passa da quantidade do insumo (nem quando a quantidade diminui)
+  {
+    const current = data.items.find((i) => i.id === itemId)!
+    const qty = Decimal.from(input.quantity ?? current.quantity)
+    const fe = input.outOfScopeQuantity !== undefined ? input.outOfScopeQuantity : current.outOfScopeQuantity
+    if (fe != null && Decimal.from(fe).gt(qty)) {
+      throw new DomainError('OUT_OF_SCOPE_QTY', `A quantidade fora de escopo de ${current.code} passa da quantidade do insumo.`)
+    }
+  }
   await repos.competitions.updateItem(itemId, input)
   await recompute(repos, ref.competitionId, revisionId)
 }

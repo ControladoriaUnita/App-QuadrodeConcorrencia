@@ -143,6 +143,11 @@ export interface QcItemDTO {
   referenceIds: string[]
   /** Fornecedor escolhido para contratar o item (cenário "Cotação escolhida"); null = sem escolha */
   chosenSupplierId: string | null
+  /**
+   * Quantidade fora de escopo (não prevista no orçamento) informada à mão; null = automática
+   * (insumo sem referência do orçamento é 100% fora de escopo). Ver shared/domain/competition/scope.ts.
+   */
+  outOfScopeQuantity: string | null
 }
 
 /** Insumo referência: insumo do orçamento puxado pelo QC (suas linhas e % ficam nos vínculos) */
@@ -477,6 +482,8 @@ export const updateItemSchema = z
     planningDescription: z.string().trim().max(300).nullable(),
     /** Fornecedor (competition_supplier) escolhido para contratar o item; null desmarca */
     chosenSupplierId: uuid.nullable(),
+    /** Quantidade fora de escopo; null volta à regra automática */
+    outOfScopeQuantity: nonNegativeDecimal('Quantidade fora de escopo não pode ser negativa').nullable(),
   })
   .partial()
 export type UpdateItemInput = z.infer<typeof updateItemSchema>
@@ -621,13 +628,43 @@ export interface OutOfScopeCostDTO {
   /** Quem pediu/apontou o custo (texto livre) */
   requestedBy: string | null
   occurredOn: string
+  /** Concorrência (QC) a que a solicitação se refere */
+  competition: { id: string; code: string; title: string } | null
   createdByName: string | null
   createdAt: string
   updatedAt: string
 }
 
+/**
+ * Linha fora de escopo apontada no mapa de um QC (automática: vem da revisão corrente e
+ * acompanha o mapa; não se edita na aba Fora de escopo).
+ */
+export interface OutOfScopeQcLineDTO {
+  competitionId: string
+  competitionCode: string
+  competitionTitle: string
+  revisionId: string
+  revisionNumber: number
+  revisionStatus: RevisionStatus
+  itemId: string
+  code: string
+  description: string
+  unit: string
+  /** Quant. FE da linha */
+  quantity: string
+  /** Unit. FE = preço contratado (null sem preço) */
+  unitCost: string | null
+  total: string
+  /** Quant. FE informada à mão (false = automática: insumo sem referência do orçamento) */
+  informed: boolean
+}
+
 export interface OutOfScopeListDTO {
   items: OutOfScopeCostDTO[]
+  /** Linhas fora de escopo dos mapas dos QCs da obra */
+  fromCompetitions: OutOfScopeQcLineDTO[]
+  /** QCs da obra para relacionar a solicitação manual */
+  competitions: { id: string; code: string; title: string }[]
   /** Orçamento vigente da obra (null sem orçamento) */
   budgetTotal: string | null
   canManage: boolean
@@ -647,6 +684,8 @@ export const saveOutOfScopeSchema = z
     justification: z.string().trim().min(5, 'Justifique por que o custo não estava no orçamento').max(4000),
     requestedBy: z.string().trim().max(200).nullable().optional(),
     occurredOn: isoDate,
+    /** QC a que a solicitação se refere */
+    competitionId: uuid.nullable().optional(),
   })
 export type SaveOutOfScopeInput = z.infer<typeof saveOutOfScopeSchema>
 
