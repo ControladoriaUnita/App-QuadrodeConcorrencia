@@ -79,6 +79,18 @@ Aba **Anexos** no QC (propostas, com o fornecedor; memoriais; documentos) e na s
 - **Consumo**: lançamentos aprovados entram no **Contratado** da obra (`qc_work_addenda_totals`; distratos reduzem); a vigência passa a ser a nova data do último lançamento aprovado.
 - Migrations `013_contract_requests.sql` e `016_addendum_kind_allocations.sql`; domínio em `shared/domain/contract/contract-request.ts` e `shared/domain/contract/addendum.ts`.
 
+### Fluxos de aprovação (tela "Aprovações")
+
+- **Pedido do QC**: na criação (e na aba Dados, enquanto em rascunho) o solicitante informa **material ou mão de obra**, a **origem** (obra ou Suprimentos) e o **diretor aprovador** (RT, SR…; `approval_directors`, não presos às obras). Os três escolhem o fluxo.
+- **Fluxos** (`approval_flows` + `approval_flow_steps`, migration `028_approval_flows.sql`, domínio em `shared/domain/approval/flows.ts`), por tipo de solicitação:
+  - **contratação**: envio do QC;
+  - **desvio de custo ou quantidade**: entra sozinho no fim do plano quando alguma linha do mapa tem desvio;
+  - **aditivo/distrato** e **aditivo de prazo** (sem itens, com nova data): vêm da tela de Contratos e usam os critérios do QC de origem.
+- **Escolha do fluxo**: critério vazio vale para qualquer pedido; vence o fluxo mais específico. Cada etapa tem papel, alçada mínima e pode ser a **etapa do diretor do pedido**. Diretor com usuário ligado: só ele decide; sem usuário, qualquer pessoa com o papel.
+- **Sem fluxo**: sem fluxo de contratação valem as etapas gerais (`approval_steps`); sem fluxo de aditivo vale a decisão única da Gerência/Diretoria (como antes).
+- **Aditivos em etapas** (`addendum_approvals`): o aditivo só fica aprovado na última etapa.
+- **Configuração**: todos consultam a tela **Aprovações**; só o administrador cadastra fluxos e diretores. A migration cria fluxos iniciais iguais às etapas atuais (mais "Contratação de serviço (RT/SR)" com o diretor no fim, o de desvio com o diretor do pedido e os de aditivo/prazo com a Gerência). Os aprovadores definitivos são cadastrados na tela.
+
 ### Consumo do orçamento
 
 - **Contratado**: revisão efetiva aprovada (última aprovada; uma rev01 em rascunho não substitui a rev00 aprovada até ser aprovada).

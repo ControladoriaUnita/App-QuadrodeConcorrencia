@@ -2,6 +2,7 @@
  * Nova concorrência: os insumos são escolhidos na MESMA tela do orçamento (Item → composição →
  * insumos), marcando o que entra e quanto será consumido de cada linha (% → verba puxada).
  * Os IPs de planejamento do QC saem das linhas marcadas.
+ * O pedido (material ou mão de obra, origem e diretor) escolhe o fluxo de aprovação.
  */
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -15,6 +16,7 @@ import { useBudgetLines, useBudgetStructure } from '@/features/works/api'
 import { BudgetIncompleteAlert, useBudgetReadiness } from '@/features/works/BudgetReadiness'
 import { workPath } from '@/features/works/currentWork'
 import { useWorkModel, WorkHeader, WorkPageSkeleton } from '@/features/works/WorkHeader'
+import { emptyRequest, RequestFields, requestComplete, type RequestValue } from '@/features/approvals/RequestFields'
 import { useCreateCompetition } from './api'
 
 export function NewCompetitionPage() {
@@ -30,6 +32,7 @@ export function NewCompetitionPage() {
   const [requestedOn, setRequestedOn] = useState(new Date().toISOString().slice(0, 10))
   const [selection, setSelection] = useState<Map<string, string>>(new Map())
   const [touched, setTouched] = useState(false)
+  const [request, setRequest] = useState<RequestValue>(emptyRequest)
 
   const chosen = useMemo(() => (lines.data ?? []).filter((l) => selection.has(l.id)), [lines.data, selection])
   const pulled = Decimal.sum(chosen.map((l) => pulledValue(l, selection.get(l.id)!)))
@@ -55,7 +58,7 @@ export function NewCompetitionPage() {
 
   const submit = async () => {
     setTouched(true)
-    if (blocked || title.trim().length < 3 || !selection.size || over.length || zero.length) return
+    if (blocked || title.trim().length < 3 || !requestComplete(request) || !selection.size || over.length || zero.length) return
     const r = await create.mutateAsync({
       workId,
       title: title.trim(),
@@ -63,6 +66,9 @@ export function NewCompetitionPage() {
       packageCodes: packageCodes.length ? packageCodes : undefined,
       lineIds: [...selection.keys()],
       lineShares: Object.fromEntries(selection),
+      requestKind: request.requestKind || null,
+      origin: request.origin || null,
+      directorId: request.directorId || null,
     })
     navigate(`${workPath.competition(workId, r.competitionId)}?aba=vinculos`)
   }
@@ -80,6 +86,9 @@ export function NewCompetitionPage() {
           <Field label="Data da solicitação" required>
             <Input type="date" value={requestedOn} onChange={(e) => setRequestedOn(e.target.value)} />
           </Field>
+        </div>
+        <div className="border-t border-border px-4 py-3">
+          <RequestFields value={request} onChange={setRequest} touched={touched} />
         </div>
       </Card>
 

@@ -359,8 +359,8 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
       <div class="lede"><p class="eyebrow">Criação</p><h2>Nova concorrência</h2></div>
       <ol class="steps">
         <li><div>
-          <h3>Informar o objeto e a data</h3>
-          <p>Ex.: “Fornecimento e instalação de esquadrias de alumínio”. Se o orçamento não estiver 100% com IP e nomes dos Itens, a tela mostra o que falta e não cria a concorrência.</p>
+          <h3>Informar o objeto, a data e o pedido</h3>
+          <p>O pedido tem três campos obrigatórios: <b>tipo</b> (material ou mão de obra), <b>origem</b> (obra ou Suprimentos) e <b>diretor aprovador</b> (RT, SR…). Eles escolhem o fluxo de aprovação, que a tela mostra logo abaixo com as etapas. Ex. de objeto: “Fornecimento e instalação de esquadrias de alumínio”. Se o orçamento não estiver 100% com IP e nomes dos Itens, a tela mostra o que falta e não cria a concorrência.</p>
         </div></li>
         <li><div>
           <h3>Marcar os insumos no orçamento</h3>
@@ -457,6 +457,7 @@ footer { max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; color: var
     <!-- ───────────────────────────── APROVAÇÃO -->
     <section id="aprovacao">
       <div class="lede"><p class="eyebrow">Alçada</p><h2>Aprovação e revisões</h2></div>
+      <p>As etapas vêm do <b>fluxo de aprovação</b> do pedido. Ele é escolhido pelo tipo, pela origem e pelo diretor e é cadastrado na tela <b>Aprovações</b> pelo administrador. Se alguma linha do mapa tem <b>desvio de preço ou de quantidade</b>, as etapas do fluxo de desvio entram no fim. A etapa do diretor responsável só é decidida pelo diretor ligado a ela. A tabela abaixo mostra as etapas gerais, que valem quando não há fluxo configurado. Aditivos, distratos e aditivos de prazo também seguem fluxos próprios e só ficam aprovados na última etapa.</p>
       <div class="tbl">
         <table>
           <thead><tr><th>Etapa</th><th>Papel</th><th class="r">Entra a partir de</th></tr></thead>

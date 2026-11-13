@@ -18,6 +18,8 @@ import type {
 import { Decimal } from '../../../shared/domain/decimal'
 import { budgetReadiness, missingSummary } from '../../../shared/domain/budget/readiness'
 import { buildApprovalPlan, decide, type ApprovalInstance } from '../../../shared/domain/approval/approval-flow'
+import { planFromFlows } from '../../../shared/domain/approval/flows'
+import { computeScope } from '../../../shared/domain/competition/scope'
 import { lineTotal } from '../../../shared/domain/competition/best-condition'
 import { buildQcMap, type QcMap } from '../../../shared/domain/competition/qc-map'
 import {
@@ -34,6 +36,7 @@ import { AppError, can, notFound, requirePermission, roleIdsFor, type RequestCon
 import type { AggregatedInput, CompetitionData, ComputedPersistence, NewQcItem, Repositories } from '../ports'
 import { namedBudgetStructure } from './works'
 import { contractPending } from './contracts'
+import { directorUsers, flowContextOf, toInstances } from './approval-flows'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 
@@ -91,6 +94,7 @@ function withCapabilities(
         data.revision.status === 'in_approval' &&
         !!pending &&
         roles.includes(pending.roleId) &&
+        (!pending.directorUserId || pending.directorUserId === ctx.actor.id) &&
         can(ctx.actor, 'approval.decide', workId),
       createRevision: isLatest && canCreateRevision(data.revisions).ok && can(ctx.actor, 'competition.edit', workId),
     },
@@ -152,6 +156,9 @@ export async function createCompetition(repos: Repositories, ctx: RequestContext
       requestedOn: input.requestedOn ?? today(ctx),
       procurementOwnerId: ctx.actor.id,
       budgetAmount: budgetAmount.toDb(),
+      requestKind: input.requestKind ?? null,
+      origin: input.origin ?? null,
+      directorId: input.directorId ?? null,
       references,
     },
     ctx.actor.id,
@@ -229,7 +236,7 @@ export async function recompute(repos: Repositories, competitionId: string, revi
 
 export async function updateRevision(repos: Repositories, ctx: RequestContext, revisionId: string, input: UpdateRevisionInput) {
   const ref = await loadEditable(repos, ctx, revisionId, 'competition.edit')
-  const { engineeringOwnerId, procurementOwnerId, engineeringOwnerName, procurementOwnerName, ...revisionPatch } = input
+  const { engineeringOwnerId, procurementOwnerId, engineeringOwnerName, procurementOwnerName, requestKind, origin, directorId, ...revisionPatch } = input
   // Responsáveis digitados por extenso; apagar o nome também desfaz o usuário indicado antes (senão o nome dele voltaria)
   const text = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null)
   const owners = {
@@ -240,8 +247,12 @@ export async function updateRevision(repos: Repositories, ctx: RequestContext, r
     ...(engineeringOwnerName !== undefined && !text(engineeringOwnerName) ? { engineeringOwnerId: null } : {}),
     ...(procurementOwnerName !== undefined && !text(procurementOwnerName) ? { procurementOwnerId: null } : {}),
   }
-  if (Object.values(owners).some((v) => v !== undefined)) {
-    await repos.competitions.updateCompetition(ref.competitionId, owners)
+  if (directorId && !(await repos.approvalFlows.listDirectors()).some((d) => d.id === directorId)) {
+    throw new AppError('DIRECTOR_INVALID', 'Diretor inexistente.', 422)
+  }
+  const request = { requestKind, origin, directorId }
+  if ([...Object.values(owners), ...Object.values(request)].some((v) => v !== undefined)) {
+    await repos.competitions.updateCompetition(ref.competitionId, { ...owners, ...request })
   }
   if (Object.keys(revisionPatch).length) await repos.competitions.updateRevision(revisionId, revisionPatch)
   await recompute(repos, ref.competitionId, revisionId)
@@ -591,7 +602,12 @@ export async function submitRevision(repos: Repositories, ctx: RequestContext, r
   // Alçada: total da cotação escolhida (várias empresas), senão o da vencedora, senão a melhor condição
   const split = map.chosen.lines.some((l) => l.competitionSupplierId)
   const amount = approvalAmount(map.winner?.summary.total ?? null, map.mixTotal, split ? map.chosen.total : null)
-  const plan = buildApprovalPlan(await repos.approvals.listSteps(), amount)
+  // Fluxo do pedido (origem, tipo, diretor); com desvio em alguma linha, somam-se as etapas de desvio.
+  // Sem fluxo de contratação configurado, valem as etapas gerais (approval_steps).
+  const deviation = computeScope(data, map).deviationItems > 0
+  const plan =
+    planFromFlows(await repos.approvalFlows.listFlows(), 'competition', flowContextOf(data.competition), amount, { deviation })?.approvals ??
+    buildApprovalPlan(await repos.approvals.listSteps(), amount)
   await repos.approvals.createPlan(revisionId, plan)
   await repos.competitions.setRevisionStatus(revisionId, {
     status: 'in_approval',
@@ -608,15 +624,7 @@ export async function decideApproval(repos: Repositories, ctx: RequestContext, r
   requirePermission(ctx, 'approval.decide', ref.workId)
   if (ref.status !== 'in_approval') throw new DomainError('REVISION_NOT_IN_APPROVAL', 'A revisão não está em aprovação.')
 
-  const current: ApprovalInstance[] = (await repos.approvals.listForRevision(revisionId)).map((a) => ({
-    stepOrder: a.stepOrder,
-    stepName: a.stepName,
-    roleId: a.roleId,
-    status: a.status,
-    decidedBy: a.decidedById,
-    decidedAt: a.decidedAt,
-    comment: a.comment,
-  }))
+  const current: ApprovalInstance[] = toInstances(await repos.approvals.listForRevision(revisionId))
   const nowIso = ctx.now().toISOString()
   const result = decide(current, {
     stepOrder: input.stepOrder,
@@ -625,6 +633,7 @@ export async function decideApproval(repos: Repositories, ctx: RequestContext, r
     actorId: ctx.actor.id,
     actorRoleIds: roleIdsFor(ctx.actor, ref.workId),
     now: nowIso,
+    directorUsers: await directorUsers(repos),
   })
   for (const step of result.approvals) {
     const before = current.find((c) => c.stepOrder === step.stepOrder)!

@@ -31,6 +31,7 @@ import {
 } from '../../../shared/domain/contract/contract-request'
 import { AppError, can, notFound, requirePermission, type Actor, type RequestContext } from '../context'
 import type { ContractData, NewContractRequest, Repositories } from '../ports'
+import { canDecideCurrent, directorUsers } from './approval-flows'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 
@@ -78,8 +79,17 @@ export async function getContract(repos: Repositories, ctx: RequestContext, id: 
   const openAddendum = c.addenda.some((a) => a.status === 'draft' || a.status === 'submitted')
   const contractTypes = await repos.catalog.listContractTypes()
   const issues = c.status === 'draft' ? validateContractRequest(headerOf(c), c.items.map((i) => ({ quantity: Decimal.from(i.quantity) })), today(ctx)) : []
+  // Etapas de aprovação de cada aditivo; sem etapas (enviado antes dos fluxos), decisão única antiga
+  const byAddendum = await repos.approvalFlows.listForAddenda(c.addenda.map((a) => a.id))
+  const addenda = c.addenda.map((a) => ({ ...a, approvals: byAddendum.get(a.id) ?? [] }))
+  const submitted = addenda.find((a) => a.status === 'submitted')
+  const users = submitted?.approvals.length ? await directorUsers(repos) : new Map<string, string | null>()
+  const decideAddendum = !!submitted && (submitted.approvals.length
+    ? can(ctx.actor, 'approval.decide', workId) && canDecideCurrent(ctx.actor, workId, submitted.approvals, users)
+    : canDecideAddendum(ctx.actor, workId))
   return {
     ...c,
+    addenda,
     contractTypes,
     issues,
     can: {
@@ -88,7 +98,7 @@ export async function getContract(repos: Repositories, ctx: RequestContext, id: 
       submit: manage && c.status === 'draft',
       cancel: manage && (c.status === 'draft' || c.status === 'submitted'),
       addendum: manage && isConcluded(c.status) && !openAddendum,
-      decideAddendum: canDecideAddendum(ctx.actor, workId) && c.addenda.some((a) => a.status === 'submitted'),
+      decideAddendum,
     },
   }
 }

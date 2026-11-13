@@ -166,6 +166,27 @@ function AddendumCard({ c, a, busy, onEdit, onDelete, onSubmit, onDecide }: {
         </p>
         {a.items.length > 0 && <AddendumItemsTable summary={summary} items={a.items} />}
         <AddendumTotals summary={summary} title={title} />
+        {a.approvals.length > 0 && (
+          <ol className="grid gap-1 rounded-control border border-border p-3 text-sm" aria-label={`Etapas de aprovação do ${title}`}>
+            {a.approvals.map((s) => {
+              const isCurrent = s === a.approvals.find((x) => x.status === 'pending')
+              return (
+                <li key={s.stepOrder} className="flex flex-wrap items-center gap-2">
+                  <span className="w-5 text-xs text-text-muted">{s.stepOrder}.</span>
+                  <span className="font-medium">{s.stepName}</span>
+                  <Badge tone={isCurrent ? 'primary' : s.status === 'approved' ? 'success' : s.status === 'rejected' ? 'error' : 'neutral'}>
+                    {isCurrent ? 'Aguardando' : s.status === 'approved' ? 'Aprovado' : s.status === 'rejected' ? 'Reprovado' : s.status === 'skipped' ? 'Não se aplica' : 'Pendente'}
+                  </Badge>
+                  <span className="text-xs text-text-muted">
+                    {s.directorName ?? s.roleName}
+                    {s.decidedAt && ` · ${s.decidedByName ?? '—'} em ${formatDateTime(s.decidedAt)}`}
+                  </span>
+                  {s.comment && <span className="text-xs text-ink-700">“{s.comment}”</span>}
+                </li>
+              )
+            })}
+          </ol>
+        )}
         {a.decidedAt && (
           <p className={cn('rounded-control px-3 py-2 text-sm', a.status === 'approved' ? 'bg-success-soft text-success' : 'bg-error-soft text-error')}>
             {a.status === 'approved' ? 'Aprovado' : 'Reprovado'} por {a.decidedByName ?? '—'} em {formatDateTime(a.decidedAt)}
@@ -174,7 +195,7 @@ function AddendumCard({ c, a, busy, onEdit, onDelete, onSubmit, onDecide }: {
         )}
         {a.status === 'submitted' && c.can.decideAddendum && (
           <div className="grid gap-2 rounded-control border border-warning/30 bg-warning-soft/40 p-3">
-            <Field label="Comentário da Gerência / Diretoria" hint="Obrigatório para reprovar.">
+            <Field label={`Comentário${a.approvals.find((x) => x.status === 'pending') ? ` — ${a.approvals.find((x) => x.status === 'pending')!.stepName}` : ' da Gerência / Diretoria'}`} hint="Obrigatório para reprovar.">
               <Textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
             </Field>
             <div className="flex justify-end gap-2">

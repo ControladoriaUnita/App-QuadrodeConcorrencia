@@ -19,6 +19,7 @@ function source(items: QcItemDTO[], links: QcLinkDTO[], prices: [string, string]
     competition: {
       id: 'c', code: 'QC-1', title: 'T', description: null, status: 'open', packageCode: null, requestedOn: '2026-10-01', workId: 'w',
       workCode: '1', workName: 'W', budgetId: 'b', engineeringOwner: null, procurementOwner: null, engineeringOwnerName: null, procurementOwnerName: null,
+      requestKind: null, origin: null, directorId: null, directorName: null,
     },
     revision: {
       id: 'r', number: 0, status: 'draft', reason: null, serviceStartOn: null, serviceEndOn: null, budgetAmount: '1000',

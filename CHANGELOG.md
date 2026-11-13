@@ -21,7 +21,28 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 | Ambiente | Versão |
 |---|---|
 | produção | v11 |
-| dev | v14 |
+| dev | v15 |
+
+## v15 — dev (2026-11-13)
+
+- **Pedido do QC:** na criação da concorrência, o solicitante informa três campos obrigatórios. Na aba Dados eles podem ser trocados enquanto o QC está em rascunho:
+  - **material ou mão de obra**;
+  - a **origem** (obra ou Suprimentos);
+  - o **diretor aprovador** (RT, SR…). Os diretores não ficam presos às obras.
+  Os três escolhem o fluxo de aprovação, mostrado na tela com as etapas, e aparecem no cabeçalho do QC.
+- **Fluxos de aprovação configuráveis** (tela nova **Aprovações**). Um fluxo por tipo de solicitação:
+  - **contratação**;
+  - **desvio de custo ou quantidade**: entra sozinho no fim do plano quando alguma linha do mapa tem desvio;
+  - **aditivo/distrato**;
+  - **aditivo de prazo**: só nova data, sem itens.
+- Cada fluxo vale para a origem, o tipo e o diretor (vazio = qualquer), e o mais específico vence. Cada etapa tem papel, alçada mínima e pode ser a **etapa do diretor do pedido**: com usuário ligado, só esse diretor decide.
+- Todos consultam a tela Aprovações; só o administrador cadastra. Os fluxos iniciais repetem as etapas atuais, e os de contratação de serviço (RT e SR) têm o diretor no fim. Os aprovadores definitivos serão cadastrados na tela.
+- **Aditivos em etapas:** o aditivo, o distrato e o aditivo de prazo passam pelas etapas do fluxo, mostradas no cartão do aditivo, e só ficam aprovados na última. Os enviados antes continuam com a decisão única.
+- Banco: migration `028_approval_flows.sql`:
+  - diretores e fluxos, com os fluxos iniciais;
+  - pedido no QC;
+  - etapas dos aditivos.
+  Rodar no Supabase antes de liberar, depois da 025, 026 e 027.
 
 ## v14 — dev (2026-11-13)
 

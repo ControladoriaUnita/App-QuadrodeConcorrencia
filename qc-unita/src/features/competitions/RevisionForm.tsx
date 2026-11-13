@@ -1,5 +1,6 @@
 /**
- * Dados do QC: cronograma, verba, responsáveis, tipo de contrato, vencedora e justificativa.
+ * Dados do QC: cronograma, verba, responsáveis, pedido (tipo, origem e diretor: escolhem o fluxo de
+ * aprovação), tipo de contrato, vencedora e justificativa.
  * React Hook Form + Zod (o mesmo schema validado no servidor).
  */
 import { useEffect } from 'react'
@@ -10,7 +11,9 @@ import { Save } from 'lucide-react'
 import type { CompetitionDetailDTO } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import type { QcMap } from '@shared/domain/competition/qc-map'
+import { REQUEST_KIND_LABEL, REQUEST_ORIGIN_LABEL, type RequestKind, type RequestOrigin } from '@shared/domain/approval/flows'
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input, Select, Textarea } from '@/components/ui'
+import { useApprovalConfig } from '@/features/approvals/api'
 import { formatBRL, formatDate, formatDecimal } from '@/utils/format'
 
 const moneyBR = z
@@ -32,6 +35,9 @@ const formSchema = z
     serviceEndOn: z.string(),
     engineeringOwnerName: z.string().max(200),
     procurementOwnerName: z.string().max(200),
+    requestKind: z.string(),
+    origin: z.string(),
+    directorId: z.string(),
     budgetUsedAmount: moneyBR,
     budgetAdjustmentAmount: moneyBR,
     contractTypeId: z.string(),
@@ -54,12 +60,16 @@ export function RevisionForm({ detail, map, saving, onSave }: { detail: Competit
   const r = detail.revision
   const c = detail.competition
   const disabled = !detail.can.edit
+  const directors = useApprovalConfig().data?.directors ?? []
 
   const defaults: FormValues = {
     serviceStartOn: r.serviceStartOn ?? '',
     serviceEndOn: r.serviceEndOn ?? '',
     engineeringOwnerName: c.engineeringOwnerName ?? '',
     procurementOwnerName: c.procurementOwnerName ?? '',
+    requestKind: c.requestKind ?? '',
+    origin: c.origin ?? '',
+    directorId: c.directorId ?? '',
     budgetUsedAmount: toBR(r.budgetUsedAmount),
     budgetAdjustmentAmount: toBR(r.budgetAdjustmentAmount),
     contractTypeId: r.contractTypeId ?? '',
@@ -78,6 +88,9 @@ export function RevisionForm({ detail, map, saving, onSave }: { detail: Competit
       serviceEndOn: nul(v.serviceEndOn),
       engineeringOwnerName: nul(v.engineeringOwnerName.trim()),
       procurementOwnerName: nul(v.procurementOwnerName.trim()),
+      requestKind: nul(v.requestKind),
+      origin: nul(v.origin),
+      directorId: nul(v.directorId),
       budgetUsedAmount: fromBR(v.budgetUsedAmount),
       budgetAdjustmentAmount: fromBR(v.budgetAdjustmentAmount),
       contractTypeId: nul(v.contractTypeId),
@@ -115,6 +128,24 @@ export function RevisionForm({ detail, map, saving, onSave }: { detail: Competit
           </Field>
           <Field label="Suprimentos responsável" error={e.procurementOwnerName?.message}>
             <Input disabled={disabled} placeholder="Nome do responsável" autoComplete="off" {...register('procurementOwnerName')} />
+          </Field>
+          <Field label="Tipo do pedido">
+            <Select disabled={disabled} {...register('requestKind')}>
+              <option value="">Não informado</option>
+              {(Object.keys(REQUEST_KIND_LABEL) as RequestKind[]).map((k) => <option key={k} value={k}>{REQUEST_KIND_LABEL[k]}</option>)}
+            </Select>
+          </Field>
+          <Field label="Origem do pedido">
+            <Select disabled={disabled} {...register('origin')}>
+              <option value="">Não informada</option>
+              {(Object.keys(REQUEST_ORIGIN_LABEL) as RequestOrigin[]).map((k) => <option key={k} value={k}>{REQUEST_ORIGIN_LABEL[k]}</option>)}
+            </Select>
+          </Field>
+          <Field label="Diretor aprovador" className="sm:col-span-2" hint="Tipo, origem e diretor escolhem o fluxo de aprovação do envio.">
+            <Select disabled={disabled} {...register('directorId')}>
+              <option value="">Não informado</option>
+              {directors.map((d) => <option key={d.id} value={d.id}>{d.code} — {d.name}</option>)}
+            </Select>
           </Field>
           <Field label="Tipo de contrato" className="sm:col-span-2">
             <Select disabled={disabled} {...register('contractTypeId')}>

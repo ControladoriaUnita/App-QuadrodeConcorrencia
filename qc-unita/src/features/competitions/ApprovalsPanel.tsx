@@ -62,6 +62,7 @@ export function ApprovalsPanel({
                     </div>
                     <p className="text-xs text-text-muted">
                       Papel: {a.roleName}
+                      {a.directorName && ` · ${a.directorName}`}
                       {a.decidedAt && ` · ${a.decidedByName ?? '—'} em ${formatDateTime(a.decidedAt)}`}
                     </p>
                     {a.comment && <p className="mt-1 rounded-control bg-ink-50 px-3 py-2 text-sm text-ink-700">“{a.comment}”</p>}
@@ -141,7 +142,7 @@ export function ApprovalsPanel({
             ) : (
               <Alert tone="info">
                 {current
-                  ? `Aguardando decisão do papel “${current.roleName}”.`
+                  ? `Aguardando decisão ${current.directorName ? `de ${current.directorName}` : `do papel “${current.roleName}”`}.`
                   : detail.revision.status === 'approved'
                     ? 'Fluxo concluído. A revisão está congelada.'
                     : 'Fluxo encerrado.'}

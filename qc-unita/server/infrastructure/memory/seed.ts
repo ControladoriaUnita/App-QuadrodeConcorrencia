@@ -96,6 +96,27 @@ async function seed(db: MemoryDb) {
   ].forEach(([order, name, role, min]) =>
     db.put('approval_steps', { id: uid(), stepOrder: order, name, roleId: roleIds[role as string], minAmount: min, active: true }),
   )
+  // Diretores e fluxos iniciais (espelho da migration 028). RT tem usuário ligado (Helena Duarte).
+  const directors = { RT: uid(), SR: uid() }
+  db.put('approval_directors', { id: directors.RT, code: 'RT', name: 'Diretor RT', userId: DEMO_USERS[4].id, active: true })
+  db.put('approval_directors', { id: directors.SR, code: 'SR', name: 'Diretor SR', userId: null, active: true })
+  const flow = (kind: string, name: string, directorId: string | null, steps: [string, string, string | null, boolean][]) => {
+    const flowId = uid()
+    db.put('approval_flows', { id: flowId, kind, name, origin: null, requestKind: null, directorId, active: true })
+    steps.forEach(([stepName, role, min, director], k) =>
+      db.put('approval_flow_steps', { id: uid(), flowId, stepOrder: k + 1, name: stepName, roleId: roleIds[role], director, minAmount: min, active: true }),
+    )
+  }
+  const base: [string, string, string | null, boolean][] = [
+    ['Suprimentos', 'procurement', null, false],
+    ['Engenharia', 'engineering', null, false],
+    ['Gerente / Coordenador de Obra', 'manager', null, false],
+  ]
+  flow('competition', 'Contratação (padrão)', null, [...base, ['Diretoria', 'director', '500000', false]])
+  for (const [code, id] of Object.entries(directors)) flow('competition', `Contratação de serviço (${code})`, id, [...base, [`Diretor responsável (${code})`, 'director', null, true]])
+  flow('deviation', 'Desvio de custo ou quantidade', null, [['Diretor responsável (desvio)', 'director', null, true]])
+  flow('addendum', 'Aditivo / distrato', null, [['Gerente / Coordenador de Obra', 'manager', null, false]])
+  flow('deadline', 'Aditivo de prazo contratual', null, [['Gerente / Coordenador de Obra', 'manager', null, false]])
   for (const [code, name] of CONTRACT_TYPES) db.put('contract_types', { id: uid(), code, name, directBilling: code === 'CTD04' || code === 'CTD10' })
 
   // ------------------------------------------------------------------ ERP mock

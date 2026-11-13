@@ -8,7 +8,7 @@ import { Decimal } from '../../shared/domain/decimal'
 import { DEMO_USERS } from '../infrastructure/memory/seed'
 import { handle } from './router'
 
-const [, PROC, ENG, MGR] = DEMO_USERS.map((u) => u.id)
+const [, PROC, ENG, MGR, DIR] = DEMO_USERS.map((u) => u.id)
 
 async function call<T = unknown>(method: string, path: string, body?: unknown, user = PROC): Promise<{ status: number; data: T }> {
   const res = await handle(
@@ -26,6 +26,19 @@ let workId: string
 const contracted = async () =>
   Number((await call<{ code: string; summary: { contracted: string } }[]>('GET', '/works')).data.find((w) => w.code === '2041')!.summary.contracted)
 const seeded = async () => (await call<ContractListItemDTO[]>('GET', `/contracts?workId=${workId}`)).data.find((c) => c.code === 'SC-2041-001')!.id
+
+
+/** Aprova as etapas pendentes em ordem, cada uma com o usuário do papel (inclui a etapa de desvio) */
+async function approveAll(competitionId: string) {
+  const byRole: Record<string, typeof PROC> = { Suprimentos: PROC, Engenharia: ENG, 'Gerente / Coordenador de Obra': MGR, Diretoria: DIR }
+  for (;;) {
+    const { data } = await call<CompetitionDetailDTO>('GET', `/competitions/${competitionId}`)
+    const step = data.approvals.find((a) => a.status === 'pending')
+    if (!step || data.revision.status !== 'in_approval') return
+    const res = await call('POST', `/revisions/${data.revision.id}/approvals`, { stepOrder: step.stepOrder, decision: 'approved', comment: 'De acordo.' }, byRole[step.roleName])
+    expect(res.status, JSON.stringify(res.data)).toBe(200)
+  }
+}
 
 beforeAll(async () => {
   process.env.DATA_SOURCE = 'memory'
@@ -64,8 +77,8 @@ describe('solicitação de contrato', () => {
   it('gera do QC aprovado, exige critérios de medição, envia e cancela', async () => {
     const contrapiso = (await comps()).find((c) => c.title.startsWith('Contrapiso'))!
     const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${contrapiso.id}`)
-    await call('POST', `/revisions/${d.revision.id}/approvals`, { stepOrder: 2, decision: 'approved' }, ENG)
-    await call('POST', `/revisions/${d.revision.id}/approvals`, { stepOrder: 3, decision: 'approved' }, MGR)
+    expect(d.revision.status).toBe('in_approval')
+    await approveAll(contrapiso.id)
     expect((await comps()).find((x) => x.id === contrapiso.id)!.status).toBe('approved')
 
     const created = await call<{ id: string; code: string }>('POST', '/contracts', { competitionId: contrapiso.id })
@@ -124,9 +137,7 @@ describe('solicitação de contrato', () => {
     // A alçada usa o total da cotação escolhida
     const sent = await detail()
     expect(sent.revision.status).toBe('in_approval')
-    for (const [user, stepOrder] of [[PROC, 1], [ENG, 2], [MGR, 3]] as const) {
-      expect((await call('POST', `/revisions/${rev.revisionId}/approvals`, { stepOrder, decision: 'approved', comment: 'De acordo.' }, user)).status).toBe(200)
-    }
+    await approveAll(contrapiso.id)
     expect((await detail()).can.createContract).toBe(true)
 
     const created = await call<{ created: { id: string }[] }>('POST', '/contracts', { competitionId: contrapiso.id })

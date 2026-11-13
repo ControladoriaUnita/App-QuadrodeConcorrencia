@@ -20,6 +20,7 @@ function source(): QcMapSource {
     competition: {
       id: 'c', code: 'QC-1', title: 'T', description: null, status: 'approved', packageCode: null, requestedOn: '2026-09-01', workId: 'w',
       workCode: '1', workName: 'W', budgetId: 'b', engineeringOwner: null, procurementOwner: null, engineeringOwnerName: null, procurementOwnerName: null,
+      requestKind: null, origin: null, directorId: null, directorName: null,
     },
     revision: {
       id: 'r', number: 0, status: 'approved', reason: null, serviceStartOn: '2026-10-01', serviceEndOn: '2026-12-31', budgetAmount: '3000.0000',

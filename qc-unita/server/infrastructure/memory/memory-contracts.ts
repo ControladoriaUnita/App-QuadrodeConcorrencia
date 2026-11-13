@@ -76,6 +76,7 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
         decidedAt: (a.decidedAt as string) ?? null,
         decidedByName: name(a.decidedBy),
         decisionComment: (a.decisionComment as string) ?? null,
+        approvals: [],
         createdAt: a.createdAt as string,
         items: db
           .find('contract_addendum_items', (x) => x.addendumId === a.id)

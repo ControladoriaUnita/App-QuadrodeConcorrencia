@@ -23,6 +23,8 @@ export interface ApprovalInstance {
   stepOrder: number
   stepName: string
   roleId: string
+  /** Etapa do diretor responsável do pedido (ver ./flows.ts) */
+  directorId?: string | null
   status: ApprovalStatus
   decidedBy: string | null
   decidedAt: string | null
@@ -65,6 +67,11 @@ export interface DecisionInput {
   actorRoleIds: string[]
   comment?: string | null
   now: string
+  /**
+   * Usuário ligado ao diretor de cada etapa de diretor (directorId → userId). Diretor com usuário:
+   * só ele decide a etapa. Diretor sem usuário: qualquer um com o papel da etapa.
+   */
+  directorUsers?: Map<string, string | null>
 }
 
 export function decide(approvals: ApprovalInstance[], input: DecisionInput): { approvals: ApprovalInstance[]; outcome: FlowOutcome } {
@@ -75,6 +82,10 @@ export function decide(approvals: ApprovalInstance[], input: DecisionInput): { a
   }
   if (!input.actorRoleIds.includes(step.roleId)) {
     throw new DomainError('APPROVAL_FORBIDDEN', `Você não possui o papel exigido para "${step.stepName}".`)
+  }
+  const directorUser = step.directorId ? input.directorUsers?.get(step.directorId) : null
+  if (directorUser && directorUser !== input.actorId) {
+    throw new DomainError('APPROVAL_FORBIDDEN', `A etapa "${step.stepName}" é do diretor responsável pelo pedido.`)
   }
   if (input.decision === 'rejected' && !input.comment?.trim()) {
     throw new DomainError('APPROVAL_COMMENT_REQUIRED', 'Informe o motivo da reprovação.')

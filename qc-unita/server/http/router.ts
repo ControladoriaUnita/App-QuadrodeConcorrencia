@@ -42,6 +42,8 @@ import {
   requestUploadSchema,
   type ApiErrorBody,
   saveOutOfScopeSchema,
+  saveApprovalFlowSchema,
+  saveDirectorSchema,
 } from '../../shared/contracts'
 import { AppError, requireGlobalAdmin, toAppError, type RequestContext } from '../application/context'
 import type { Repositories } from '../application/ports'
@@ -49,6 +51,7 @@ import * as addenda from '../application/use-cases/addenda'
 import * as attachments from '../application/use-cases/attachments'
 import * as budgetMappings from '../application/use-cases/budget-mappings'
 import * as outOfScope from '../application/use-cases/out-of-scope'
+import * as approvalFlows from '../application/use-cases/approval-flows'
 import * as catalog from '../application/use-cases/catalog'
 import * as contracts from '../application/use-cases/contracts'
 import * as simulation from '../application/use-cases/simulation'
@@ -137,6 +140,19 @@ route('PUT', '/budget-mappings/items', async ({ repos, ctx, body }) => budgetMap
 route('PUT', '/budget-mappings/indirect', async ({ repos, ctx, body }) =>
   budgetMappings.setIndirectMapping(repos, ctx, parse(setIndirectMappingSchema, await body())))
 // Custos fora de escopo da obra (itens não previstos no orçamento)
+// Fluxos de aprovação e diretores (leitura: todos; gravação: administrador)
+route('GET', '/approval-config', async ({ repos, ctx }) => approvalFlows.getApprovalConfig(repos, ctx))
+route('POST', '/approval-flows', async ({ repos, ctx, body }) => approvalFlows.saveApprovalFlow(repos, ctx, null, parse(saveApprovalFlowSchema, await body())), 201)
+route('PUT', '/approval-flows/:id', async ({ repos, ctx, params, body }) =>
+  approvalFlows.saveApprovalFlow(repos, ctx, parse(uuidParam, params.id), parse(saveApprovalFlowSchema, await body())))
+route('DELETE', '/approval-flows/:id', async ({ repos, ctx, params }) => {
+  await approvalFlows.deleteApprovalFlow(repos, ctx, parse(uuidParam, params.id))
+  return { ok: true }
+})
+route('POST', '/approval-directors', async ({ repos, ctx, body }) => approvalFlows.saveDirector(repos, ctx, null, parse(saveDirectorSchema, await body())), 201)
+route('PUT', '/approval-directors/:id', async ({ repos, ctx, params, body }) =>
+  approvalFlows.saveDirector(repos, ctx, parse(uuidParam, params.id), parse(saveDirectorSchema, await body())))
+
 route('GET', '/works/:id/out-of-scope', async ({ repos, ctx, params }) => outOfScope.listOutOfScope(repos, ctx, parse(uuidParam, params.id)))
 route('POST', '/works/:id/out-of-scope', async ({ repos, ctx, params, body }) =>
   outOfScope.createOutOfScope(repos, ctx, parse(uuidParam, params.id), parse(saveOutOfScopeSchema, await body())), 201)
