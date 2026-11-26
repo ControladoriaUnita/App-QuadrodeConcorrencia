@@ -3,10 +3,12 @@
  * insumos), marcando o que entra e quanto será consumido de cada linha (% → verba puxada).
  * Os IPs de planejamento do QC saem das linhas marcadas.
  * O pedido (material ou mão de obra, origem e diretor) escolhe o fluxo de aprovação.
+ * "Ocultar campos" esconde objeto, tipo e origem do pedido para dar espaço à árvore de % a consumir.
  */
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Check } from 'lucide-react'
+import { Check, Eye, EyeOff } from 'lucide-react'
+import { REQUEST_KIND_LABEL, REQUEST_ORIGIN_LABEL } from '@shared/domain/approval/flows'
 import { Decimal } from '@shared/domain/decimal'
 import { Alert, Button, Card, CardHeader, Field, Input, Skeleton } from '@/components/ui'
 import { formatBRL } from '@/utils/format'
@@ -33,6 +35,8 @@ export function NewCompetitionPage() {
   const [selection, setSelection] = useState<Map<string, string>>(new Map())
   const [touched, setTouched] = useState(false)
   const [request, setRequest] = useState<RequestValue>(emptyRequest)
+  /** Objeto, tipo e origem do pedido ocultos (mais espaço para o % a consumir) */
+  const [compact, setCompact] = useState(false)
 
   const chosen = useMemo(() => (lines.data ?? []).filter((l) => selection.has(l.id)), [lines.data, selection])
   const pulled = Decimal.sum(chosen.map((l) => pulledValue(l, selection.get(l.id)!)))
@@ -58,6 +62,8 @@ export function NewCompetitionPage() {
 
   const submit = async () => {
     setTouched(true)
+    // Campo oculto com pendência: volta a mostrar para o aviso aparecer
+    if (title.trim().length < 3 || !request.requestKind || !request.origin) setCompact(false)
     if (blocked || title.trim().length < 3 || !requestComplete(request) || !selection.size || over.length || zero.length) return
     const r = await create.mutateAsync({
       workId,
@@ -79,16 +85,45 @@ export function NewCompetitionPage() {
       {readiness && !readiness.ready && <BudgetIncompleteAlert readiness={readiness} className="mb-3" />}
 
       <Card className="mb-3">
-        <div className="grid gap-4 px-4 py-3 sm:grid-cols-[1fr_11rem]">
-          <Field label="Objeto da concorrência" required error={titleError}>
-            <Input autoFocus placeholder="Ex.: Fornecimento e instalação de esquadrias de alumínio" value={title} onChange={(e) => setTitle(e.target.value)} />
-          </Field>
+        <div className="grid gap-4 px-4 py-3 sm:grid-cols-[1fr_11rem_auto]">
+          {compact ? (
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-sm font-medium text-ink-700">Objeto, tipo e origem do pedido (ocultos)</span>
+              <p className="flex h-10 min-w-0 items-center text-sm text-text-muted">
+                <span className="truncate" title={title.trim() || undefined}>
+                  {[
+                    title.trim() || 'Sem objeto',
+                    request.requestKind ? REQUEST_KIND_LABEL[request.requestKind] : 'Tipo não escolhido',
+                    request.origin ? REQUEST_ORIGIN_LABEL[request.origin] : 'Origem não escolhida',
+                  ].join(' · ')}
+                </span>
+              </p>
+            </div>
+          ) : (
+            <Field label="Objeto da concorrência" required error={titleError}>
+              <Input autoFocus placeholder="Ex.: Fornecimento e instalação de esquadrias de alumínio" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </Field>
+          )}
           <Field label="Data da solicitação" required>
             <Input type="date" value={requestedOn} onChange={(e) => setRequestedOn(e.target.value)} />
           </Field>
+          <div className="flex flex-col gap-1.5">
+            {/* Rótulo invisível: alinha o botão com os campos ao lado */}
+            <span className="hidden text-sm font-medium sm:invisible sm:block" aria-hidden>
+              Campos
+            </span>
+            <Button
+              className="sm:w-44"
+              icon={compact ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+              aria-pressed={compact}
+              onClick={() => setCompact((v) => !v)}
+            >
+              {compact ? 'Mostrar campos' : 'Ocultar campos'}
+            </Button>
+          </div>
         </div>
         <div className="border-t border-border px-4 py-3">
-          <RequestFields value={request} onChange={setRequest} touched={touched} />
+          <RequestFields value={request} onChange={setRequest} touched={touched} hideKindAndOrigin={compact} />
         </div>
       </Card>
 

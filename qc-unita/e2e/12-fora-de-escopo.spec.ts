@@ -30,14 +30,26 @@ test('lança, edita e exclui um custo fora de escopo', async ({ page }) => {
   await page.getByRole('button', { name: 'Novo custo fora de escopo' }).click()
   const dialog = page.getByRole('dialog')
 
-  // Sem os obrigatórios o lançamento é recusado na própria tela
+  // Sem os obrigatórios o lançamento é recusado na própria tela; o QC é opcional
+  await expect(dialog.getByRole('radio', { name: 'Insumos do Orçamento' })).toBeVisible()
+  await expect(dialog.getByRole('radio', { name: 'Insumo cadastrado' })).toHaveCount(0)
   await dialog.getByRole('button', { name: 'Lançar custo' }).click()
   await expect(dialog.getByText('Informe a quantidade')).toBeVisible()
   await expect(dialog.getByText('Escolha o motivo')).toBeVisible()
-  await expect(dialog.getByText('Escolha a concorrência (QC) a que a solicitação se refere')).toBeVisible()
+  await expect(dialog.getByText('Escolha o insumo do orçamento')).toBeVisible()
+  await expect(dialog.getByText('Escolha o vínculo de planejamento (IP)')).toBeVisible()
+  await expect(dialog.getByText(/Escolha a concorrência/)).toHaveCount(0)
   await dialog.getByLabel('Concorrência (QC)').selectOption({ label: 'QC-0001 — Pavimentação externa e passeio' })
 
+  // Insumo livre: só do cadastro de insumos do ERP (o código não é digitado)
   await dialog.getByRole('radio', { name: 'Insumo livre' }).click()
+  await expect(dialog.getByLabel('Código')).toBeDisabled()
+  const erp = dialog.getByRole('combobox', { name: 'Insumo do cadastro do ERP' })
+  await erp.click()
+  await erp.fill('IM00160')
+  await page.getByRole('listbox').getByRole('option', { name: /IM00160/ }).click()
+  await expect(dialog.getByLabel('Código')).toHaveValue('IM00160')
+  await expect(dialog.getByLabel('Unid.')).toHaveValue('rl')
   await dialog.getByLabel('Descrição').fill('Grade de proteção da escavação')
   await dialog.getByLabel('Unid.').fill('m')
   await dialog.getByRole('textbox', { name: 'Quantidade' }).fill('25')
@@ -46,6 +58,10 @@ test('lança, edita e exclui um custo fora de escopo', async ({ page }) => {
   await expect(dialog.getByText('R$ 4.512,50')).toBeVisible()
   await dialog.getByLabel('Motivo').selectOption({ label: 'Alteração de projeto' })
   await dialog.getByLabel('Justificativa').fill('Projeto revisado incluiu proteção da escavação junto à divisa.')
+  const ip = dialog.getByRole('combobox', { name: 'Vínculo de planejamento' })
+  await ip.click()
+  await ip.fill('IP00104')
+  await page.getByRole('listbox').getByRole('option', { name: /IP00104/ }).click()
   await dialog.getByRole('button', { name: 'Lançar custo' }).click()
   await expect(dialog).toBeHidden()
 
@@ -56,12 +72,16 @@ test('lança, edita e exclui um custo fora de escopo', async ({ page }) => {
   await expect(fe3.getByRole('link', { name: 'QC-0001' })).toBeVisible()
   await expect(kpi(page, 'Custos fora de escopo')).toContainText('R$ 13.296,50')
 
-  // Editar: nova quantidade recalcula o total
+  await expect(fe3).toContainText('IM00160')
+
+  // Editar: nova quantidade recalcula o total; sem concorrência o lançamento fica sem QC
   await page.getByRole('button', { name: 'Editar FE-003' }).click()
   await page.getByRole('dialog').getByRole('textbox', { name: 'Quantidade' }).fill('10')
   await page.getByRole('dialog').getByRole('textbox', { name: 'Quantidade' }).blur()
+  await page.getByRole('dialog').getByLabel('Concorrência (QC)').selectOption({ label: 'Sem concorrência' })
   await page.getByRole('dialog').getByRole('button', { name: 'Salvar' }).click()
   await expect(fe3).toContainText('R$ 1.805,00')
+  await expect(fe3.getByRole('link', { name: 'QC-0001' })).toHaveCount(0)
 
   // Excluir pede confirmação
   await page.getByRole('button', { name: 'Excluir FE-003' }).click()

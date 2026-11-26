@@ -38,3 +38,47 @@ test('"Sem Fornecedor" pode ser convidado e indicado como vencedor', async ({ pa
   await page.reload()
   await expect(page.getByText('Vencedora indicada').locator('..')).toContainText('Sem Fornecedor')
 })
+
+test('adicionar insumo ao mapa avisa o que falta (quantidade, insumo e vínculo) e o insumo livre só vem do ERP', async ({ page }) => {
+  await abrirQc(page, 'Pavimentação externa e passeio')
+  await page.getByRole('tab', { name: /Mapa de cotação/ }).click()
+  await page.getByRole('button', { name: 'Adicionar insumo' }).click()
+  const dialog = page.getByRole('dialog')
+
+  // Escolhe o insumo da obra e tenta adicionar sem quantidade: o aviso aparece junto do botão
+  const obra = dialog.getByRole('combobox', { name: 'Insumo da obra' })
+  await obra.click()
+  await obra.fill('IM00002')
+  await page.getByRole('listbox').getByRole('option', { name: /IM00002/ }).click()
+  await dialog.getByRole('button', { name: 'Adicionar insumo' }).click()
+  const falta = dialog.getByRole('alert').filter({ hasText: 'Falta preencher para adicionar o insumo' })
+  await expect(falta).toBeVisible()
+  await expect(falta).toContainText('Preencha a quantidade')
+  await expect(falta).toContainText('Defina o vínculo de planejamento')
+  await expect(dialog.getByText('Informe a quantidade')).toBeVisible()
+
+  // Quantidade zero também não vale
+  const qtd = dialog.getByRole('textbox', { name: 'Quantidade' })
+  await qtd.fill('0')
+  await qtd.blur()
+  await expect(falta).toContainText('Preencha a quantidade')
+  await qtd.fill('12')
+  await qtd.blur()
+  await expect(falta).not.toContainText('Preencha a quantidade')
+
+  // Marcar uma referência preenche o vínculo (o IP é herdado dela)
+  await dialog.getByRole('checkbox').first().check()
+  await expect(falta).toHaveCount(0)
+
+  // Insumo livre: sem digitar código, só busca no cadastro do ERP
+  await dialog.getByRole('radio', { name: 'Insumo livre' }).click()
+  await expect(dialog.getByLabel('Código')).toBeDisabled()
+  await expect(dialog.getByLabel('Código')).toHaveValue('')
+  const erp = dialog.getByRole('combobox', { name: 'Insumo do cadastro do ERP' })
+  await erp.click()
+  await erp.fill('IM00160')
+  await page.getByRole('listbox').getByRole('option', { name: /IM00160/ }).click()
+  await expect(dialog.getByLabel('Código')).toHaveValue('IM00160')
+  await dialog.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(dialog).toBeHidden()
+})

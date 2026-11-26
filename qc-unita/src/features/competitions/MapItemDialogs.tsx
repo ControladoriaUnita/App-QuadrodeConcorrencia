@@ -1,13 +1,16 @@
 /**
  * Diálogos do mapa de cotação:
- *  - Adicionar insumo: da lista de insumos da obra (UAU) ou livre, com quantidade e as referências usadas.
+ *  - Adicionar insumo: da lista de insumos da obra (UAU) ou livre (só do cadastro de insumos do ERP),
+ *    com quantidade e as referências usadas.
  *  - Editar insumo: referências ligadas, IP manual (ou herdado) e, para insumos criados no mapa, a identificação.
+ * O vínculo de planejamento é obrigatório: IP manual ou referências marcadas (o IP é herdado delas).
  */
 import { useMemo, useState } from 'react'
 import type { AddQcItemInput, CompetitionDetailDTO, QcItemDTO, UpdateItemInput } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import type { QcMap } from '@shared/domain/competition/qc-map'
 import { Alert, Button, Combobox, DecimalInput, Dialog, Field, Input, SegmentedControl } from '@/components/ui'
+import { ErpMaterialCombobox } from '@/features/catalog/ErpMaterialCombobox'
 import { usePlanningCodes, useWorkMaterials } from '@/features/works/api'
 import { planningOptions } from '@/features/works/planning'
 import { cn } from '@/utils/cn'
@@ -58,15 +61,19 @@ function ReferencePicker({ detail, map, value, onChange, exceptItemId }: { detai
   )
 }
 
+/** Vínculo de planejamento preenchido: IP manual ou referências marcadas (herança) */
+const hasPlanning = (refs: string[], planning: Planning) => refs.length > 0 || !!planning
+const PLANNING_REQUIRED = 'Vínculo de planejamento obrigatório: escolha o IP ou marque insumos referência para herdar o IP.'
+
 /** IP manual: lista de IPs da obra; vazio = herdar das referências */
-function PlanningField({ workId, value, onChange }: { workId: string; value: Planning; onChange: (v: Planning) => void }) {
+function PlanningField({ workId, value, onChange, error }: { workId: string; value: Planning; onChange: (v: Planning) => void; error?: string | null }) {
   const codes = usePlanningCodes(workId)
   const options = useMemo(
     () => [{ value: '', label: 'Herdar das referências', hint: 'IPs das linhas do orçamento, pela verba' }, ...planningOptions(codes.data?.items ?? [], value)],
     [codes.data, value],
   )
   return (
-    <Field label="Vínculo de planejamento (IP)" hint={codes.data?.warning ?? (codes.data?.source === 'uau' ? 'IPs da obra na UAU.' : undefined)}>
+    <Field label="Vínculo de planejamento (IP)" required error={error} hint={codes.data?.warning ?? (codes.data?.source === 'uau' ? 'IPs da obra na UAU.' : undefined)}>
       <Combobox
         options={options}
         value={value?.code ?? ''}
@@ -109,8 +116,18 @@ function AddItemForm({ detail, map, saving, onClose, onAdd }: AddProps) {
     () => (materials.data?.items ?? []).map((m) => ({ value: m.code, label: `${m.code} — ${m.description}`, hint: m.unit, keywords: m.code })),
     [materials.data],
   )
-  const fromList = !free && !!materialCode
-  const valid = !!quantity && code.trim().length > 0 && description.trim().length >= 2 && unit.trim().length > 0
+  const fromList = !!materialCode
+  /** Quantidade vazia ou zero = não preenchida */
+  const missingQuantity = !quantity || !Decimal.from(quantity).isPositive()
+  const missingPlanning = !hasPlanning(refs, planning)
+  const missingMaterial = !materialCode
+  const valid = !missingQuantity && !missingMaterial && !missingPlanning && code.trim().length > 0 && description.trim().length >= 2 && unit.trim().length > 0
+  /** O que falta, mostrado junto do botão (o diálogo rola e o campo pode estar fora da vista) */
+  const pending = [
+    missingMaterial && (free ? 'escolha o insumo no cadastro do ERP' : 'escolha o insumo'),
+    missingQuantity && 'preencha a quantidade',
+    missingPlanning && 'defina o vínculo de planejamento (IP ou insumos referência)',
+  ].filter(Boolean) as string[]
 
   return (
     <Dialog
@@ -129,7 +146,7 @@ function AddItemForm({ detail, map, saving, onClose, onAdd }: AddProps) {
               setTouched(true)
               if (!valid) return
               await onAdd({
-                materialCode: fromList ? materialCode : null,
+                materialCode,
                 code: code.trim(), description: description.trim(), unit: unit.trim(), quantity: quantity!,
                 referenceIds: refs, planningCode: planning?.code ?? null, planningDescription: planning?.description ?? null,
               })
@@ -146,10 +163,32 @@ function AddItemForm({ detail, map, saving, onClose, onAdd }: AddProps) {
           label="Origem do insumo"
           items={[{ key: 'obra', label: 'Insumo da obra' }, { key: 'livre', label: 'Insumo livre' }]}
           value={free ? 'livre' : 'obra'}
-          onChange={(k) => setFree(k === 'livre')}
+          onChange={(k) => {
+            if ((k === 'livre') === free) return
+            // Cada origem tem a sua lista: o insumo escolhido na outra não vale
+            setFree(k === 'livre')
+            setMaterialCode(null)
+            setCode('')
+            setDescription('')
+            setUnit('')
+          }}
         />
-        {!free && (
-          <Field label="Insumo" hint={materials.data?.warning ?? (materials.data?.source === 'uau' ? 'Insumos do orçamento da obra na UAU.' : 'Insumos do orçamento importado.')}>
+        {free ? (
+          <Field label="Insumo" required error={touched && missingMaterial ? 'Escolha o insumo no cadastro do ERP' : null} hint="Só insumos do cadastro do ERP (UAU). Busque pelo código ou pela descrição.">
+            <ErpMaterialCombobox
+              value={materialCode}
+              selected={materialCode ? { code, description, unit, active: true } : null}
+              onChange={(m) => {
+                setMaterialCode(m.code)
+                setCode(m.code)
+                setDescription(m.description)
+                setUnit(m.unit)
+              }}
+              aria-label="Insumo do cadastro do ERP"
+            />
+          </Field>
+        ) : (
+          <Field label="Insumo" required error={touched && missingMaterial ? 'Escolha o insumo' : null} hint={materials.data?.warning ?? (materials.data?.source === 'uau' ? 'Insumos do orçamento da obra na UAU.' : 'Insumos do orçamento importado.')}>
             <Combobox
               options={options}
               value={materialCode}
@@ -170,24 +209,30 @@ function AddItemForm({ detail, map, saving, onClose, onAdd }: AddProps) {
           </Field>
         )}
         <div className="grid gap-3 sm:grid-cols-[9rem_1fr_6rem_8rem]">
-          <Field label="Código" required error={touched && !code.trim() ? 'Informe' : null}>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} disabled={fromList} />
+          {/* Código, descrição e unidade vêm do insumo escolhido na lista */}
+          <Field label="Código" required error={touched && fromList && !code.trim() ? 'Informe' : null}>
+            <Input value={code} onChange={(e) => setCode(e.target.value)} disabled />
           </Field>
-          <Field label="Descrição" required error={touched && description.trim().length < 2 ? 'Informe' : null}>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} disabled={fromList} />
+          <Field label="Descrição" required error={touched && fromList && description.trim().length < 2 ? 'Informe' : null}>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} disabled />
           </Field>
-          <Field label="Unid." required error={touched && !unit.trim() ? 'Informe' : null}>
-            <Input value={unit} onChange={(e) => setUnit(e.target.value)} disabled={fromList} />
+          <Field label="Unid." required error={touched && fromList && !unit.trim() ? 'Informe' : null}>
+            <Input value={unit} onChange={(e) => setUnit(e.target.value)} disabled />
           </Field>
-          <Field label="Quantidade" required error={touched && !quantity ? 'Informe' : null}>
-            <DecimalInput value={quantity} onCommit={setQuantity} fractionDigits={4} trimZeros placeholder="0,00" aria-label="Quantidade" />
+          <Field label="Quantidade" required error={touched && missingQuantity ? 'Informe a quantidade' : null}>
+            <DecimalInput value={quantity} onCommit={setQuantity} fractionDigits={4} trimZeros placeholder="0,00" aria-label="Quantidade" className="border-border bg-surface" />
           </Field>
         </div>
         <Field label="Insumos referência (comparação com o orçado)">
           <ReferencePicker detail={detail} map={map} value={refs} onChange={setRefs} />
         </Field>
-        <PlanningField workId={workId} value={planning} onChange={setPlanning} />
-        {!refs.length && !planning && <Alert tone="warning">Sem referência nem IP manual, o insumo fica pendente para o envio à aprovação.</Alert>}
+        <PlanningField workId={workId} value={planning} onChange={setPlanning} error={touched && missingPlanning ? 'Escolha o IP ou marque insumos referência' : null} />
+        {missingPlanning && !touched && <Alert tone="warning">{PLANNING_REQUIRED}</Alert>}
+        {touched && pending.length > 0 && (
+          <Alert tone="error" title="Falta preencher para adicionar o insumo">
+            {pending.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join('; ')}.
+          </Alert>
+        )}
       </div>
     </Dialog>
   )
@@ -223,6 +268,7 @@ function EditItemForm({ item, detail, map, saving, onClose, onSave }: EditProps 
   if (manual && description.trim() !== item.description) patch.description = description.trim()
   if (manual && unit.trim() !== item.unit) patch.unit = unit.trim()
   const dirty = refsChanged || Object.keys(patch).length > 0
+  const missingPlanning = !hasPlanning(refs, planning)
 
   return (
     <Dialog
@@ -238,7 +284,7 @@ function EditItemForm({ item, detail, map, saving, onClose, onSave }: EditProps 
             <Button
               variant="primary"
               loading={saving}
-              disabled={!dirty}
+              disabled={!dirty || missingPlanning}
               onClick={async () => {
                 await onSave(item.id, refsChanged ? refs : null, Object.keys(patch).length ? patch : null)
                 onClose()
@@ -265,7 +311,15 @@ function EditItemForm({ item, detail, map, saving, onClose, onSave }: EditProps 
             <p className="text-sm">{refs.map((id) => detail.references.find((r) => r.id === id)?.code).join(', ') || 'Nenhuma'}</p>
           )}
         </Field>
-        {editable && <PlanningField workId={detail.competition.workId} value={planning} onChange={setPlanning} />}
+        {editable && (
+          <PlanningField
+            workId={detail.competition.workId}
+            value={planning}
+            onChange={setPlanning}
+            error={missingPlanning ? 'Escolha o IP ou marque insumos referência' : null}
+          />
+        )}
+        {editable && missingPlanning && <Alert tone="warning">{PLANNING_REQUIRED}</Alert>}
         <div>
           <p className="mb-1 text-xs font-semibold text-text-muted">Vínculos para a solicitação de contrato (salvos)</p>
           <ul className="grid gap-0.5 text-sm">

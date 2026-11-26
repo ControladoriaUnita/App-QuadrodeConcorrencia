@@ -1,7 +1,8 @@
 /**
- * Lançar / editar um custo fora de escopo: insumo (da obra ou livre), quantidade, custo unitário,
- * motivo e justificativa; Item da EAP e IP opcionais. A solicitação é amarrada ao QC a que se
- * refere (obrigatório quando a obra tem concorrências). Validação pelo mesmo schema da API.
+ * Lançar / editar um custo fora de escopo: insumo (dos insumos do orçamento ou, em "Insumo livre",
+ * do cadastro de insumos do ERP), quantidade, custo unitário, motivo e justificativa; vínculo de
+ * planejamento (IP) obrigatório e Item da EAP opcional. A solicitação pode ser atrelada a um QC
+ * ou não. Validação pelo mesmo schema da API.
  */
 import { useMemo, useState } from 'react'
 import type { OutOfScopeCategoryKey, OutOfScopeCostDTO, SaveOutOfScopeInput } from '@shared/contracts'
@@ -9,6 +10,7 @@ import { saveOutOfScopeSchema } from '@shared/contracts'
 import { OUT_OF_SCOPE_CATEGORIES, outOfScopeCode, outOfScopeTotal } from '@shared/domain/budget/out-of-scope'
 import { Alert, Button, Combobox, DecimalInput, Dialog, Field, Input, SegmentedControl, Select, Textarea } from '@/components/ui'
 import type { ApiError } from '@/lib/api'
+import { ErpMaterialCombobox } from '@/features/catalog/ErpMaterialCombobox'
 import { useBudgetStructure, usePlanningCodes, useWorkMaterials } from '@/features/works/api'
 import { planningOptions } from '@/features/works/planning'
 import { formatBRL } from '@/utils/format'
@@ -60,10 +62,10 @@ export function OutOfScopeDialog({ workId, cost, competitions, saving, error, on
     ]
     return [{ value: '', label: 'Sem Item da EAP', keywords: '' }, ...all.sort((a, b) => a.value.localeCompare(b.value, 'pt-BR', { numeric: true }))]
   }, [structure.data])
-  const ipOptions = useMemo(() => [{ value: '', label: 'Sem IP', keywords: '' }, ...planningOptions(codes.data?.items ?? [], planning)], [codes.data, planning])
+  const ipOptions = useMemo(() => planningOptions(codes.data?.items ?? [], planning), [codes.data, planning])
 
   const input = {
-    code: free ? (code.trim() || null) : code || null,
+    code: code.trim() || null,
     description,
     unit,
     quantity: quantity ?? '',
@@ -78,18 +80,21 @@ export function OutOfScopeDialog({ workId, cost, competitions, saving, error, on
     competitionId: competitionId || null,
   }
   const parsed = saveOutOfScopeSchema.safeParse(input)
-  // A solicitação precisa apontar o QC de origem sempre que a obra tem concorrências
-  const needsCompetition = competitions.length > 0 && !competitionId
+  // O insumo sai sempre de uma lista (orçamento ou cadastro do ERP) e o IP é obrigatório
+  const missingCode = !code.trim()
+  const missingPlanning = !planning
+  const blocked = !parsed.success || missingCode || missingPlanning
   const empty: Record<string, string | null> = {
+    code: missingCode ? (free ? 'Escolha o insumo no cadastro do ERP' : 'Escolha o insumo do orçamento') : null,
     quantity: quantity ? null : 'Informe a quantidade',
     unitCost: unitCost ? null : 'Informe o custo unitário',
     category: category ? null : 'Escolha o motivo',
-    competitionId: needsCompetition ? 'Escolha a concorrência (QC) a que a solicitação se refere' : null,
+    planningCode: missingPlanning ? 'Escolha o vínculo de planejamento (IP)' : null,
   }
   const issue = (field: string) =>
-    touched && (!parsed.success || needsCompetition) ? (empty[field] ?? (parsed.success ? null : parsed.error.issues.find((i) => i.path[0] === field)?.message) ?? null) : null
+    touched && blocked ? (empty[field] ?? (parsed.success ? null : parsed.error.issues.find((i) => i.path[0] === field)?.message) ?? null) : null
   const total = quantity && unitCost ? outOfScopeTotal(quantity, unitCost) : null
-  const fromList = !free && !!code
+  const fromList = !!code
 
   return (
     <Dialog
@@ -106,7 +111,7 @@ export function OutOfScopeDialog({ workId, cost, competitions, saving, error, on
             loading={saving}
             onClick={async () => {
               setTouched(true)
-              if (!parsed.success || needsCompetition) return
+              if (blocked || !parsed.success) return
               try {
                 await onSave(parsed.data)
                 onClose()
@@ -124,12 +129,11 @@ export function OutOfScopeDialog({ workId, cost, competitions, saving, error, on
         {error && <Alert tone="error" title={error.message} />}
         <Field
           label="Concorrência (QC)"
-          required={competitions.length > 0}
           error={issue('competitionId')}
-          hint={competitions.length ? 'QC a que esta solicitação fora de escopo se refere.' : 'A obra ainda não tem concorrências.'}
+          hint={competitions.length ? 'Opcional: atrele a um QC ou deixe sem concorrência (contratação não prevista no orçamento).' : 'A obra ainda não tem concorrências.'}
         >
           <Select value={competitionId} onChange={(e) => setCompetitionId(e.target.value)} disabled={!competitions.length}>
-            <option value="">{competitions.length ? 'Selecione…' : 'Sem concorrência'}</option>
+            <option value="">Sem concorrência</option>
             {competitions.map((c) => (
               <option key={c.id} value={c.id}>{c.code} — {c.title}</option>
             ))}
@@ -137,12 +141,32 @@ export function OutOfScopeDialog({ workId, cost, competitions, saving, error, on
         </Field>
         <SegmentedControl
           label="Origem do insumo"
-          items={[{ key: 'obra', label: 'Insumo cadastrado' }, { key: 'livre', label: 'Insumo livre' }]}
+          items={[{ key: 'obra', label: 'Insumos do Orçamento' }, { key: 'livre', label: 'Insumo livre' }]}
           value={free ? 'livre' : 'obra'}
-          onChange={(k) => setFree(k === 'livre')}
+          onChange={(k) => {
+            if ((k === 'livre') === free) return
+            // Cada origem tem a sua lista: o insumo escolhido na outra não vale
+            setFree(k === 'livre')
+            setCode('')
+            setDescription('')
+            setUnit('')
+          }}
         />
-        {!free && (
-          <Field label="Insumo" hint={materials.data?.warning ?? 'Busque pelo código ou pela descrição.'}>
+        {free ? (
+          <Field label="Insumo" required error={issue('code')} hint="Só insumos do cadastro do ERP (UAU). Busque pelo código ou pela descrição.">
+            <ErpMaterialCombobox
+              value={code || null}
+              selected={code ? { code, description, unit, active: true } : null}
+              onChange={(m) => {
+                setCode(m.code)
+                setDescription(m.description)
+                setUnit(m.unit)
+              }}
+              aria-label="Insumo do cadastro do ERP"
+            />
+          </Field>
+        ) : (
+          <Field label="Insumo" required error={issue('code')} hint={materials.data?.warning ?? 'Busque pelo código ou pela descrição.'}>
             <Combobox
               options={materialOptions}
               value={code || null}
@@ -157,13 +181,13 @@ export function OutOfScopeDialog({ workId, cost, competitions, saving, error, on
                   setUnit(m.unit)
                 }
               }}
-              aria-label="Insumo cadastrado"
+              aria-label="Insumos do Orçamento"
             />
           </Field>
         )}
         <div className="grid gap-3 sm:grid-cols-[8rem_1fr_6rem]">
           <Field label="Código">
-            <Input value={code} onChange={(e) => setCode(e.target.value)} disabled={fromList} placeholder={free ? 'Opcional' : undefined} />
+            <Input value={code} onChange={(e) => setCode(e.target.value)} disabled={fromList || free} />
           </Field>
           <Field label="Descrição" required error={issue('description')}>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -206,7 +230,7 @@ export function OutOfScopeDialog({ workId, cost, competitions, saving, error, on
           <Field label="Item da EAP (opcional)" hint="Onde o custo se encaixa no orçamento." error={issue('wbs')}>
             <Combobox options={wbsOptions} value={wbs} loading={structure.isLoading} maxResults={80} onChange={setWbs} aria-label="Item da EAP" />
           </Field>
-          <Field label="Vínculo de planejamento (IP, opcional)" hint={codes.data?.warning ?? undefined}>
+          <Field label="Vínculo de planejamento (IP)" required error={issue('planningCode')} hint={codes.data?.warning ?? undefined}>
             <Combobox
               options={ipOptions}
               value={planning?.code ?? ''}

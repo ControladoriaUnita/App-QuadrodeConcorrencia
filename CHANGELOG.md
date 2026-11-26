@@ -21,7 +21,14 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 | Ambiente | Versão |
 |---|---|
 | produção | v11 |
-| dev | v15 |
+| dev | v16 |
+
+## v16 — dev (2026-11-26)
+
+- **Nova concorrência:** botão **Ocultar campos / Mostrar campos** esconde o objeto, o tipo e a origem do pedido para dar espaço à árvore de % a consumir. Data e diretor continuam visíveis; se faltar algum campo oculto ao criar, eles voltam a aparecer.
+- **Fora de escopo:** o QC passa a ser opcional ("Sem concorrência"); "Insumo cadastrado" passa a se chamar **Insumos do Orçamento**; o **Insumo livre** só aceita insumos do cadastro do ERP (UAU); o **vínculo de planejamento (IP)** é obrigatório.
+- **Mapa — Adicionar insumo:** o insumo livre também só vem do cadastro do ERP; o vínculo de planejamento é obrigatório (IP manual ou insumos referência, de onde o IP é herdado), também ao editar; a falta de quantidade (vazia ou zero) aparece em aviso junto do botão e o campo ganhou moldura.
+- Sem migration. `verificar`: 237 testes do Vitest (9 pulados), 35 de tela e build.
 
 ## v15 — dev (2026-11-13)
 

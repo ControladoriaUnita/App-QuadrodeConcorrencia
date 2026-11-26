@@ -1,6 +1,7 @@
 /**
  * Pedido da concorrência: material ou mão de obra, origem (obra ou Suprimentos) e diretor aprovador
  * (RT, SR…). Os três escolhem o fluxo de aprovação, mostrado logo abaixo com as etapas.
+ * `hideKindAndOrigin` oculta tipo e origem (botão "Ocultar campos" da nova concorrência).
  */
 import type { RequestKind, RequestOrigin } from '@shared/contracts'
 import { matchFlow, REQUEST_KIND_LABEL, REQUEST_ORIGIN_LABEL } from '@shared/domain/approval/flows'
@@ -16,7 +17,17 @@ export interface RequestValue {
 export const emptyRequest: RequestValue = { requestKind: '', origin: '', directorId: '' }
 export const requestComplete = (v: RequestValue) => !!v.requestKind && !!v.origin && !!v.directorId
 
-export function RequestFields({ value, onChange, touched }: { value: RequestValue; onChange: (v: RequestValue) => void; touched: boolean }) {
+export function RequestFields({
+  value,
+  onChange,
+  touched,
+  hideKindAndOrigin = false,
+}: {
+  value: RequestValue
+  onChange: (v: RequestValue) => void
+  touched: boolean
+  hideKindAndOrigin?: boolean
+}) {
   const config = useApprovalConfig()
   const directors = (config.data?.directors ?? []).filter((d) => d.active)
   const flow = config.data
@@ -35,18 +46,22 @@ export function RequestFields({ value, onChange, touched }: { value: RequestValu
   return (
     <div className="grid gap-3">
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Tipo do pedido" required error={err(!!value.requestKind, 'Escolha material ou mão de obra')}>
-          <Select value={value.requestKind} onChange={(e) => set({ requestKind: e.target.value as RequestKind | '' })}>
-            <option value="">Selecione…</option>
-            {(Object.keys(REQUEST_KIND_LABEL) as RequestKind[]).map((k) => <option key={k} value={k}>{REQUEST_KIND_LABEL[k]}</option>)}
-          </Select>
-        </Field>
-        <Field label="Origem do pedido" required error={err(!!value.origin, 'Escolha quem abriu o pedido')}>
-          <Select value={value.origin} onChange={(e) => set({ origin: e.target.value as RequestOrigin | '' })}>
-            <option value="">Selecione…</option>
-            {(Object.keys(REQUEST_ORIGIN_LABEL) as RequestOrigin[]).map((k) => <option key={k} value={k}>{REQUEST_ORIGIN_LABEL[k]}</option>)}
-          </Select>
-        </Field>
+        {!hideKindAndOrigin && (
+          <>
+            <Field label="Tipo do pedido" required error={err(!!value.requestKind, 'Escolha material ou mão de obra')}>
+              <Select value={value.requestKind} onChange={(e) => set({ requestKind: e.target.value as RequestKind | '' })}>
+                <option value="">Selecione…</option>
+                {(Object.keys(REQUEST_KIND_LABEL) as RequestKind[]).map((k) => <option key={k} value={k}>{REQUEST_KIND_LABEL[k]}</option>)}
+              </Select>
+            </Field>
+            <Field label="Origem do pedido" required error={err(!!value.origin, 'Escolha quem abriu o pedido')}>
+              <Select value={value.origin} onChange={(e) => set({ origin: e.target.value as RequestOrigin | '' })}>
+                <option value="">Selecione…</option>
+                {(Object.keys(REQUEST_ORIGIN_LABEL) as RequestOrigin[]).map((k) => <option key={k} value={k}>{REQUEST_ORIGIN_LABEL[k]}</option>)}
+              </Select>
+            </Field>
+          </>
+        )}
         <Field label="Diretor aprovador" required error={err(!!value.directorId, 'Escolha o diretor que entra no fluxo')}>
           <Select value={value.directorId} onChange={(e) => set({ directorId: e.target.value })} disabled={config.isLoading}>
             <option value="">Selecione…</option>
