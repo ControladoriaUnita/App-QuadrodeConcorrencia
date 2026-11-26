@@ -136,7 +136,13 @@ export function CompetitionPage() {
                 Nova revisão
               </Button>
             )}
-            {detail.can.submit && (
+            {/* O envio para aprovação fica na aba "Solicitação de contrato" */}
+            {detail.can.submit && tab !== 'contrato' && can('contract.read') && (
+              <Button icon={<Send className="size-4" />} onClick={() => setTab('contrato')}>
+                Solicitação e envio
+              </Button>
+            )}
+            {detail.can.submit && !can('contract.read') && (
               <Button variant="primary" icon={<Send className="size-4" />} onClick={() => setConfirmSubmit(true)}>
                 Enviar para aprovação
               </Button>
@@ -232,7 +238,14 @@ export function CompetitionPage() {
           onRemoveItem={(itemId) => m.removeItem.mutate(itemId)}
         />
       )}
-      {tab === 'contrato' && can('contract.read') && <ContractRequestPanel competitionId={c.id} workId={c.workId} canCreate={detail.can.createContract} />}
+      {tab === 'contrato' && can('contract.read') && (
+        <ContractRequestPanel
+          competitionId={c.id}
+          workId={c.workId}
+          canCreate={detail.can.createContract}
+          qcSubmit={{ can: detail.can.submit, pending: m.submit.isPending, issues: map.issues.length, onSubmit: () => setConfirmSubmit(true) }}
+        />
+      )}
       {tab === 'vinculos' && (
         <LinksPanel
           detail={detail}

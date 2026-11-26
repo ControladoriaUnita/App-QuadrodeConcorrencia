@@ -20,10 +20,18 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v16 |
-| dev | v20 |
+| produção | v20 |
+| dev | v21 |
 
-## v20 — dev (2026-11-26)
+## v21 — dev (2026-11-26)
+
+- **Envio para aprovação na Solicitação de contrato:** saiu o “Enviar para aprovação” do cabeçalho do QC. O envio passa a ser feito na aba **Solicitação de contrato** (botão **Enviar QC para aprovação**); no cabeçalho, o botão **Solicitação e envio** leva até a aba. Se ainda não houver solicitação, ela é gerada no envio, como antes.
+- **Campos ocultáveis:** botão **Ocultar campos / Mostrar campos** na solicitação e **Ocultar / Mostrar** em cada bloco (informações gerais, projetos, escopo e critérios de medição). A escolha fica lembrada no navegador.
+- **Linhas do contrato em destaque:** os itens vêm antes dos dados, com descrição maior, valores em negrito e linhas alternadas.
+- O subtítulo da solicitação só diz “aprovada” quando o QC já foi aprovado.
+- Sem migration. `verificar`: 245 testes do Vitest (9 pulados), 40 de tela e build.
+
+## v20 — produção (2026-11-26)
 
 - **Diretores aprovam os QCs uns dos outros:** a etapa “Diretor responsável” pode ser decidida pelo diretor do pedido ou por outro diretor (usuário ligado a outro diretor, com o papel da etapa). Quem não é diretor continua barrado. Vale para QCs e aditivos. A etapa mostra o selo **por outro diretor**.
 - **Aviso ao dono do pedido:** quando outro diretor decide, o aviso é montado (QC, etapa, diretor dono, quem decidiu e a decisão) e fica numa caixa de saída (`server/application/notifications.ts`). **O envio do e-mail ainda não existe:** o meio de envio será definido depois e ligado ali.

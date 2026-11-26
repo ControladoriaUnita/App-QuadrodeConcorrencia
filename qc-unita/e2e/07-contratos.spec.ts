@@ -121,3 +121,27 @@ test('mudar o R$ unitário no aditivo duplica a linha: a original fica zerada e 
   await expect(page.getByRole('button', { name: 'Enviar para aprovação' })).toBeVisible()
   await expect(page.getByText('linha duplicada (novo unitário)', { exact: false })).toBeVisible()
 })
+
+test('na solicitação os itens vêm primeiro e os campos podem ser ocultados (todos ou por bloco)', async ({ page }) => {
+  await abrirQc(page, 'Terraplenagem e bota-fora')
+  await page.getByRole('tab', { name: /Solicitação de contrato/ }).click()
+  const itens = page.getByText('2. Itens do contrato', { exact: false })
+  const gerais = page.getByText('1. Informações gerais')
+  await expect(itens).toBeVisible()
+  expect((await itens.boundingBox())!.y).toBeLessThan((await gerais.boundingBox())!.y)
+
+  await page.getByRole('button', { name: 'Ocultar campos' }).click()
+  await expect(page.getByRole('textbox', { name: 'Início' })).toBeHidden()
+  await expect(page.getByText('6. Critérios de medição')).toBeHidden()
+  await expect(itens).toBeVisible()
+  // A escolha fica lembrada
+  await page.reload()
+  await expect(page.getByRole('textbox', { name: 'Início' })).toBeHidden()
+  await page.getByRole('button', { name: 'Mostrar campos' }).click()
+  await expect(page.getByRole('textbox', { name: 'Início' })).toBeVisible()
+
+  // Por bloco
+  await page.getByRole('button', { name: 'Ocultar relação de projetos' }).click()
+  await expect(page.getByRole('textbox', { name: 'Início' })).toBeVisible()
+  await page.getByRole('button', { name: 'Mostrar relação de projetos' }).click()
+})

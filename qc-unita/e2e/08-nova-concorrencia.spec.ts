@@ -1,4 +1,4 @@
-import { abrirAlpha, expect, nav, test } from './fixtures'
+import { abrirAlpha, abrirQc, expect, nav, test } from './fixtures'
 
 test('"Ocultar campos" esconde objeto, tipo e origem do pedido e eles voltam se faltarem ao criar', async ({ page }) => {
   await abrirAlpha(page)
@@ -58,4 +58,17 @@ test('criar concorrência a partir do orçamento leva ao novo QC e ele aparece n
 
   await nav(page).getByText('Concorrências').click()
   await expect(page.getByRole('region', { name: 'Em cotação' })).toContainText('Esquadrias de alumínio — teste E2E')
+})
+
+test('o envio do QC para aprovação fica na aba Solicitação de contrato', async ({ page }) => {
+  await abrirQc(page, 'Esquadrias de alumínio — teste E2E')
+  await expect(page.getByRole('button', { name: 'Enviar para aprovação' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Solicitação e envio' }).click()
+  await expect(page.getByRole('tab', { name: /Solicitação de contrato/ })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('button', { name: 'Enviar QC para aprovação' }).click()
+  // QC ainda incompleto: o diálogo avisa das pendências; cancela sem enviar
+  await expect(page.getByText('Enviar para aprovação?')).toBeVisible()
+  await expect(page.getByText('Há pendências')).toBeVisible()
+  await page.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(page.getByText('Enviar para aprovação?')).toBeHidden()
 })

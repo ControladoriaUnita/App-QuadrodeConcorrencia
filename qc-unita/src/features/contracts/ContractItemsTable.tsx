@@ -24,17 +24,17 @@ export function ContractItemsTable({ c, onUpdate, onAllocations }: {
 }) {
   const editable = c.can.edit
   const [editing, setEditing] = useState<ContractItemDTO | null>(null)
-  const th = 'sticky top-0 z-10 border-b border-border bg-ink-50 px-3 py-2 text-xs font-semibold text-text-muted whitespace-nowrap'
-  const td = 'border-b border-border px-3 py-1.5 align-top'
+  const th = 'sticky top-0 z-10 border-b border-border bg-ink-100 px-3 py-2.5 text-xs font-semibold text-ink-700 whitespace-nowrap'
+  const td = 'border-b border-border px-3 py-2.5 align-top'
   const result = Decimal.from(c.availableAmount).minus(c.totalAmount)
   const ratio = Decimal.from(c.budgetAmount).isZero() ? null : result.div(c.budgetAmount, 6)
   const materials = useMemo(() => globalMaterials(c.items), [c.items])
   const hasMaterials = materials.total.isPositive()
 
   return (
-    <Card>
+    <Card className="border-primary/30">
       <CardHeader
-        title="2. Especificação dos serviços contratados"
+        title="2. Itens do contrato — especificação dos serviços contratados"
         description={`${c.items.length} item(ns) · preços da vencedora na ${c.competition.code}; vínculos de planejamento por IP (herdados das referências ou escolhidos no mapa)`}
       />
       <div className="max-h-[calc(100dvh-14rem)] overflow-auto">
@@ -52,10 +52,10 @@ export function ContractItemsTable({ c, onUpdate, onAllocations }: {
           </thead>
           <tbody>
             {c.items.map((i) => (
-              <tr key={i.id} className="hover:bg-ink-50">
+              <tr key={i.id} className="odd:bg-surface even:bg-ink-50/50 hover:bg-primary-soft/30">
                 <td className={cn(td, 'max-w-80')}>
-                  <p className="truncate font-medium" title={i.description}>{i.description}</p>
-                  <p className="text-[11px] leading-4 text-text-muted">{i.code}</p>
+                  <p className="truncate text-[15px] font-semibold text-text" title={i.description}>{i.description}</p>
+                  <p className="text-xs leading-4 font-medium text-ink-600">{i.code}</p>
                   {i.references.length > 0 && (
                     <ul className="mt-1 grid gap-0.5 border-l-2 border-border pl-2 text-[11px] leading-4 text-text-muted">
                       {i.references.map((r) => (
@@ -87,9 +87,9 @@ export function ContractItemsTable({ c, onUpdate, onAllocations }: {
                     onCommit={(v) => v !== null && onUpdate(i.id, { pctRetention: v })}
                   />
                 </td>
-                <td className={cn(td, 'text-right whitespace-nowrap')}>{formatQuantity(i.quantity)} <span className="text-text-muted">{i.unit}</span></td>
-                <td className={cn(td, 'text-right whitespace-nowrap')}>{formatBRL(i.unitPrice)}</td>
-                <td className={cn(td, 'text-right font-medium whitespace-nowrap')}>
+                <td className={cn(td, 'text-right font-medium whitespace-nowrap text-text')}>{formatQuantity(i.quantity)} <span className="text-text-muted">{i.unit}</span></td>
+                <td className={cn(td, 'text-right font-medium whitespace-nowrap text-text')}>{formatBRL(i.unitPrice)}</td>
+                <td className={cn(td, 'text-right font-semibold whitespace-nowrap text-text')}>
                   {formatBRL(i.totalPrice)}
                   {materials.byItem.has(i.id) && (
                     <span className="block text-[11px] leading-4 font-normal text-text-muted" title="Parte de material desta linha (total × % material), somada em Materiais globais">

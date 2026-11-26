@@ -5,7 +5,7 @@
  */
 import { useEffect, type ReactNode } from 'react'
 import { useFieldArray, useForm } from 'react-hook-form'
-import { Plus, Save, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Save, Trash2 } from 'lucide-react'
 import type { ContractPartyDTO, ContractRequestDTO, UpdateContractRequestInput } from '@shared/contracts'
 import { Badge, Button, Card, CardBody, CardHeader, Field, Input, Select, Textarea } from '@/components/ui'
 import { useSuppliers } from '@/features/competitions/api'
@@ -26,7 +26,25 @@ interface FormValues {
 
 const nul = (v: string) => (v.trim() === '' ? null : v.trim())
 
-export function ContractForm({ c, saving, onSave }: { c: ContractRequestDTO; saving: boolean; onSave: (v: UpdateContractRequestInput) => void }) {
+/** Blocos do formulário que podem ser ocultados */
+export type ContractFormSection = 'general' | 'projects' | 'scope'
+export const CONTRACT_FORM_SECTIONS: ContractFormSection[] = ['general', 'projects', 'scope']
+
+export function ContractForm({ c, saving, onSave, hidden, onToggle }: {
+  c: ContractRequestDTO
+  saving: boolean
+  onSave: (v: UpdateContractRequestInput) => void
+  /** Blocos ocultos (o corpo some, o título continua; os valores digitados ficam) */
+  hidden?: Set<ContractFormSection>
+  onToggle?: (section: ContractFormSection) => void
+}) {
+  const isHidden = (k: ContractFormSection) => !!hidden?.has(k)
+  const toggle = (k: ContractFormSection, label: string) =>
+    onToggle && (
+      <Button size="sm" variant="ghost" icon={isHidden(k) ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />} aria-expanded={!isHidden(k)} aria-label={`${isHidden(k) ? 'Mostrar' : 'Ocultar'} ${label}`} onClick={() => onToggle(k)}>
+        {isHidden(k) ? 'Mostrar' : 'Ocultar'}
+      </Button>
+    )
   const disabled = !c.can.edit
   const suppliers = useSuppliers()
   const defaults: FormValues = {
@@ -68,16 +86,19 @@ export function ContractForm({ c, saving, onSave }: { c: ContractRequestDTO; sav
       <Card>
         <CardHeader
           title="1. Informações gerais"
-          description={`Gerada da ${formatRevision(c.revision.number)} aprovada de ${c.competition.code} em ${formatDate(c.createdAt.slice(0, 10))}${c.createdByName ? ` por ${c.createdByName}` : ''}`}
+          description={`Gerada da ${formatRevision(c.revision.number)}${c.qcApproved ? ' aprovada' : ''} de ${c.competition.code} em ${formatDate(c.createdAt.slice(0, 10))}${c.createdByName ? ` por ${c.createdByName}` : ''}`}
           actions={
-            !disabled && (
-              <Button type="submit" variant="primary" size="sm" icon={<Save className="size-4" />} loading={saving} disabled={!formState.isDirty}>
-                Salvar
-              </Button>
-            )
+            <div className="flex items-center gap-1">
+              {!disabled && (
+                <Button type="submit" variant="primary" size="sm" icon={<Save className="size-4" />} loading={saving} disabled={!formState.isDirty}>
+                  Salvar
+                </Button>
+              )}
+              {toggle('general', 'informações gerais')}
+            </div>
           }
         />
-        <CardBody className="grid gap-4">
+        <CardBody className={cn('grid gap-4', isHidden('general') && 'hidden')}>
           <Section title="1.1 Dados iniciais">
             <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
               <Info label="Obra" value={`${c.work.code} · ${c.work.name}`} />
@@ -144,14 +165,17 @@ export function ContractForm({ c, saving, onSave }: { c: ContractRequestDTO; sav
         <CardHeader
           title="3. Relação de projetos pertinentes à execução"
           actions={
-            !disabled && (
-              <Button size="sm" icon={<Plus className="size-4" />} onClick={() => projects.append({ sheet: '', fileName: '', revision: '' })}>
-                Adicionar projeto
-              </Button>
-            )
+            <div className="flex items-center gap-1">
+              {!disabled && !isHidden('projects') && (
+                <Button size="sm" icon={<Plus className="size-4" />} onClick={() => projects.append({ sheet: '', fileName: '', revision: '' })}>
+                  Adicionar projeto
+                </Button>
+              )}
+              {toggle('projects', 'relação de projetos')}
+            </div>
           }
         />
-        <CardBody className="py-3">
+        <CardBody className={cn('py-3', isHidden('projects') && 'hidden')}>
           {projects.fields.length === 0 ? (
             <p className="text-sm text-text-muted">Nenhum projeto informado.</p>
           ) : (
@@ -180,7 +204,8 @@ export function ContractForm({ c, saving, onSave }: { c: ContractRequestDTO; sav
       </Card>
 
       <Card>
-        <CardBody className="grid gap-4 lg:grid-cols-2">
+        {onToggle && <CardHeader title="4 a 6. Escopo, materiais faturados e critérios de medição" actions={toggle('scope', 'escopo e critérios de medição')} />}
+        <CardBody className={cn('grid gap-4 lg:grid-cols-2', isHidden('scope') && 'hidden')}>
           <Field label="4. Escopo e definições técnicas para execução dos serviços" className="lg:col-span-2">
             <Textarea rows={4} disabled={disabled} {...register('scopeDefinitions')} />
           </Field>
