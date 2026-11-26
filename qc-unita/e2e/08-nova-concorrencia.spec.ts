@@ -72,3 +72,21 @@ test('o envio do QC para aprovação fica na aba Solicitação de contrato', asy
   await page.getByRole('button', { name: 'Cancelar' }).click()
   await expect(page.getByText('Enviar para aprovação?')).toBeHidden()
 })
+
+test('a solicitação é liberada antes da aprovação: os dados são preenchidos na própria aba e ela é gerada na hora', async ({ page }) => {
+  await abrirQc(page, 'Pavimentação externa e passeio')
+  await page.getByRole('tab', { name: /Solicitação de contrato/ }).click()
+  await expect(page.getByText('Preencha os dados da solicitação de contrato')).toBeVisible()
+  await page.getByLabel('Início do serviço').fill('2027-01-04')
+  await page.getByLabel('Término do serviço').fill('2027-03-31')
+  await page.getByLabel('Engenheiro responsável').fill('Eng. Teste E2E')
+  await page.getByLabel('Tipo de contrato').selectOption({ index: 1 })
+  await page.getByLabel('Empresa vencedora').selectOption({ index: 1 })
+  await page.getByLabel('Justificativa da escolha').fill('Melhor proposta completa.')
+  await page.getByRole('button', { name: 'Salvar' }).click()
+  // Gerada sozinha, em rascunho, antes da aprovação; o envio do QC fica na mesma tela
+  await expect(page.getByText('QC ainda não aprovado')).toBeVisible()
+  await expect(page.getByText('2. Itens do contrato', { exact: false })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Enviar QC para aprovação' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Enviar e concluir' })).toBeDisabled()
+})

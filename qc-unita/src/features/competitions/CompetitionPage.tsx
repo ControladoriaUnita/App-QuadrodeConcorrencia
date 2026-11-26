@@ -244,6 +244,8 @@ export function CompetitionPage() {
           workId={c.workId}
           canCreate={detail.can.createContract}
           qcSubmit={{ can: detail.can.submit, pending: m.submit.isPending, issues: map.issues.length, onSubmit: () => setConfirmSubmit(true) }}
+          autoCreate={r.status === 'draft'}
+          dataForm={detail.can.edit ? <RevisionForm detail={detail} map={map} saving={m.updateRevision.isPending} onSave={(v) => m.updateRevision.mutate(v)} /> : undefined}
         />
       )}
       {tab === 'vinculos' && (

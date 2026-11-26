@@ -1,7 +1,9 @@
 /**
  * Aba "Solicitação de contrato" do QC: a solicitação nasce antes da aprovação do quadro.
- *  - Sem solicitação: botão para gerar (precisa de vencedora ou cotação escolhida, tipo de contrato e
- *    datas na aba Dados); ao enviar o QC para aprovação ela é gerada automaticamente.
+ *  - Liberada antes da aprovação, desde o rascunho do QC. Sem solicitação: os dados que ela precisa
+ *    (vencedora ou cotação escolhida, tipo de contrato, datas, responsáveis) são preenchidos aqui
+ *    mesmo e, assim que estiverem completos, a solicitação é gerada sozinha. Ao enviar o QC para
+ *    aprovação ela também é gerada, se ainda faltar.
  *  - Em rascunho: dados, itens e "Atualizar pelo mapa". "Enviar e concluir" só depois do QC aprovado.
  *  - Vínculos de planejamento (IP · Qtd) editáveis pelo Planejamento, também depois do envio.
  *  - O QC é enviado para aprovação daqui (botão "Enviar QC para aprovação"), não do cabeçalho do QC.
@@ -10,7 +12,7 @@
  *  - Aditivos e distratos continuam na tela de Contratos.
  * Com cotação escolhida há uma solicitação por empresa (seletor no topo).
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, Ban, Eye, EyeOff, FileSignature, FileStack, RefreshCw, Send, ShieldCheck } from 'lucide-react'
 import { Decimal } from '@shared/domain/decimal'
@@ -49,12 +51,29 @@ export interface QcSubmitAction {
   onSubmit: () => void
 }
 
-export function ContractRequestPanel({ competitionId, workId, canCreate, qcSubmit }: { competitionId: string; workId: string; canCreate: boolean; qcSubmit?: QcSubmitAction }) {
+export function ContractRequestPanel({ competitionId, workId, canCreate, qcSubmit, dataForm, autoCreate = false }: {
+  competitionId: string
+  workId: string
+  canCreate: boolean
+  qcSubmit?: QcSubmitAction
+  /** Dados do QC que a solicitação precisa, editáveis aqui enquanto ela ainda não existe */
+  dataForm?: ReactNode
+  /** Gera sozinha quando os dados ficam completos (QC em rascunho; depois de cancelar uma, não) */
+  autoCreate?: boolean
+}) {
   const list = useContracts({ competitionId })
   const create = useCreateContract()
   const active = (list.data ?? []).filter((x) => x.status !== 'cancelled').sort((a, b) => a.code.localeCompare(b.code))
   const [picked, setPicked] = useState<string | null>(null)
   const selected = active.find((x) => x.id === picked) ?? active[0]
+  // Dados completos e nenhuma solicitação ainda: gera sozinha (uma vez por visita)
+  const auto = useRef(false)
+  useEffect(() => {
+    if (autoCreate && list.isSuccess && canCreate && !(list.data ?? []).length && !auto.current && !create.isPending) {
+      auto.current = true
+      create.mutate(competitionId)
+    }
+  }, [autoCreate, list.isSuccess, list.data, canCreate, create, competitionId])
 
   if (list.isLoading) return <Skeleton className="h-64" />
 
@@ -97,19 +116,26 @@ export function ContractRequestPanel({ competitionId, workId, canCreate, qcSubmi
       {selected ? (
         <ContractRequestView key={selected.id} id={selected.id} workId={workId} />
       ) : (
-        <Card>
-          <EmptyState
-            title="Ainda sem solicitação de contrato"
-            description="A solicitação nasce antes da aprovação do quadro: gere agora ou ela será gerada automaticamente ao enviar o QC para aprovação. Precisa da empresa vencedora (ou da cotação escolhida no mapa), do tipo de contrato e das datas do serviço na aba Dados."
-            action={
-              canCreate ? (
-                <Button variant="primary" icon={<FileSignature className="size-4" />} loading={create.isPending} onClick={() => create.mutate(competitionId)}>
-                  Gerar solicitação de contrato
-                </Button>
-              ) : undefined
-            }
-          />
-        </Card>
+        <>
+          <Card>
+            <EmptyState
+              title={canCreate ? 'Dados completos para a solicitação de contrato' : 'Preencha os dados da solicitação de contrato'}
+              description={
+                canCreate
+                  ? 'Gere a solicitação para preencher os demais campos e enviar o QC para aprovação por esta tela.'
+                  : 'A solicitação é liberada antes da aprovação do QC. Preencha abaixo a empresa vencedora (ou marque a cotação escolhida no mapa), o tipo de contrato e as datas do serviço e salve: a solicitação é gerada na hora. Depois, envie o QC para aprovação por esta mesma tela.'
+              }
+              action={
+                canCreate ? (
+                  <Button variant="primary" icon={<FileSignature className="size-4" />} loading={create.isPending} onClick={() => create.mutate(competitionId)}>
+                    Gerar solicitação de contrato
+                  </Button>
+                ) : undefined
+              }
+            />
+          </Card>
+          {!canCreate && dataForm}
+        </>
       )}
     </div>
   )

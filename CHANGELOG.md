@@ -20,10 +20,15 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v20 |
-| dev | v21 |
+| produção | v21 |
+| dev | v22 |
 
-## v21 — dev (2026-11-26)
+## v22 — dev (2026-11-26)
+
+- **Solicitação de contrato liberada desde o rascunho do QC:** sem solicitação, a aba mostra os dados que ela precisa (empresa vencedora ou cotação escolhida, tipo de contrato, datas e responsáveis) para preencher ali mesmo. Ao salvar com tudo completo, a solicitação é gerada na hora e o QC é enviado para aprovação pela mesma tela. A geração automática vale só para QC em rascunho que nunca teve solicitação (depois de cancelar uma, gera-se pelo botão).
+- Sem migration. `verificar`: 245 testes do Vitest (9 pulados), 41 de tela e build.
+
+## v21 — produção (2026-11-26)
 
 - **Envio para aprovação na Solicitação de contrato:** saiu o “Enviar para aprovação” do cabeçalho do QC. O envio passa a ser feito na aba **Solicitação de contrato** (botão **Enviar QC para aprovação**); no cabeçalho, o botão **Solicitação e envio** leva até a aba. Se ainda não houver solicitação, ela é gerada no envio, como antes.
 - **Campos ocultáveis:** botão **Ocultar campos / Mostrar campos** na solicitação e **Ocultar / Mostrar** em cada bloco (informações gerais, projetos, escopo e critérios de medição). A escolha fica lembrada no navegador.
