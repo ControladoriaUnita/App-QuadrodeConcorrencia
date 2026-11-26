@@ -84,18 +84,22 @@ export async function getContract(repos: Repositories, ctx: RequestContext, id: 
   const workId = c.work.id
   const manage = can(ctx.actor, 'contract.manage', workId)
   const openAddendum = c.addenda.some((a) => a.status === 'draft' || a.status === 'submitted')
-  const contractTypes = await repos.catalog.listContractTypes()
   const issues = c.status === 'draft' ? validateContractRequest(headerOf(c), c.items.map((i) => ({ quantity: Decimal.from(i.quantity) })), today(ctx)) : []
-  // Etapas de aprovação de cada aditivo; sem etapas (enviado antes dos fluxos), decisão única antiga
-  const byAddendum = await repos.approvalFlows.listForAddenda(c.addenda.map((a) => a.id))
+  // Leituras independentes em paralelo (antes, uma após a outra)
+  const [contractTypes, byAddendum, revisionRef, items] = await Promise.all([
+    repos.catalog.listContractTypes(),
+    // Etapas de aprovação de cada aditivo; sem etapas (enviado antes dos fluxos), decisão única antiga
+    repos.approvalFlows.listForAddenda(c.addenda.map((a) => a.id)),
+    repos.competitions.getRevisionRef(c.revision.id),
+    withBudgetItems(repos, c),
+  ])
   const addenda = c.addenda.map((a) => ({ ...a, approvals: byAddendum.get(a.id) ?? [] }))
   const submitted = addenda.find((a) => a.status === 'submitted')
   const users = submitted?.approvals.length ? await directorUsers(repos) : new Map<string, string | null>()
   const decideAddendum = !!submitted && (submitted.approvals.length
     ? can(ctx.actor, 'approval.decide', workId) && canDecideCurrent(ctx.actor, workId, submitted.approvals, users)
     : canDecideAddendum(ctx.actor, workId))
-  const qcApproved = (await repos.competitions.getRevisionRef(c.revision.id))?.status === 'approved'
-  const items = await withBudgetItems(repos, c)
+  const qcApproved = revisionRef?.status === 'approved'
   const planning = can(ctx.actor, 'contract.planning', workId) || manage
   return {
     ...c,
@@ -123,9 +127,8 @@ export async function getContract(repos: Repositories, ctx: RequestContext, id: 
  * referência fica sem item do orçamento (fora do orçamento).
  */
 async function withBudgetItems(repos: Repositories, c: ContractData): Promise<ContractData['items']> {
-  const data = await repos.competitions.getData(c.competition.id, c.revision.id)
+  const [data, work] = await Promise.all([repos.competitions.getData(c.competition.id, c.revision.id), repos.catalog.getWork(c.work.id)])
   if (!data) return c.items
-  const work = await repos.catalog.getWork(c.work.id)
   const budgetId = work?.currentBudgetId ?? data.competition.budgetId
   if (!budgetId) return c.items
   const [lines, structure] = await Promise.all([repos.catalog.listBudgetLines(budgetId), namedBudgetStructure(repos, budgetId)])
@@ -290,12 +293,20 @@ const formatRev = (n: number) => `R${String(n).padStart(2, '0')}`
  *  - Empresa que saiu da cotação: o rascunho dela é cancelado.
  *  - `create`: gera as que faltam (ao enviar o QC para aprovação a solicitação passa a existir).
  */
-export async function syncContractRequests(repos: Repositories, ctx: RequestContext, competitionId: string, revisionId: string, opts: { create: boolean }) {
-  const data = await repos.competitions.getData(competitionId, revisionId)
+export async function syncContractRequests(
+  repos: Repositories,
+  ctx: RequestContext,
+  competitionId: string,
+  revisionId: string,
+  opts: { create: boolean },
+  /** Mapa e solicitações já lidos por quem chama (recálculo do QC), para não reler do banco */
+  loaded?: { data: CompetitionData; contracts: ContractListItemDTO[] },
+) {
+  const data = loaded?.data ?? (await repos.competitions.getData(competitionId, revisionId))
   if (!data) throw notFound('Concorrência')
   const r = data.revision
   const { map, chosen, drafts, unchosen } = draftsOf(data)
-  const active = (await repos.contracts.list({ competitionId })).filter((c) => c.status !== 'cancelled')
+  const active = (loaded?.contracts ?? (await repos.contracts.list({ competitionId }))).filter((c) => c.status !== 'cancelled')
   const result = { updated: 0, created: 0, cancelled: 0 }
   const cancelled = new Set<string>()
   for (const ac of active.filter((c) => c.status === 'draft')) {

@@ -20,10 +20,17 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v22 |
-| dev | v23 |
+| produção | v23 |
+| dev | v24 |
 
-## v23 — dev (2026-11-26)
+## v24 — dev (2026-11-26)
+
+- **Preenchimento mais rápido no mapa e na solicitação:** cada valor salvo no mapa regravava, um pedido por vez, o total de todos os preços (insumos × fornecedores) e apagava e reinseria todas as melhores condições. Num mapa de 30 insumos e 4 fornecedores eram mais de 130 idas ao Supabase em fila por campo. Agora só o que mudou é gravado, em paralelo. O recálculo reaproveita o mapa já lido para atualizar a solicitação, e a abertura do QC e da solicitação faz as leituras ao mesmo tempo (o orçamento grande vem em páginas paralelas).
+- **Corrige erro ao salvar campos em sequência:** duas gravações seguidas no mapa podiam colidir na chave única das melhores condições e uma delas falhava.
+- **Tela:** quantidade, %, fora de escopo e os demais campos do insumo entram na hora, com os totais recalculados no navegador. Salvar um campo não recarrega mais a lista de obras e de concorrências (elas recarregam ao serem abertas), e os campos da solicitação recarregam só a solicitação.
+- Sem migration. `verificar`: 251 testes do Vitest (9 pulados), 41 de tela e build.
+
+## v23 — produção (2026-11-26)
 
 - **Solicitação acompanha o mapa na hora:** com a solicitação em rascunho, toda alteração do mapa (insumo criado ou removido, quantidade, preço, empresa escolhida, vencedora) já atualiza os itens dela, sem precisar de “Atualizar pelo mapa”. Corrige insumos criados no mapa que não apareciam na solicitação gerada antes deles. Trocar a vencedora cancela o rascunho da anterior e gera o da nova. Vale para quem gera solicitações (contract.manage).
 - **Item do orçamento em cada linha:** cada linha da solicitação mostra de qual Item da EAP e composição do orçamento ela vem (pelos insumos referência). Insumo criado no mapa sem referência aparece como **fora do orçamento · criado no mapa**.

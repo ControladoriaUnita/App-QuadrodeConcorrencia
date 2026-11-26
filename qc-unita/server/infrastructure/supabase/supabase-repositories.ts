@@ -33,9 +33,15 @@ import { createSupabaseBudgetMappings, createSupabaseIndirect } from './supabase
 import { createSupabaseApprovalFlows } from './supabase-approval-flows'
 import { createSupabaseOutOfScope } from './supabase-out-of-scope'
 import { createSupabaseContracts } from './supabase-contracts'
-import { allPages } from './pages'
+import { allPages, inParallel } from './pages'
 
 type Json = Record<string, unknown>
+
+/** Valores numéricos do banco ("12.5000") × do domínio ("12.5"): iguais se ambos nulos ou numericamente iguais */
+function sameAmount(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (a == null || b == null) return a == null && b == null
+  return Decimal.from(a).eq(b)
+}
 
 // Sem tipos gerados do banco (supabase gen types) o retorno é tratado como `any` e tipado nos pontos de uso.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -355,12 +361,7 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
       },
       async listBudgetLines(budgetId, packages) {
         // PostgREST limita cada resposta (padrão 1.000 linhas): lê em páginas, na ordem da função
-        const rows: Json[] = []
-        for (let from = 0; ; from += 1000) {
-          const page = must(await db.rpc('qc_budget_lines', { p_budget_id: budgetId, p_packages: packages?.length ? packages : null }).range(from, from + 999)) as Json[]
-          rows.push(...page)
-          if (page.length < 1000) break
-        }
+        const rows = await allPages<Json>((from, to) => db.rpc('qc_budget_lines', { p_budget_id: budgetId, p_packages: packages?.length ? packages : null }).range(from, to))
         return rows.map((r) => ({
           id: r.id as string, lineKey: r.line_key as string, activityWbs: r.activity_wbs as string, activityCode: (r.activity_code as string) ?? null,
           activityDescription: r.activity_description as string, materialId: r.material_id as string, code: r.code as string,
@@ -372,14 +373,8 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
       },
       async getBudgetStructure(budgetId) {
         // PostgREST limita cada resposta (padrão 1.000 linhas): lê em páginas
-        const all = async (table: string, cols: string) => {
-          const out: Json[] = []
-          for (let from = 0; ; from += 1000) {
-            const page = must(await db.from(table).select(cols).eq('budget_id', budgetId).order('sort_order').range(from, from + 999)) as Json[]
-            out.push(...page)
-            if (page.length < 1000) return out
-          }
-        }
+        const all = (table: string, cols: string) =>
+          allPages<Json>((from, to) => db.from(table).select(cols).eq('budget_id', budgetId).order('sort_order').range(from, to))
         const [groups, acts, budget] = await Promise.all([
           all('budget_items', 'wbs_code, description, sort_order'),
           all('activities', 'wbs_code, composition_code, description, unit, quantity::text, unit_cost::text, total_cost::text, sort_order'),
@@ -685,39 +680,82 @@ export function createSupabaseRepositories(db: SupabaseClient, service: Supabase
       },
 
       async persistComputed(revisionId, computed) {
+        // Só grava o que mudou e em lote: antes era um pedido por preço × fornecedor, em sequência
+        // (cada gravação no mapa levava segundos) e cada linha regravada ia para a auditoria.
         const proposals = must(
-          await db.from('supplier_proposals').select('id, competition_supplier_id').eq('revision_id', revisionId),
-        ) as { id: string; competition_supplier_id: string }[]
+          await db.from('supplier_proposals').select('id, competition_supplier_id, total_amount::text').eq('revision_id', revisionId),
+        ) as { id: string; competition_supplier_id: string; total_amount: string | null }[]
         const pid = new Map(proposals.map((p) => [p.competition_supplier_id, p.id]))
+        type PriceRow = { proposal_id: string; competition_item_id: string; total_price: string | null }
+        type BestRow = { competition_item_id: string; competition_supplier_id: string | null; unit_price: string | null; total_price: string | null; budget_total: string | null; variance_amount: string | null; variance_ratio: string | null; is_override: boolean; override_reason: string | null }
+        const [priceRows, bestRows] = await Promise.all([
+          proposals.length && computed.priceTotals.length
+            ? allPages<PriceRow>((a, b) =>
+                db.from('supplier_proposal_items').select('proposal_id, competition_item_id, total_price::text').in('proposal_id', proposals.map((p) => p.id)).order('id').range(a, b),
+              )
+            : Promise.resolve([] as PriceRow[]),
+          allPages<BestRow>((a, b) =>
+            db
+              .from('best_conditions')
+              .select('competition_item_id, competition_supplier_id, unit_price::text, total_price::text, budget_total::text, variance_amount::text, variance_ratio::text, is_override, override_reason')
+              .eq('revision_id', revisionId)
+              .order('id')
+              .range(a, b),
+          ),
+        ])
 
-        for (const t of computed.proposalTotals) {
-          const id = pid.get(t.competitionSupplierId)
-          if (id) must(await db.from('supplier_proposals').update({ total_amount: t.total }).eq('id', id))
-        }
-        if (computed.priceTotals.length) {
-          // Upsert parcial: só atualiza total_price (unit_price permanece)
-          for (const t of computed.priceTotals) {
-            const id = pid.get(t.competitionSupplierId)
-            if (!id) continue
-            must(await db.from('supplier_proposal_items').update({ total_price: t.totalPrice }).eq('proposal_id', id).eq('competition_item_id', t.itemId))
-          }
-        }
-        if (computed.awardedTotal !== undefined) {
-          must(await db.from('competition_revisions').update({ awarded_total: computed.awardedTotal }).eq('id', revisionId))
-        }
-        for (const v of computed.linkValues ?? []) {
-          must(await db.from('competition_item_links').update({ awarded_unit_price: v.awardedUnitPrice, awarded_total: v.awardedTotal }).eq('id', v.linkId))
-        }
-        must(await db.from('best_conditions').delete().eq('revision_id', revisionId))
-        if (computed.best.length) {
-          must(await db.from('best_conditions').insert(
-            computed.best.map((b) => ({
-              revision_id: revisionId, competition_item_id: b.itemId, competition_supplier_id: b.competitionSupplierId,
-              unit_price: b.unitPrice, total_price: b.totalPrice, budget_total: b.budgetTotal, variance_amount: b.varianceAmount,
-              variance_ratio: b.varianceRatio, is_override: b.isOverride, override_reason: b.overrideReason,
-            })),
-          ))
-        }
+        const proposalUpdates = computed.proposalTotals
+          .map((t) => ({ t, p: proposals.find((p) => p.competition_supplier_id === t.competitionSupplierId) }))
+          .filter(({ t, p }) => p && !sameAmount(p.total_amount, t.total))
+        const currentTotal = new Map(priceRows.map((r) => [`${r.proposal_id}|${r.competition_item_id}`, r.total_price]))
+        const priceUpdates = computed.priceTotals
+          .map((t) => ({ t, proposalId: pid.get(t.competitionSupplierId) }))
+          .filter(({ t, proposalId }) => {
+            const key = `${proposalId}|${t.itemId}`
+            return proposalId && currentTotal.has(key) && !sameAmount(currentTotal.get(key)!, t.totalPrice)
+          })
+        const bestNow = new Map(bestRows.map((b) => [b.competition_item_id, b]))
+        const bestWanted = computed.best.map((b) => ({
+          revision_id: revisionId, competition_item_id: b.itemId, competition_supplier_id: b.competitionSupplierId,
+          unit_price: b.unitPrice, total_price: b.totalPrice, budget_total: b.budgetTotal, variance_amount: b.varianceAmount,
+          variance_ratio: b.varianceRatio, is_override: b.isOverride, override_reason: b.overrideReason,
+          computed_at: new Date().toISOString(),
+        }))
+        const bestChanged = bestWanted.filter((w) => {
+          const b = bestNow.get(w.competition_item_id)
+          return (
+            !b ||
+            b.competition_supplier_id !== w.competition_supplier_id ||
+            b.is_override !== w.is_override ||
+            (b.override_reason ?? null) !== (w.override_reason ?? null) ||
+            !sameAmount(b.unit_price, w.unit_price) ||
+            !sameAmount(b.total_price, w.total_price) ||
+            !sameAmount(b.budget_total, w.budget_total) ||
+            !sameAmount(b.variance_amount, w.variance_amount) ||
+            !sameAmount(b.variance_ratio, w.variance_ratio)
+          )
+        })
+        const wantedItems = new Set(bestWanted.map((w) => w.competition_item_id))
+        const bestGone = bestRows.map((b) => b.competition_item_id).filter((id) => !wantedItems.has(id))
+
+        await Promise.all([
+          inParallel(proposalUpdates, async ({ t, p }) => must(await db.from('supplier_proposals').update({ total_amount: t.total }).eq('id', p!.id))),
+          inParallel(priceUpdates, async ({ t, proposalId }) =>
+            must(await db.from('supplier_proposal_items').update({ total_price: t.totalPrice }).eq('proposal_id', proposalId!).eq('competition_item_id', t.itemId)),
+          ),
+          computed.awardedTotal !== undefined
+            ? db.from('competition_revisions').update({ awarded_total: computed.awardedTotal }).eq('id', revisionId).then(must)
+            : null,
+          inParallel(computed.linkValues ?? [], async (v) =>
+            must(await db.from('competition_item_links').update({ awarded_unit_price: v.awardedUnitPrice, awarded_total: v.awardedTotal }).eq('id', v.linkId)),
+          ),
+          (async () => {
+            if (bestGone.length) must(await db.from('best_conditions').delete().eq('revision_id', revisionId).in('competition_item_id', bestGone))
+            // Um insumo tem uma única melhor condição (competition_item_id é único): upsert, sem apagar
+            // e reinserir tudo — duas gravações seguidas no mapa não colidem mais na chave
+            if (bestChanged.length) must(await db.from('best_conditions').upsert(bestChanged, { onConflict: 'competition_item_id' }))
+          })(),
+        ])
       },
 
       addReferences: insertReferences,

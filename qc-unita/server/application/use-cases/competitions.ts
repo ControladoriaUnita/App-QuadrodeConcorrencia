@@ -56,21 +56,22 @@ export async function getCompetition(
   const data = await repos.competitions.getData(competitionId, revisionId)
   if (!data) throw notFound('Concorrência')
   requirePermission(ctx, 'competition.read', data.competition.workId)
-  const work = await repos.catalog.getWork(data.competition.workId)
-  const budgetId = work?.currentBudgetId ?? data.competition.budgetId
-  const [allLines, commitments] = await Promise.all([
-    repos.catalog.listBudgetLines(budgetId),
+  const manage = can(ctx.actor, 'contract.manage', data.competition.workId)
+  // Leituras independentes em paralelo (antes, uma após a outra)
+  const [allLines, commitments, users, pending] = await Promise.all([
+    repos.catalog.getWork(data.competition.workId).then((work) => repos.catalog.listBudgetLines(work?.currentBudgetId ?? data.competition.budgetId)),
     repos.competitions.workCommitments(data.competition.workId),
+    directorUsers(repos),
+    manage ? contractPending(repos, competitionId) : Promise.resolve(false),
   ])
   // Linhas relevantes ao consolidador: IPs e insumos tocados pelo QC (o orçamento inteiro seria pesado)
   const pkgs = new Set(data.links.map((l) => l.packageCode).filter(Boolean))
   const mats = new Set(data.links.map((l) => l.materialId))
   const keys = new Set(data.links.map((l) => l.lineKey))
-  const base = withCapabilities(ctx, data, await directorUsers(repos))
-  const manage = can(ctx.actor, 'contract.manage', data.competition.workId)
+  const base = withCapabilities(ctx, data, users)
   return {
     ...base,
-    can: { ...base.can, createContract: manage && (await contractPending(repos, competitionId)) },
+    can: { ...base.can, createContract: manage && pending },
     budgetLines: allLines.filter((l) => pkgs.has(l.packageCode) || mats.has(l.materialId) || keys.has(l.lineKey)),
     otherCommitments: commitments.links.filter((l) => l.competitionId !== competitionId),
   }
@@ -212,16 +213,20 @@ function serializeBest(map: QcMap): ComputedPersistence['best'] {
  * (insumos criados no mapa, quantidades, preços, empresa escolhida). Só para quem gera solicitações.
  */
 export async function recomputeAndSync(repos: Repositories, ctx: RequestContext, competitionId: string, revisionId: string): Promise<QcMap> {
-  const map = await recompute(repos, competitionId, revisionId)
-  const ref = await repos.competitions.getRevisionRef(revisionId)
-  if (ref && ref.status === 'draft' && can(ctx.actor, 'contract.manage', ref.workId)) {
-    const drafts = (await repos.contracts.list({ competitionId })).filter((c) => c.status === 'draft')
-    if (drafts.length) await syncContractRequests(repos, ctx, competitionId, revisionId, { create: true })
+  // O mapa recém-lido serve também à solicitação (antes era relido do banco mais duas vezes)
+  const { map, data } = await recomputeWithData(repos, competitionId, revisionId)
+  if (data.revision.status === 'draft' && can(ctx.actor, 'contract.manage', data.competition.workId)) {
+    const contracts = await repos.contracts.list({ competitionId })
+    if (contracts.some((c) => c.status === 'draft')) await syncContractRequests(repos, ctx, competitionId, revisionId, { create: true }, { data, contracts })
   }
   return map
 }
 
 export async function recompute(repos: Repositories, competitionId: string, revisionId: string): Promise<QcMap> {
+  return (await recomputeWithData(repos, competitionId, revisionId)).map
+}
+
+async function recomputeWithData(repos: Repositories, competitionId: string, revisionId: string): Promise<{ map: QcMap; data: CompetitionData }> {
   const data = await repos.competitions.getData(competitionId, revisionId)
   if (!data) throw notFound('Concorrência')
   const budgetAmount = Decimal.sum(data.links.map((l) => l.budgetValue)).round(4)
@@ -248,7 +253,7 @@ export async function recompute(repos: Repositories, competitionId: string, revi
       .map(({ before: _b, ...v }) => v),
   }
   await repos.competitions.persistComputed(revisionId, computed)
-  return map
+  return { map, data }
 }
 
 export async function updateRevision(repos: Repositories, ctx: RequestContext, revisionId: string, input: UpdateRevisionInput) {

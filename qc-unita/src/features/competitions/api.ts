@@ -47,10 +47,12 @@ function useInvalidate(competitionId: string) {
   const qc = useQueryClient()
   return () => {
     qc.invalidateQueries({ queryKey: ['competition', competitionId] })
-    qc.invalidateQueries({ queryKey: ['competitions'] })
     qc.invalidateQueries({ queryKey: keys.audit(competitionId) })
-    qc.invalidateQueries({ queryKey: ['work-overview'] })
-    qc.invalidateQueries({ queryKey: ['works'] })
+    // Listas e resumo da obra não estão na tela do QC: ficam marcadas como velhas e recarregam ao
+    // serem abertas (antes, cada valor digitado no mapa recarregava também a lista de obras)
+    qc.invalidateQueries({ queryKey: ['competitions'], refetchType: 'none' })
+    qc.invalidateQueries({ queryKey: ['work-overview'], refetchType: 'none' })
+    qc.invalidateQueries({ queryKey: ['works'], refetchType: 'none' })
   }
 }
 
@@ -83,15 +85,15 @@ export function useQcMutations(competitionId: string, revisionId: string) {
     updateRevision: useMutation({ mutationFn: (b: UpdateRevisionInput) => api(base, { method: 'PATCH', body: b }), ...opts }),
     updateItem: useMutation({
       mutationFn: ({ itemId, ...b }: UpdateItemInput & { itemId: string }) => api(`${base}/items/${itemId}`, { method: 'PATCH', body: b }),
-      // Cotação escolhida: marca a caixa na hora (mesmo padrão otimista dos preços)
-      onMutate: async ({ itemId, chosenSupplierId }) => {
-        if (chosenSupplierId === undefined) return { snapshots: [] }
+      // Atualização otimista (mesmo padrão dos preços): quantidade, %, cotação escolhida etc. entram
+      // na hora e o domínio recalcula os totais no cliente, sem esperar o servidor
+      onMutate: async ({ itemId, ...patch }) => {
         const key = ['competition', competitionId]
         await qc.cancelQueries({ queryKey: key })
         const snapshots = qc.getQueriesData<CompetitionDetailDTO>({ queryKey: key })
         for (const [k, d] of snapshots) {
           if (!d || d.revision.id !== revisionId) continue
-          qc.setQueryData(k, { ...d, items: d.items.map((i) => (i.id === itemId ? { ...i, chosenSupplierId } : i)) })
+          qc.setQueryData(k, { ...d, items: d.items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)) })
         }
         return { snapshots }
       },

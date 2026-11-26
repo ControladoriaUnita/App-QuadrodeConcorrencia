@@ -50,18 +50,30 @@ export function useCreateContract() {
 }
 
 export function useContractMutations(id: string) {
+  const qc = useQueryClient()
   const invalidate = useInvalidate()
   const opts = { onSuccess: invalidate }
+  /**
+   * Campos da solicitação (cabeçalho, especificação, %, vínculos) não mudam o QC nem a obra: só a
+   * solicitação recarrega na hora; o resto fica marcado como velho e recarrega ao ser aberto.
+   */
+  const fieldOpts = {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: contractKeys.detail(id) })
+      qc.invalidateQueries({ queryKey: ['contracts'] })
+      for (const key of [['competition'], ['competitions'], ['work-overview'], ['works']]) qc.invalidateQueries({ queryKey: key, refetchType: 'none' })
+    },
+  }
   const base = `/contracts/${id}`
   return {
-    update: useMutation({ mutationFn: (b: UpdateContractRequestInput) => api(base, { method: 'PATCH', body: b }), ...opts }),
+    update: useMutation({ mutationFn: (b: UpdateContractRequestInput) => api(base, { method: 'PATCH', body: b }), ...fieldOpts }),
     updateItem: useMutation({
       mutationFn: ({ itemId, ...b }: UpdateContractItemInput & { itemId: string }) => api(`${base}/items/${itemId}`, { method: 'PATCH', body: b }),
-      ...opts,
+      ...fieldOpts,
     }),
     setAllocations: useMutation({
       mutationFn: ({ itemId, ...b }: ContractItemAllocationsInput & { itemId: string }) => api(`${base}/items/${itemId}/allocations`, { method: 'PUT', body: b }),
-      ...opts,
+      ...fieldOpts,
     }),
     sync: useMutation({ mutationFn: () => api<{ updated: number; created: number; cancelled: number }>(`${base}/sync`, { method: 'POST' }), ...opts }),
     submit: useMutation({ mutationFn: () => api(`${base}/submit`, { method: 'POST' }), ...opts }),
