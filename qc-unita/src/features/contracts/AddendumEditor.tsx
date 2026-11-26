@@ -2,13 +2,16 @@
  * Editor de aditivo ou distrato, item a item. Quem digita informa quantidades positivas; o sinal vem do tipo
  * (distrato) ou da linha: no aditivo cada item do contrato pode acrescentar ou reduzir (remanejamento).
  * Cada item com quantidade é distribuído entre os IPs (sugestão proporcional ao IP vigente, editável).
+ * Aditivo não inclui insumo novo: para mudar o R$ unitário, "Mudar unitário" duplica a linha. A original
+ * é zerada (fica no histórico com o unitário original) e a duplicada recebe o saldo, editável, com o
+ * novo unitário. Item do contrato acrescenta ou reduz sempre ao preço contratado.
  */
 import { useMemo, useState } from 'react'
-import { Minus, Plus, Trash2 } from 'lucide-react'
+import { Copy, Minus, Plus, Trash2 } from 'lucide-react'
 import type { AddendumDTO, AddendumKind, BudgetPackageDTO, ContractRequestDTO, SaveAddendumInput } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import { computeAddendum, currentAllocations, currentEndOn, signedQuantity, suggestAllocations } from '@shared/domain/contract/addendum'
-import { Button, Card, CardBody, CardHeader, DecimalInput, Field, Input } from '@/components/ui'
+import { Badge, Button, Card, CardBody, CardHeader, DecimalInput, Field, Input } from '@/components/ui'
 import { cn } from '@/utils/cn'
 import { formatBRL, formatDate, formatQuantity } from '@/utils/format'
 import { AllocationsEditor, type AllocationRow, type IpOption } from './AllocationsEditor'
@@ -24,11 +27,12 @@ interface ItemDraft {
   /** Só no aditivo: a linha reduz o item (ao preço contratado) */
   reduce?: boolean
 }
-interface NewRow extends ItemDraft {
-  key: number
-  code: string
-  description: string
-  unit: string
+/** Linha duplicada de um item do contrato com novo R$ unitário */
+interface DupRow {
+  sourceId: string
+  quantity: string | null
+  unitPrice: string | null
+  allocations: AllocationRow[]
 }
 
 const abs = (v: string) => Decimal.from(v).abs().toDb()
@@ -60,14 +64,18 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
         .map((i) => [i.contractItemId!, { quantity: abs(i.quantityDelta), unitPrice: i.unitPrice, auto: false, reduce: kind === 'addendum' && Decimal.from(i.quantityDelta).isNegative(), allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: abs(a.quantity) })) }]),
     ),
   )
-  const [rows, setRows] = useState<NewRow[]>(() =>
+  // Linhas sem item do contrato são as duplicadas (novo unitário): a origem é o item de mesmo código
+  const [dups, setDups] = useState<DupRow[]>(() =>
     (addendum?.items ?? [])
       .filter((i) => !i.contractItemId)
-      .map((i, k) => ({
-        key: k, code: i.code, description: i.description, unit: i.unit, quantity: abs(i.quantityDelta), unitPrice: i.unitPrice, auto: false,
-        allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: abs(a.quantity) })),
-      })),
+      .flatMap((i) => {
+        const src = c.items.find((x) => x.code === i.code)
+        return src
+          ? [{ sourceId: src.id, quantity: abs(i.quantityDelta), unitPrice: i.unitPrice, allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: abs(a.quantity) })) }]
+          : []
+      }),
   )
+  const dupOf = (itemId: string) => dups.find((d) => d.sourceId === itemId)
 
   // IPs vigentes por item (contrato + aprovados) e opções de IP
   const currentByItem = new Map(contractItems.map((i) => [i.id, currentAllocations(i, previousLines)]))
@@ -110,23 +118,20 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
               contractItemId: i.id,
               quantity: d.quantity!,
               ...(reduce ? { reduce: true } : {}),
-              unitPrice: isTermination || reduce ? undefined : (d.unitPrice ?? i.unitPrice),
               allocations: d.allocations.filter((a) => a.packageCode && a.quantity).map((a) => ({ packageCode: a.packageCode, quantity: a.quantity! })),
             }
           }),
-        ...rows
-          .filter((r) => r.code.trim() && r.quantity)
+        ...(isTermination ? [] : dups)
+          .filter((r) => r.quantity)
           .map((r) => ({
-            code: r.code.trim(),
-            description: r.description.trim() || r.code.trim(),
-            unit: r.unit.trim() || 'un',
+            sourceItemId: r.sourceId,
             quantity: r.quantity!,
             unitPrice: r.unitPrice ?? '0',
             allocations: r.allocations.filter((a) => a.packageCode && a.quantity).map((a) => ({ packageCode: a.packageCode, quantity: a.quantity! })),
           })),
       ],
     }),
-    [kind, reason, requestedOn, newEndOn, drafts, rows, c.items, isTermination],
+    [kind, reason, requestedOn, newEndOn, drafts, dups, c.items, isTermination],
   )
 
   const summary = computeAddendum(
@@ -135,11 +140,12 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
     input.items.map((i) => {
       const reduce = 'reduce' in i && i.reduce === true
       const sign = (v: string) => signedQuantity(kind, Decimal.from(v), reduce)
+      const source = 'sourceItemId' in i ? c.items.find((x) => x.id === i.sourceItemId) : undefined
       return {
         contractItemId: i.contractItemId ?? null,
-        code: 'code' in i ? i.code : '',
+        code: source?.code ?? '',
         quantityDelta: sign(i.quantity),
-        unitPrice: Decimal.from(i.unitPrice ?? c.items.find((x) => x.id === i.contractItemId)?.unitPrice ?? '0'),
+        unitPrice: Decimal.from('sourceItemId' in i ? i.unitPrice : (c.items.find((x) => x.id === i.contractItemId)?.unitPrice ?? '0')),
         allocations: i.allocations.map((a) => ({ packageCode: a.packageCode, quantity: sign(a.quantity) })),
       }
     }),
@@ -157,7 +163,7 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
         description={
           isTermination
             ? 'Informe quanto será retirado de cada item do contrato (ao preço contratado) e de quais IPs.'
-            : 'Em cada item escolha acrescentar (+) ou reduzir (−) e informe a quantidade. Dá para zerar uma linha e acrescentar em outra no mesmo aditivo. A redução usa o preço contratado; o acréscimo aceita novo R$ unitário e itens novos.'
+            : 'Em cada item escolha acrescentar (+) ou reduzir (−) e informe a quantidade, sempre ao preço contratado. Dá para zerar uma linha e acrescentar em outra no mesmo aditivo. Para mudar o R$ unitário use “Mudar unitário”: a linha é duplicada, a original fica zerada (histórico do unitário original) e a nova recebe o saldo. Não há inclusão de insumo novo.'
         }
         actions={
           <>
@@ -201,8 +207,26 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
                 const qty = d?.quantity ? Decimal.from(d.quantity) : Decimal.ZERO
                 const reduce = isTermination || !!d?.reduce
                 const delta = signedQuantity(kind, qty, reduce)
-                const price = Decimal.from(reduce ? i.unitPrice : (d?.unitPrice ?? i.unitPrice))
+                const price = Decimal.from(i.unitPrice)
                 const before = qtyNow.get(i.id) ?? Decimal.ZERO
+                const dup = isTermination ? undefined : dupOf(i.id)
+                const setDup = (patch: Partial<DupRow>) => setDups((s) => s.map((x) => (x.sourceId === i.id ? { ...x, ...patch } : x)))
+                /** Duplica a linha: zera a original (todo o vigente, todos os IPs) e a nova recebe o saldo */
+                const duplicate = () => {
+                  const current = currentByItem.get(i.id) ?? new Map<string, Decimal>()
+                  const all = toRows(suggestAllocations(current, before))
+                  setDrafts((s) => ({ ...s, [i.id]: { quantity: before.toDb(), unitPrice: null, reduce: true, auto: false, allocations: all } }))
+                  setDups((s) => [...s, { sourceId: i.id, quantity: before.toDb(), unitPrice: null, allocations: all }])
+                }
+                const undoDuplicate = () => {
+                  setDups((s) => s.filter((x) => x.sourceId !== i.id))
+                  setDrafts((s) => {
+                    const { [i.id]: _gone, ...rest } = s
+                    return rest
+                  })
+                }
+                const dupQty = dup?.quantity ? Decimal.from(dup.quantity) : Decimal.ZERO
+                const dupTotal = dup?.quantity && dup.unitPrice ? Decimal.from(dup.unitPrice).times(dup.quantity).round(4) : null
                 const after = before.plus(delta)
                 const active = qty.isPositive()
                 // Trocar acrescentar ↔ reduzir refaz a sugestão de IPs (a base muda: vigente × disponível)
@@ -216,12 +240,15 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
                   <tr key={i.id} className={cn(active && (reduce ? 'bg-warning-soft/40' : 'bg-primary-soft/40'))}>
                     <td className={cn(td, 'max-w-72')}>
                       <p className="truncate" title={i.description}>{i.description}</p>
-                      <p className="text-[11px] text-text-muted">{i.code}</p>
+                      <p className="flex items-center gap-1 text-[11px] text-text-muted">
+                        {i.code}
+                        {dup && <Badge tone="warning" className="px-1.5 py-0 text-[10px]" title="A linha original é zerada e fica no histórico com o unitário original">zerada · unitário original</Badge>}
+                      </p>
                     </td>
                     <td className={cn(td, 'text-right text-text-muted')}>{formatQuantity(before)} {i.unit}</td>
                     <td className={cn(td, 'px-1')}>
                       <div className="flex items-center gap-1">
-                        {!isTermination && (
+                        {!isTermination && !dup && (
                           <div className="flex shrink-0 overflow-hidden rounded-control border border-border" role="group" aria-label={`Movimento de ${i.code}`}>
                             <button
                               type="button"
@@ -249,12 +276,13 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
                           value={d?.quantity ?? null}
                           fractionDigits={4}
                           trimZeros
+                          disabled={!!dup}
                           max={reduce ? before.toDb() : undefined}
                           gridColumn="addendum-qty"
                           aria-label={`${isTermination ? text.qty : 'Quantidade'} de ${i.code}`}
                           onCommit={(v) => setItem(i.id, { quantity: v })}
                         />
-                        {reduce && before.isPositive() && (
+                        {reduce && !dup && before.isPositive() && (
                           <button
                             type="button"
                             className="shrink-0 rounded-control px-1.5 py-1 text-[11px] font-medium text-warning hover:bg-warning-soft"
@@ -269,21 +297,22 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
                     </td>
                     <td className={cn(td, 'text-right', after.isNegative() && 'font-semibold text-error')}>{formatQuantity(after)}</td>
                     <td className={cn(td, 'px-1')}>
-                      {reduce ? (
-                        <p className="py-1.5 text-right text-text-muted">{formatBRL(i.unitPrice)}</p>
-                      ) : (
-                        <DecimalInput
-                          value={d?.unitPrice ?? i.unitPrice}
-                          allowEmpty={false}
-                          gridColumn="addendum-price"
-                          aria-label={`R$ unitário de ${i.code}`}
-                          onCommit={(v) => setItem(i.id, { unitPrice: v })}
-                        />
+                      <p className="py-1.5 text-right text-text-muted">{formatBRL(i.unitPrice)}</p>
+                      {!isTermination && !dup && before.isPositive() && (
+                        <button
+                          type="button"
+                          className="ml-auto flex items-center gap-1 rounded-control px-1.5 py-0.5 text-[11px] font-medium text-primary hover:bg-primary-soft"
+                          title="Duplica a linha com novo R$ unitário: a original fica zerada (histórico) e a nova recebe o saldo"
+                          aria-label={`Mudar unitário de ${i.code}`}
+                          onClick={duplicate}
+                        >
+                          <Copy className="size-3" aria-hidden /> Mudar unitário
+                        </button>
                       )}
                     </td>
                     <td className={cn(td, 'text-right', delta.isNegative() && 'text-error')}>{active ? formatBRL(price.times(delta).round(4)) : '—'}</td>
                   </tr>,
-                  active && (
+                  active && !dup && (
                     <tr key={`${i.id}-ip`}>
                       <td colSpan={6} className="border-b border-border bg-ink-50/60 px-3 py-2">
                         <AllocationsEditor
@@ -296,43 +325,37 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
                       </td>
                     </tr>
                   ),
-                ]
-              })}
-              {rows.map((r) => {
-                const set = (patch: Partial<NewRow>) => setRows((s) => s.map((x) => (x.key === r.key ? { ...x, ...patch } : x)))
-                const total = r.quantity && r.unitPrice ? Decimal.from(r.quantity).times(r.unitPrice).round(4) : null
-                return [
-                  <tr key={`n${r.key}`} className="bg-info-soft/40">
-                    <td className={td}>
-                      <div className="grid grid-cols-[6rem_1fr_3.5rem_auto] items-center gap-1">
-                        <Input className="h-8" placeholder="Código" aria-label="Código do item novo" value={r.code} onChange={(e) => set({ code: e.target.value })} />
-                        <Input className="h-8" placeholder="Descrição" aria-label="Descrição do item novo" value={r.description} onChange={(e) => set({ description: e.target.value })} />
-                        <Input className="h-8" placeholder="Un." aria-label="Unidade do item novo" value={r.unit} onChange={(e) => set({ unit: e.target.value })} />
-                        <button type="button" className="rounded-control p-1 text-ink-500 hover:bg-error-soft hover:text-error" aria-label="Remover item novo" onClick={() => setRows((s) => s.filter((x) => x.key !== r.key))}>
-                          <Trash2 className="size-4" />
-                        </button>
-                      </div>
-                    </td>
-                    <td className={cn(td, 'text-right text-text-muted')}>item novo</td>
-                    <td className={cn(td, 'px-1')}>
-                      <DecimalInput value={r.quantity} fractionDigits={4} trimZeros aria-label="Quantidade do item novo" onCommit={(v) => set({ quantity: v })} />
-                    </td>
-                    <td className={cn(td, 'text-right')}>{formatQuantity(r.quantity)}</td>
-                    <td className={cn(td, 'px-1')}>
-                      <DecimalInput value={r.unitPrice} aria-label="R$ unitário do item novo" onCommit={(v) => set({ unitPrice: v })} />
-                    </td>
-                    <td className={cn(td, 'text-right')}>{total ? formatBRL(total) : '—'}</td>
-                  </tr>,
-                  r.quantity && (
-                    <tr key={`n${r.key}-ip`}>
+                  dup && (
+                    <tr key={`${i.id}-dup`} className="bg-info-soft/40">
+                      <td className={cn(td, 'max-w-72')}>
+                        <div className="flex items-start gap-1">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate" title={i.description}>↳ {i.description}</p>
+                            <p className="flex items-center gap-1 text-[11px] text-text-muted">
+                              {i.code}
+                              <Badge tone="info" className="px-1.5 py-0 text-[10px]">linha duplicada · novo unitário</Badge>
+                            </p>
+                          </div>
+                          <button type="button" className="rounded-control p-1 text-ink-500 hover:bg-error-soft hover:text-error" aria-label={`Desfazer a duplicação de ${i.code}`} onClick={undoDuplicate}>
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className={cn(td, 'text-right text-text-muted')} title="Saldo vindo da linha original">saldo {formatQuantity(before)}</td>
+                      <td className={cn(td, 'px-1')}>
+                        <DecimalInput value={dup.quantity} fractionDigits={4} trimZeros aria-label={`Quantidade da linha duplicada de ${i.code}`} onCommit={(v) => setDup({ quantity: v })} />
+                      </td>
+                      <td className={cn(td, 'text-right')}>{formatQuantity(dupQty)}</td>
+                      <td className={cn(td, 'px-1')}>
+                        <DecimalInput value={dup.unitPrice} aria-label={`Novo R$ unitário de ${i.code}`} onCommit={(v) => setDup({ unitPrice: v })} />
+                      </td>
+                      <td className={cn(td, 'text-right')}>{dupTotal ? formatBRL(dupTotal) : '—'}</td>
+                    </tr>
+                  ),
+                  dup && dup.quantity && (
+                    <tr key={`${i.id}-dup-ip`}>
                       <td colSpan={6} className="border-b border-border bg-ink-50/60 px-3 py-2">
-                        <AllocationsEditor
-                          rows={r.allocations}
-                          options={optionsFor(null)}
-                          target={Decimal.from(r.quantity)}
-                          unit={r.unit || 'un'}
-                          onChange={(allocations) => set({ allocations })}
-                        />
+                        <AllocationsEditor rows={dup.allocations} options={optionsFor(i.id)} target={dupQty} unit={i.unit} onChange={(allocations) => setDup({ allocations })} />
                       </td>
                     </tr>
                   ),
@@ -342,17 +365,11 @@ export function AddendumEditor({ c, kind, addendum, packages, busy, onCancel, on
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {isTermination ? (
-            <span className="text-xs text-text-muted">O distrato só reduz itens do contrato, ao preço contratado.</span>
-          ) : (
-            <Button
-              size="sm"
-              icon={<Plus className="size-4" />}
-              onClick={() => setRows((s) => [...s, { key: Date.now(), code: '', description: '', unit: '', quantity: null, unitPrice: null, allocations: [], auto: false }])}
-            >
-              Incluir item novo
-            </Button>
-          )}
+          <span className="text-xs text-text-muted">
+            {isTermination
+              ? 'O distrato só reduz itens do contrato, ao preço contratado.'
+              : 'Sem inclusão de insumo novo: para mudar o R$ unitário, duplique a linha com “Mudar unitário”.'}
+          </span>
           <AddendumTotals summary={summary} title={`${number}º ${text.title}`} />
         </div>
       </CardBody>

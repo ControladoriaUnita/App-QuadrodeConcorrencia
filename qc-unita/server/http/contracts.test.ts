@@ -249,19 +249,21 @@ describe('aditivos', () => {
     expect(await contracted()).toBeCloseTo(before + Number(t.totalDelta), 2) // distrato reduz o contratado
   })
 
-  it('aditivo com remanejamento: reduz um item e acrescenta outro na mesma solicitação', async () => {
+  it('aditivo com remanejamento: reduz um item e acrescenta em outro na mesma solicitação, sempre ao preço contratado', async () => {
     const id = await seeded()
     const { data: c } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
     const item = c.items[0]!
+    const other = c.items[1]!
     const ip = item.allocations[0]!.packageCode!
+    const ip2 = other.allocations[0]!.packageCode!
     // Um décimo do contratado cabe no vigente mesmo depois do distrato aprovado acima (metade)
     const q = Decimal.from(item.allocations[0]!.quantity).div(10).round(4)
     const created = await call<{ id: string; kind: string }>('POST', `/contracts/${id}/addenda`, {
       reason: 'Remanejamento entre itens',
       items: [
-        // A redução ignora o R$ informado: volta ao preço contratado
+        // O R$ informado é ignorado: item do contrato fica sempre no preço contratado
         { contractItemId: item.id, reduce: true, quantity: q.toDb(), unitPrice: '999', allocations: [{ packageCode: ip, quantity: q.toDb() }] },
-        { code: 'IS99998', description: 'Serviço remanejado', unit: 'm', quantity: '2', unitPrice: '10', allocations: [{ packageCode: ip, quantity: '2' }] },
+        { contractItemId: other.id, quantity: '2', unitPrice: '999', allocations: [{ packageCode: ip2, quantity: '2' }] },
       ],
     })
     expect(created.status, JSON.stringify(created.data)).toBe(201)
@@ -269,22 +271,52 @@ describe('aditivos', () => {
     const { data: c2 } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
     const a = c2.addenda.find((x) => x.id === created.data.id)!
     const reduced = a.items.find((i) => i.contractItemId === item.id)!
+    const added = a.items.find((i) => i.contractItemId === other.id)!
     expect([reduced.quantityDelta, reduced.unitPrice]).toEqual([q.neg().toDb(), item.unitPrice])
+    expect([added.quantityDelta, added.unitPrice]).toEqual(['2.0000', other.unitPrice])
     expect(reduced.allocations[0]!.quantity).toBe(q.neg().toDb())
-    expect(a.totalDelta).toBe(Decimal.from('20').minus(q.times(item.unitPrice).round(4)).toDb())
+    expect(a.totalDelta).toBe(Decimal.from(other.unitPrice).times(2).round(4).minus(q.times(item.unitPrice).round(4)).toDb())
     const sub = await call('POST', `/addenda/${created.data.id}/submit`)
     expect(sub.status, JSON.stringify(sub.data)).toBe(200)
     expect((await call('POST', `/addenda/${created.data.id}/decide`, { decision: 'rejected', comment: 'Refazer.' }, MGR)).status).toBe(200)
   })
 
-  it('aditivo com item novo exige vínculo de planejamento e numera depois dos aditivos anteriores', async () => {
+  it('aditivo não inclui insumo novo; mudar o R$ unitário duplica a linha e zera a original (histórico)', async () => {
     const id = await seeded()
-    const created = await call<{ id: string; number: number }>('POST', `/contracts/${id}/addenda`, {
+    const novo = await call('POST', `/contracts/${id}/addenda`, {
       reason: 'Serviço complementar de drenagem',
-      newEndOn: '2027-04-30',
       items: [{ code: 'IS99999', description: 'Drenagem provisória', unit: 'm', quantity: '120', unitPrice: '35.5', allocations: [] }],
     })
+    expect(novo.status).toBeGreaterThanOrEqual(400)
+
+    const { data: c } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
+    const item = c.items[1]!
+    const approvedDelta = Decimal.sum(c.addenda.filter((x) => x.status === 'approved').flatMap((x) => x.items.filter((i) => i.contractItemId === item.id).map((i) => i.quantityDelta)))
+    const vigente = Decimal.from(item.quantity).plus(approvedDelta)
+    const ips = item.allocations.map((al) => ({ packageCode: al.packageCode!, quantity: al.quantity }))
+    const saldo = vigente.minus(1)
+    const newPrice = Decimal.from(item.unitPrice).plus('7.5').toDb()
+    const zero = { contractItemId: item.id, reduce: true, quantity: vigente.toDb(), allocations: ips }
+    const dup = { sourceItemId: item.id, quantity: saldo.toDb(), unitPrice: newPrice, allocations: [] as { packageCode: string; quantity: string }[] }
+
+    // Sem zerar a original: recusa
+    const noZero = await call<{ error: { code: string } }>('POST', `/contracts/${id}/addenda`, { reason: 'Novo preço negociado', items: [dup] })
+    expect(noZero.data.error.code).toBe('ADDENDUM_DUPLICATE_ORIGINAL')
+    // Mesmo unitário: recusa
+    const same = await call<{ error: { code: string } }>('POST', `/contracts/${id}/addenda`, { reason: 'Novo preço negociado', items: [zero, { ...dup, unitPrice: item.unitPrice }] })
+    expect(same.data.error.code).toBe('ADDENDUM_SAME_PRICE')
+
+    const created = await call<{ id: string; number: number }>('POST', `/contracts/${id}/addenda`, { reason: 'Novo preço negociado', newEndOn: '2027-04-30', items: [zero, dup] })
+    expect(created.status, JSON.stringify(created.data)).toBe(201)
     expect(created.data.number).toBe(3)
+    const { data: c2 } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
+    const a = c2.addenda.find((x) => x.id === created.data.id)!
+    const original = a.items.find((i) => i.contractItemId === item.id)!
+    const copy = a.items.find((i) => !i.contractItemId)!
+    // A original fica com saldo zero e o unitário original; a duplicada leva o saldo (editável) com o novo unitário
+    expect([original.quantityDelta, original.unitPrice]).toEqual([vigente.neg().toDb(), item.unitPrice])
+    expect([copy.code, copy.description, copy.unit, copy.quantityDelta, copy.unitPrice]).toEqual([item.code, item.description, item.unit, saldo.toDb(), newPrice])
+    // Vínculo continua obrigatório na linha duplicada
     const sub = await call<{ error: { details: { message: string }[] } }>('POST', `/addenda/${created.data.id}/submit`)
     expect(sub.data.error.details.map((d) => d.message).join()).toMatch(/Vincule ao planejamento/)
     expect((await call('DELETE', `/addenda/${created.data.id}`)).status).toBe(200)

@@ -8,6 +8,11 @@
  *
  * Aditivo soma e distrato subtrai, sempre item a item e com os vínculos de planejamento (IP) de cada
  * item. Regras de cálculo e validação em shared/domain/contract/addendum.ts.
+ *
+ * Aditivo não inclui insumo novo. Para mudar o R$ unitário, duplica-se a linha do contrato: o item
+ * original é zerado no mesmo aditivo (redução de toda a quantidade vigente, ao preço contratado, guarda
+ * o histórico do unitário original) e a linha duplicada recebe o saldo com o unitário novo. Acréscimo
+ * em item do contrato usa sempre o preço contratado.
  */
 import type { AddendumItemInput, SaveAddendumData } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
@@ -55,12 +60,32 @@ const approvedLines = (c: ContractData, exceptId?: string) =>
   c.addenda.filter((a) => a.status === 'approved' && a.id !== exceptId).flatMap((a) => a.items.map(lineOf))
 
 /** Resolve as linhas digitadas (quantidades positivas) em linhas persistíveis, com o sinal do tipo. */
-function resolveItems(c: ContractData, kind: AddendumKind, items: AddendumItemInput[]): NewAddendumItem[] {
+function resolveItems(c: ContractData, kind: AddendumKind, items: AddendumItemInput[], previous: AddendumLine[]): NewAddendumItem[] {
   const byId = new Map(c.items.map((i) => [i.id, i]))
   const seen = new Set<string>()
   const signed = (v: string, reduce: boolean) => signedQuantity(kind, Decimal.from(v), reduce).round(4).toDb()
   const allocationsOf = (it: AddendumItemInput, reduce: boolean) =>
     it.allocations.map((a) => ({ packageCode: a.packageCode.trim(), locationCode: a.locationCode?.trim() || null, quantity: signed(a.quantity, reduce) }))
+
+  // Linhas duplicadas (novo unitário): o item original precisa ser zerado no mesmo aditivo
+  const duplicated = new Set<string>()
+  for (const it of items) {
+    if (it.contractItemId || !('sourceItemId' in it)) continue
+    if (kind === 'termination') throw new AppError('ADDENDUM_ITEM', 'O distrato só reduz itens do contrato.', 422)
+    const src = byId.get(it.sourceItemId)
+    if (!src) throw new AppError('ADDENDUM_ITEM', 'A linha duplicada não vem de um item deste contrato.', 422)
+    if (duplicated.has(src.id)) throw new AppError('ADDENDUM_ITEM_DUPLICATED', `O item ${src.code} foi duplicado duas vezes.`, 422)
+    duplicated.add(src.id)
+    if (Decimal.from(it.unitPrice).eq(src.unitPrice)) {
+      throw new AppError('ADDENDUM_SAME_PRICE', `A linha duplicada de ${src.code} precisa de um R$ unitário diferente do contratado.`, 422)
+    }
+    if (!Decimal.from(it.unitPrice).isPositive()) throw new AppError('ADDENDUM_PRICE', `Informe o novo R$ unitário de ${src.code}.`, 422)
+    const vigente = Decimal.from(src.quantity).plus(Decimal.sum(previous.filter((p) => p.contractItemId === src.id).map((p) => p.quantityDelta)))
+    const zeroed = items.find((x) => x.contractItemId === src.id && 'reduce' in x && x.reduce === true && Decimal.from(x.quantity).eq(vigente))
+    if (!zeroed) {
+      throw new AppError('ADDENDUM_DUPLICATE_ORIGINAL', `Para mudar o unitário de ${src.code}, a linha original precisa ser zerada no mesmo aditivo (histórico do unitário original).`, 422)
+    }
+  }
 
   return items.map((it) => {
     if (it.contractItemId) {
@@ -68,26 +93,26 @@ function resolveItems(c: ContractData, kind: AddendumKind, items: AddendumItemIn
       if (!ci) throw new AppError('ADDENDUM_ITEM', 'Item não pertence a este contrato.', 422)
       if (seen.has(ci.id)) throw new AppError('ADDENDUM_ITEM_DUPLICATED', `O item ${ci.code} foi informado duas vezes.`, 422)
       seen.add(ci.id)
-      // Distrato e redução (remanejamento) devolvem ao preço contratado; o acréscimo pode renegociar o unitário
+      // Item do contrato: sempre ao preço contratado (novo unitário só pela linha duplicada)
       const reduce = 'reduce' in it && it.reduce === true
-      const unitPrice = kind === 'termination' || reduce ? ci.unitPrice : (it.unitPrice ?? ci.unitPrice)
       return {
         contractItemId: ci.id, materialId: ci.materialId, code: ci.code, description: ci.description, unit: ci.unit,
-        quantityDelta: signed(it.quantity, reduce), unitPrice: Decimal.from(unitPrice).round(4).toDb(), allocations: allocationsOf(it, reduce),
+        quantityDelta: signed(it.quantity, reduce), unitPrice: Decimal.from(ci.unitPrice).round(4).toDb(), allocations: allocationsOf(it, reduce),
       }
     }
-    if (kind === 'termination') throw new AppError('ADDENDUM_ITEM', 'O distrato só reduz itens do contrato.', 422)
-    const n = it as Extract<AddendumItemInput, { code: string }>
+    if (!('sourceItemId' in it)) throw new AppError('ADDENDUM_NEW_ITEM', 'O aditivo não inclui insumo novo: duplique a linha do contrato para mudar o R$ unitário.', 422)
+    const src = byId.get(it.sourceItemId)!
     return {
-      contractItemId: null, materialId: null, code: n.code, description: n.description, unit: n.unit,
-      quantityDelta: signed(n.quantity, false), unitPrice: Decimal.from(n.unitPrice).round(4).toDb(), allocations: allocationsOf(n, false),
+      contractItemId: null, materialId: src.materialId, code: src.code, description: src.description, unit: src.unit,
+      quantityDelta: signed(it.quantity, false), unitPrice: Decimal.from(it.unitPrice).round(4).toDb(), allocations: allocationsOf(it, false),
     }
   })
 }
 
 function contentOf(c: ContractData, kind: AddendumKind, input: SaveAddendumData, ctx: RequestContext, addendumId?: string): AddendumContent {
-  const items = resolveItems(c, kind, input.items)
-  const summary = computeAddendum(contractItemsOf(c), approvedLines(c, addendumId), items.map(lineOf))
+  const previous = approvedLines(c, addendumId)
+  const items = resolveItems(c, kind, input.items, previous)
+  const summary = computeAddendum(contractItemsOf(c), previous, items.map(lineOf))
   return {
     kind,
     reason: input.reason.trim(),

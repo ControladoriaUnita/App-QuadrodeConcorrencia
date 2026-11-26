@@ -71,29 +71,53 @@ test('a Gerência aprova o aditivo e ele entra no novo total do contrato', async
   await expect(page.getByText('Aditivos e distratos', { exact: true }).first().locator('..')).toContainText('1 de 1')
 })
 
-test('o aditivo reduz um item e acrescenta outro na mesma solicitação (remanejamento)', async ({ page }) => {
+test('o aditivo reduz um item e acrescenta em outro na mesma solicitação (remanejamento), sem insumo novo', async ({ page }) => {
   await abrirContrato(page)
   await page.getByRole('tab', { name: /Aditivos e distratos/ }).click()
   await page.getByRole('button', { name: 'Solicitar aditivo' }).click()
-  await page.getByRole('textbox', { name: /Motivo do aditivo/ }).fill('Remanejamento: zera um item e leva o saldo para um item novo')
+  await page.getByRole('textbox', { name: /Motivo do aditivo/ }).fill('Remanejamento: zera um item e leva o saldo para outro')
+  await expect(page.getByRole('button', { name: 'Incluir item novo' })).toHaveCount(0)
 
   // Primeiro item do contrato: reduzir e zerar a quantidade vigente
   await page.getByRole('button', { name: /^Reduzir / }).first().click()
   await page.getByRole('button', { name: /^Zerar / }).first().click()
   await expect(page.getByRole('button', { name: /^Reduzir / }).first()).toHaveAttribute('aria-pressed', 'true')
 
-  // Item novo acrescentando
-  await page.getByRole('button', { name: 'Incluir item novo' }).click()
-  await page.getByRole('textbox', { name: 'Código do item novo' }).fill('IS99997')
-  await page.getByRole('textbox', { name: 'Descrição do item novo' }).fill('Serviço remanejado')
-  await page.getByRole('textbox', { name: 'Unidade do item novo' }).fill('m³')
-  await page.getByRole('textbox', { name: 'Quantidade do item novo' }).fill('10')
-  await page.getByRole('textbox', { name: 'Quantidade do item novo' }).press('Tab')
-  await page.getByRole('textbox', { name: 'R$ unitário do item novo' }).fill('50')
-  await page.getByRole('textbox', { name: 'R$ unitário do item novo' }).press('Tab')
+  // Segundo item: acrescentar, ao preço contratado (sem campo de R$ unitário)
+  await expect(page.getByRole('textbox', { name: /^R\$ unitário de / })).toHaveCount(0)
+  await page.getByRole('textbox', { name: /^Quantidade de / }).nth(1).fill('10')
+  await page.getByRole('textbox', { name: /^Quantidade de / }).nth(1).press('Tab')
 
-  await expect(page.getByText('Acréscimos', { exact: false }).first()).toContainText('R$ 500,00')
+  await expect(page.getByText('Acréscimos', { exact: false }).first()).toContainText('R$ 552,00')
   await expect(page.getByText('Reduções', { exact: false }).first()).toBeVisible()
   await page.getByRole('button', { name: 'Salvar rascunho' }).click()
   await expect(page.getByRole('button', { name: 'Enviar para aprovação' })).toBeVisible()
+})
+
+test('mudar o R$ unitário no aditivo duplica a linha: a original fica zerada e a nova recebe o saldo editável', async ({ page }) => {
+  await abrirContrato(page)
+  await page.getByRole('tab', { name: /Aditivos e distratos/ }).click()
+  // O teste anterior deixou um rascunho: exclui para abrir um novo
+  const excluir = page.getByRole('button', { name: 'Excluir', exact: true })
+  if (await excluir.count()) await excluir.first().click()
+  await expect(page.getByRole('button', { name: 'Solicitar aditivo' })).toBeVisible()
+  await page.getByRole('button', { name: 'Solicitar aditivo' }).click()
+  await page.getByRole('textbox', { name: /Motivo do aditivo/ }).fill('Novo preço negociado para o transporte')
+  await page.getByRole('button', { name: 'Mudar unitário de IS00017' }).click()
+
+  // Original zerada (histórico do unitário original); duplicada com o saldo de 351 m³
+  await expect(page.getByText('zerada · unitário original')).toBeVisible()
+  await expect(page.getByText('linha duplicada · novo unitário')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Quantidade de IS00017' })).toBeDisabled()
+  await expect(page.getByRole('textbox', { name: 'Quantidade da linha duplicada de IS00017' })).toHaveValue('351,00')
+  // Saldo editável e novo unitário
+  await page.getByRole('textbox', { name: 'Quantidade da linha duplicada de IS00017' }).fill('300')
+  await page.getByRole('textbox', { name: 'Quantidade da linha duplicada de IS00017' }).press('Tab')
+  await page.getByRole('textbox', { name: 'Novo R$ unitário de IS00017' }).fill('60')
+  await page.getByRole('textbox', { name: 'Novo R$ unitário de IS00017' }).press('Tab')
+  await expect(page.getByText('Acréscimos', { exact: false }).first()).toContainText('R$ 18.000,00')
+  await expect(page.getByText('Reduções', { exact: false }).first()).toContainText('R$ 19.375,20')
+  await page.getByRole('button', { name: 'Salvar rascunho' }).click()
+  await expect(page.getByRole('button', { name: 'Enviar para aprovação' })).toBeVisible()
+  await expect(page.getByText('linha duplicada (novo unitário)', { exact: false })).toBeVisible()
 })

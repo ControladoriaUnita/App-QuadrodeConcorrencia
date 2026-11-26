@@ -26,7 +26,7 @@ export function AddendumItemsTable({ summary, items }: { summary: AddendumSummar
                 <p className="truncate">{items[k]?.description}</p>
                 <p className="text-[11px] text-text-muted">
                   {l.code}
-                  {!l.contractItemId && ' · item novo'}
+                  {!l.contractItemId && ' · linha duplicada (novo unitário)'}
                 </p>
               </td>
               <td className={cn(td, 'text-xs')}>

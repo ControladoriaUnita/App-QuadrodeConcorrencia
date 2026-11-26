@@ -21,7 +21,13 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 | Ambiente | Versão |
 |---|---|
 | produção | v16 |
-| dev | v18 |
+| dev | v19 |
+
+## v19 — dev (2026-11-26)
+
+- **Aditivo — mudar o R$ unitário:** botão **Mudar unitário** em cada item do contrato. A linha é duplicada: a original fica **zerada** (todo o saldo vigente reduzido ao preço contratado, guardando o histórico do unitário original) e a linha duplicada recebe o **saldo, editável**, com o novo unitário e os vínculos de planejamento.
+- **Aditivo sem insumo novo:** saiu o “Incluir item novo”; o servidor recusa item sem origem no contrato. Acréscimo e redução em item do contrato usam sempre o preço contratado (o novo unitário só existe pela linha duplicada). Remanejamento (+ e −) e distrato continuam iguais.
+- Sem migration. `verificar`: 244 testes do Vitest (9 pulados), 38 de tela e build.
 
 ## v18 — dev (2026-11-26)
 

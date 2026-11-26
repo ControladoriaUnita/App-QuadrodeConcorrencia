@@ -1288,15 +1288,18 @@ const addendumItemSchema = z.union([
     quantity: positiveQuantity,
     /** Só no aditivo: true reduz o item (remanejamento), ao preço contratado */
     reduce: z.boolean().optional(),
-    /** Só no acréscimo do aditivo; distrato e redução usam o preço contratado */
+    /** Ignorado: o item do contrato usa sempre o preço contratado (novo unitário = linha duplicada) */
     unitPrice: decimalString.optional(),
     allocations: z.array(addendumAllocationSchema).max(100),
   }),
+  /**
+   * Só no aditivo: linha duplicada de um item do contrato com NOVO R$ unitário. O item original é
+   * zerado no mesmo aditivo (fica no histórico com o unitário original) e a linha nova recebe o saldo
+   * (editável). Não há como incluir insumo novo: só duplicar a linha para mudar o unitário.
+   */
   z.object({
     contractItemId: z.null().optional(),
-    code: z.string().trim().min(1).max(40),
-    description: z.string().trim().min(1).max(500),
-    unit: z.string().trim().min(1).max(20),
+    sourceItemId: uuid,
     quantity: positiveQuantity,
     unitPrice: decimalString,
     allocations: z.array(addendumAllocationSchema).max(100),

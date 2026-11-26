@@ -4,9 +4,12 @@
  * Regras
  *  - Lançamento é item a item: o valor do aditamento é sempre a soma dos itens (Δ quant. × R$ unit.),
  *    nunca um valor geral do contrato.
- *  - Aditivo acrescenta quantidade (itens do contrato ou itens novos) e, na mesma solicitação, pode
- *    reduzir outros itens do contrato (remanejamento: zerar uma linha e acrescentar em outra). A redução
- *    é só de itens do contrato e ao preço contratado. O total é o líquido (acréscimos − reduções).
+ *  - Aditivo acrescenta quantidade em itens do contrato e, na mesma solicitação, pode reduzir outros
+ *    (remanejamento: zerar uma linha e acrescentar em outra), sempre ao preço contratado. O total é o
+ *    líquido (acréscimos − reduções).
+ *  - Não há inclusão de insumo novo. Mudar o R$ unitário = duplicar a linha: a original é zerada (fica
+ *    no histórico com o unitário original) e a linha duplicada, sem item do contrato, recebe o saldo
+ *    (editável) com o novo unitário (server/application/use-cases/addenda.ts).
  *  - Distrato só subtrai, de itens do contrato e ao preço contratado.
  *  - Quem digita informa a quantidade positiva; o sinal vem do tipo (distrato) ou da linha (reduzir).
  *  - Cada item é distribuído entre os IPs (vínculos de planejamento), para o planejamento vincular no ERP.
