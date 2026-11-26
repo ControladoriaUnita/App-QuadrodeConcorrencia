@@ -181,6 +181,9 @@ function AddendumCard({ c, a, busy, onEdit, onDelete, onSubmit, onDecide }: {
                     {s.directorName ?? s.roleName}
                     {s.decidedAt && ` · ${s.decidedByName ?? '—'} em ${formatDateTime(s.decidedAt)}`}
                   </span>
+                  {s.decidedById && s.directorUserId && s.decidedById !== s.directorUserId && (
+                    <Badge tone="info" title="Decidido por outro diretor; o dono do pedido será avisado por e-mail">por outro diretor</Badge>
+                  )}
                   {s.comment && <span className="text-xs text-ink-700">“{s.comment}”</span>}
                 </li>
               )

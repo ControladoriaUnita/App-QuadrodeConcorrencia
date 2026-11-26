@@ -59,6 +59,9 @@ export function ApprovalsPanel({
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-text">{a.stepName}</p>
                       <Badge tone={a === current ? 'primary' : approvalStatus[a.status].tone}>{a === current ? 'Aguardando' : approvalStatus[a.status].label}</Badge>
+                      {a.decidedById && a.directorUserId && a.decidedById !== a.directorUserId && (
+                        <Badge tone="info" title="Decidido por outro diretor; o dono do pedido será avisado por e-mail">por outro diretor</Badge>
+                      )}
                     </div>
                     <p className="text-xs text-text-muted">
                       Papel: {a.roleName}

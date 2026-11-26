@@ -69,12 +69,25 @@ export interface DecisionInput {
   now: string
   /**
    * Usuário ligado ao diretor de cada etapa de diretor (directorId → userId). Diretor com usuário:
-   * só ele decide a etapa. Diretor sem usuário: qualquer um com o papel da etapa.
+   * ele ou outro diretor (com usuário ligado) decide a etapa — os diretores aprovam os QCs uns dos
+   * outros; quando outro diretor decide, o dono do pedido deve ser avisado. Diretor sem usuário:
+   * qualquer um com o papel da etapa.
    */
   directorUsers?: Map<string, string | null>
 }
 
-export function decide(approvals: ApprovalInstance[], input: DecisionInput): { approvals: ApprovalInstance[]; outcome: FlowOutcome } {
+/**
+ * Quem pode decidir a etapa de diretor: o diretor dela ou outro diretor (usuário ligado a algum
+ * diretor). `cross` = decidido por outro diretor (aviso ao dono do pedido).
+ */
+export function directorStepAccess(stepDirectorId: string | null | undefined, actorId: string, directorUsers: Map<string, string | null> | undefined) {
+  const owner = stepDirectorId ? (directorUsers?.get(stepDirectorId) ?? null) : null
+  if (!owner || owner === actorId) return { allowed: true, cross: false }
+  const isDirector = [...(directorUsers?.values() ?? [])].includes(actorId)
+  return { allowed: isDirector, cross: isDirector }
+}
+
+export function decide(approvals: ApprovalInstance[], input: DecisionInput): { approvals: ApprovalInstance[]; outcome: FlowOutcome; crossDirector: boolean } {
   const step = currentStep(approvals)
   if (!step) throw new DomainError('APPROVAL_CLOSED', 'Não há etapas pendentes.')
   if (step.stepOrder !== input.stepOrder) {
@@ -83,9 +96,9 @@ export function decide(approvals: ApprovalInstance[], input: DecisionInput): { a
   if (!input.actorRoleIds.includes(step.roleId)) {
     throw new DomainError('APPROVAL_FORBIDDEN', `Você não possui o papel exigido para "${step.stepName}".`)
   }
-  const directorUser = step.directorId ? input.directorUsers?.get(step.directorId) : null
-  if (directorUser && directorUser !== input.actorId) {
-    throw new DomainError('APPROVAL_FORBIDDEN', `A etapa "${step.stepName}" é do diretor responsável pelo pedido.`)
+  const access = directorStepAccess(step.directorId, input.actorId, input.directorUsers)
+  if (!access.allowed) {
+    throw new DomainError('APPROVAL_FORBIDDEN', `A etapa "${step.stepName}" é do diretor responsável pelo pedido (ou de outro diretor).`)
   }
   if (input.decision === 'rejected' && !input.comment?.trim()) {
     throw new DomainError('APPROVAL_COMMENT_REQUIRED', 'Informe o motivo da reprovação.')
@@ -98,5 +111,5 @@ export function decide(approvals: ApprovalInstance[], input: DecisionInput): { a
     if (input.decision === 'rejected' && a.status === 'pending') return { ...a, status: 'skipped' as const }
     return a
   })
-  return { approvals: next, outcome: flowOutcome(next) }
+  return { approvals: next, outcome: flowOutcome(next), crossDirector: access.cross }
 }

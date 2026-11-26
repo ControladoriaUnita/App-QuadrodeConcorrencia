@@ -21,7 +21,13 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 | Ambiente | Versão |
 |---|---|
 | produção | v16 |
-| dev | v19 |
+| dev | v20 |
+
+## v20 — dev (2026-11-26)
+
+- **Diretores aprovam os QCs uns dos outros:** a etapa “Diretor responsável” pode ser decidida pelo diretor do pedido ou por outro diretor (usuário ligado a outro diretor, com o papel da etapa). Quem não é diretor continua barrado. Vale para QCs e aditivos. A etapa mostra o selo **por outro diretor**.
+- **Aviso ao dono do pedido:** quando outro diretor decide, o aviso é montado (QC, etapa, diretor dono, quem decidiu e a decisão) e fica numa caixa de saída (`server/application/notifications.ts`). **O envio do e-mail ainda não existe:** o meio de envio será definido depois e ligado ali.
+- Sem migration. `verificar`: 245 testes do Vitest (9 pulados), 38 de tela e build.
 
 ## v19 — dev (2026-11-26)
 

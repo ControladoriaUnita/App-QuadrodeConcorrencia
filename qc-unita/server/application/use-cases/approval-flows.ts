@@ -3,7 +3,7 @@
  * administrador e apoio aos casos de uso que montam e decidem planos (QC e aditivos).
  */
 import type { ApprovalConfigDTO, ApprovalDTO, SaveApprovalFlowInput, SaveDirectorInput } from '../../../shared/contracts'
-import { currentStep, type ApprovalInstance } from '../../../shared/domain/approval/approval-flow'
+import { currentStep, directorStepAccess, type ApprovalInstance } from '../../../shared/domain/approval/approval-flow'
 import type { FlowContext } from '../../../shared/domain/approval/flows'
 import { AppError, roleIdsFor, type Actor, type RequestContext } from '../context'
 import type { CompetitionData, Repositories } from '../ports'
@@ -43,8 +43,7 @@ export function canDecideCurrent(actor: Actor, workId: string, approvals: Approv
   const step = currentStep(toInstances(approvals))
   if (!step) return false
   if (!roleIdsFor(actor, workId).includes(step.roleId)) return false
-  const user = step.directorId ? users.get(step.directorId) : null
-  return !user || user === actor.id
+  return directorStepAccess(step.directorId, actor.id, users).allowed
 }
 
 // ----------------------------------------------------------------------------- configuração

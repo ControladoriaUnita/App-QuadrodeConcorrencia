@@ -34,6 +34,7 @@ import type { AddendumContent, ContractData, NewAddendumItem, Repositories } fro
 import { isConcluded } from '../../../shared/domain/contract/contract-request'
 import { canDecideAddendum, loadContract } from './contracts'
 import { directorUsers, flowContextOf, toInstances } from './approval-flows'
+import { notifyCrossDirectorDecision } from '../notifications'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 const isOpen = (a: ContractData['addenda'][number]) => a.status === 'draft' || a.status === 'submitted'
@@ -216,6 +217,17 @@ export async function decideAddendum(repos: Repositories, ctx: RequestContext, a
   })
   for (const s of result.approvals) {
     if (current.find((x) => x.stepOrder === s.stepOrder)!.status !== s.status) await repos.approvalFlows.saveAddendumDecision(addendumId, s)
+  }
+  if (result.crossDirector) {
+    await notifyCrossDirectorDecision({
+      subject: `${c.code} — ${a.kind === 'termination' ? 'distrato' : 'aditivo'} nº ${a.number}`,
+      competitionId: c.competition.id,
+      stepName: step.stepName,
+      directorId: step.directorId ?? null,
+      decidedBy: ctx.actor.fullName,
+      decision: input.decision,
+      at: nowIso,
+    })
   }
   // O aditivo só muda de situação na última aprovação (ou na primeira reprovação)
   if (result.outcome !== 'pending') {

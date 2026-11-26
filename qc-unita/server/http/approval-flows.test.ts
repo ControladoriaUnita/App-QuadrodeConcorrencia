@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import type { ApprovalConfigDTO, CompetitionDetailDTO, CompetitionListItemDTO, ContractListItemDTO, ContractRequestDTO, WorkDTO } from '../../shared/contracts'
 import { DEMO_USERS } from '../infrastructure/memory/seed'
 import { handle } from './router'
+import { pendingCrossDirectorNotices } from '../application/notifications'
 
 const [ADMIN, PROC, ENG, MGR, DIR] = DEMO_USERS.map((u) => u.id)
 
@@ -85,6 +86,58 @@ describe('pedido do QC escolhe o fluxo', () => {
       }
     }
     expect((await call<CompetitionDetailDTO>('GET', `/competitions/${target!.competition.id}`)).data.revision.status).toBe('approved')
+  })
+})
+
+describe('diretores aprovam os QCs uns dos outros', () => {
+  it('o diretor SR decide a etapa do RT; fica registrado e o aviso ao dono do pedido é montado; quem não é diretor continua barrado', async () => {
+    const dirs = (await config()).directors
+    const rt = dirs.find((d) => d.code === 'RT')!
+    const sr = dirs.find((d) => d.code === 'SR')!
+    const save = (d: typeof rt, userId: string | null) => call('PUT', `/approval-directors/${d.id}`, { code: d.code, name: d.name, userId, active: true }, ADMIN)
+    // RT ligado a outro usuário (MGR, que não tem o papel de Diretoria); SR ligado à Diretoria (DIR)
+    expect((await save(rt, MGR!)).status).toBe(200)
+    expect((await save(sr, DIR!)).status).toBe(200)
+
+    // QC ainda em rascunho: preenche o que falta para enviar
+    const comps = (await call<CompetitionListItemDTO[]>('GET', `/competitions?workId=${alpha}`)).data
+    const draft = comps.find((x) => x.revisionStatus === 'draft' && x.title.startsWith('Pavimentação'))!
+    const target = (await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)).data
+    const rid = target.revision.id
+    const types = (await call<{ id: string }[]>('GET', '/contract-types')).data
+    const winner = target.suppliers.find((x) => !x.isPlaceholder)!
+    const head = await call('PATCH', `/revisions/${rid}`, {
+      requestKind: 'labor', origin: 'work', directorId: rt.id, serviceStartOn: '2027-01-04', serviceEndOn: '2027-03-31',
+      engineeringOwnerName: 'Eng. Teste', contractTypeId: types[0]!.id, winnerSupplierId: winner.supplierId, winnerJustification: 'Melhor preço.',
+    })
+    expect(head.status, JSON.stringify(head.data)).toBe(200)
+    const sub = await call('POST', `/revisions/${rid}/submit`)
+    expect(sub.status, JSON.stringify(sub.data)).toBe(200)
+    const sent = (await call<CompetitionDetailDTO>('GET', `/competitions/${target.competition.id}`)).data
+    const byRole: Record<string, typeof PROC> = { Suprimentos: PROC, Engenharia: ENG, 'Gerente / Coordenador de Obra': MGR }
+    const before = pendingCrossDirectorNotices().length
+    for (const a of sent.approvals) {
+      if (a.directorId) {
+        expect(a.directorUserId).toBe(MGR)
+        // Admin não é diretor: barrado; o SR (outro diretor) pode
+        expect((await call('POST', `/revisions/${rid}/approvals`, { stepOrder: a.stepOrder, decision: 'approved' }, ADMIN)).status).toBe(403)
+        expect((await call<CompetitionDetailDTO>('GET', `/competitions/${target.competition.id}`, undefined, DIR)).data.can.decide).toBe(true)
+        expect((await call('POST', `/revisions/${rid}/approvals`, { stepOrder: a.stepOrder, decision: 'approved', comment: 'De acordo pelo SR.' }, DIR)).status).toBe(200)
+      } else {
+        expect((await call('POST', `/revisions/${rid}/approvals`, { stepOrder: a.stepOrder, decision: 'approved', comment: 'De acordo.' }, byRole[a.roleName])).status).toBe(200)
+      }
+    }
+    const done = (await call<CompetitionDetailDTO>('GET', `/competitions/${target.competition.id}`)).data
+    expect(done.revision.status).toBe('approved')
+    const step = done.approvals.find((a) => a.directorId)!
+    expect([step.decidedById, step.directorUserId]).toEqual([DIR, MGR])
+    const notices = pendingCrossDirectorNotices().slice(before)
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({ competitionId: target.competition.id, directorId: rt.id, decision: 'approved' })
+
+    // volta os diretores como estavam
+    await save(rt, DIR!)
+    await save(sr, null)
   })
 })
 

@@ -17,7 +17,8 @@ import type {
 } from '../../../shared/contracts'
 import { Decimal } from '../../../shared/domain/decimal'
 import { budgetReadiness, missingSummary } from '../../../shared/domain/budget/readiness'
-import { buildApprovalPlan, decide, type ApprovalInstance } from '../../../shared/domain/approval/approval-flow'
+import { buildApprovalPlan, decide, directorStepAccess, type ApprovalInstance } from '../../../shared/domain/approval/approval-flow'
+import { notifyCrossDirectorDecision } from '../notifications'
 import { planFromFlows } from '../../../shared/domain/approval/flows'
 import { computeScope } from '../../../shared/domain/competition/scope'
 import { lineTotal } from '../../../shared/domain/competition/best-condition'
@@ -65,7 +66,7 @@ export async function getCompetition(
   const pkgs = new Set(data.links.map((l) => l.packageCode).filter(Boolean))
   const mats = new Set(data.links.map((l) => l.materialId))
   const keys = new Set(data.links.map((l) => l.lineKey))
-  const base = withCapabilities(ctx, data)
+  const base = withCapabilities(ctx, data, await directorUsers(repos))
   const manage = can(ctx.actor, 'contract.manage', data.competition.workId)
   return {
     ...base,
@@ -78,6 +79,7 @@ export async function getCompetition(
 function withCapabilities(
   ctx: RequestContext,
   data: CompetitionData,
+  users: Map<string, string | null> = new Map(),
 ): Omit<CompetitionDetailDTO, 'budgetLines' | 'otherCommitments' | 'can'> & { can: Omit<CompetitionDetailDTO['can'], 'createContract'> } {
   const workId = data.competition.workId
   const editable = isEditable(data.revision)
@@ -94,7 +96,8 @@ function withCapabilities(
         data.revision.status === 'in_approval' &&
         !!pending &&
         roles.includes(pending.roleId) &&
-        (!pending.directorUserId || pending.directorUserId === ctx.actor.id) &&
+        // Diretor da etapa ou outro diretor (os diretores aprovam os QCs uns dos outros)
+        (!pending.directorUserId || pending.directorUserId === ctx.actor.id || directorStepAccess(pending.directorId, ctx.actor.id, users).allowed) &&
         can(ctx.actor, 'approval.decide', workId),
       createRevision: isLatest && canCreateRevision(data.revisions).ok && can(ctx.actor, 'competition.edit', workId),
     },
@@ -640,6 +643,19 @@ export async function decideApproval(repos: Repositories, ctx: RequestContext, r
   for (const step of result.approvals) {
     const before = current.find((c) => c.stepOrder === step.stepOrder)!
     if (before.status !== step.status) await repos.approvals.saveDecision(revisionId, step)
+  }
+  if (result.crossDirector) {
+    const step = current.find((c) => c.stepOrder === input.stepOrder)!
+    const data = await repos.competitions.getData(ref.competitionId, revisionId)
+    await notifyCrossDirectorDecision({
+      subject: `${data?.competition.code ?? 'QC'} — ${data?.competition.title ?? ''}`,
+      competitionId: ref.competitionId,
+      stepName: step.stepName,
+      directorId: step.directorId ?? null,
+      decidedBy: ctx.actor.fullName,
+      decision: input.decision,
+      at: nowIso,
+    })
   }
 
   if (result.outcome === 'rejected') {
