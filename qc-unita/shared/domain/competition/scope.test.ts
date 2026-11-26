@@ -86,3 +86,20 @@ describe('Fora de escopo e desvio no mapa', () => {
     expect([l.budgetQuantity, l.quantityDeviation]).toEqual([null, false])
   })
 })
+
+describe('% de material no mapa', () => {
+  it('mudar o % material (ou equipamento) não mexe em R$ unit., totais, melhor condição nem cotação escolhida', () => {
+    const base = source()
+    const before = buildQcMap(base)
+    const changed = buildQcMap(patch(patch(base, 'i2', { pctMaterial: '0.6', pctEquipment: '0.2' }), 'i4', { pctMaterial: '1' }))
+    const view = (m: ReturnType<typeof buildQcMap>) => ({
+      prices: m.prices.map((p) => [p.itemId, p.competitionSupplierId, p.unitPrice?.toDb() ?? null]),
+      best: [...m.bestByItem.entries()].map(([k, b]) => [k, b?.unitPrice?.toDb() ?? null, b?.totalPrice?.toDb() ?? null]),
+      suppliers: [...m.summaryBySupplier.entries()].map(([k, x]) => [k, x.total.toDb()]),
+      mix: m.mixTotal.toDb(),
+      chosen: m.chosen.total.toDb(),
+    })
+    expect(view(changed)).toEqual(view(before))
+    expect(scopeOf(patch(base, 'i2', { pctMaterial: '0.6' })).byItem.get('i2')!.unitPrice?.toDb()).toBe(scopeOf(base).byItem.get('i2')!.unitPrice?.toDb())
+  })
+})

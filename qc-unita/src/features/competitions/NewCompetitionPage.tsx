@@ -1,7 +1,8 @@
 /**
  * Nova concorrência: os insumos são escolhidos na MESMA tela do orçamento (Item → composição →
  * insumos), marcando o que entra e quanto será consumido de cada linha (% → verba puxada).
- * Os IPs de planejamento do QC saem das linhas marcadas.
+ * Não há caixa de marcação: digitar o % na linha a coloca no QC (vazio ou 0 tira).
+ * Os IPs de planejamento do QC saem das linhas escolhidas.
  * O pedido (material ou mão de obra, origem e diretor) escolhe o fluxo de aprovação.
  * "Ocultar campos" esconde objeto, tipo e origem do pedido para dar espaço à árvore de % a consumir.
  */
@@ -130,7 +131,7 @@ export function NewCompetitionPage() {
       <Card>
         <CardHeader
           title="Insumos e quanto será consumido"
-          description="Marque no orçamento os insumos desta contratação. Em cada linha, o “% a consumir” define a verba puxada (padrão: o que ainda está livre). Marcar um Item ou composição marca todos os insumos abaixo; o % digitado nele vale para todos."
+          description="Digite o “% a consumir” direto na linha do orçamento: a linha entra no QC e o % define a verba puxada (o campo mostra o % ainda livre). Vazio ou 0 tira a linha. No Item ou composição, o % digitado vale para todos os insumos abaixo."
         />
         {lines.isLoading || structure.isLoading ? (
           <div className="grid gap-2 p-5">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-9" />)}</div>
@@ -146,7 +147,7 @@ export function NewCompetitionPage() {
 
       {(over.length > 0 || zero.length > 0 || create.error || (touched && !selection.size)) && (
         <div className="mt-3 grid gap-2">
-          {touched && !selection.size && <Alert tone="warning">Marque ao menos um insumo do orçamento.</Alert>}
+          {touched && !selection.size && <Alert tone="warning">Informe o % a consumir de ao menos um insumo do orçamento.</Alert>}
           {over.length > 0 && <Alert tone="error">{over.length} insumo(s) com % acima do saldo livre. Ajuste o “% a consumir”.</Alert>}
           {zero.length > 0 && <Alert tone="warning">{zero.length} insumo(s) marcado(s) com 0%. Informe o percentual ou desmarque.</Alert>}
           {create.error && <Alert tone="error">{(create.error as Error).message}</Alert>}

@@ -25,13 +25,15 @@ interface Props {
   suffix?: string
   /** Aceita valores negativos (ex.: quantidade aditiva de redução) */
   allowNegative?: boolean
+  /** Dica ao passar o mouse (o erro, quando houver, tem prioridade) */
+  title?: string
 }
 
 /**
  * Entrada numérica pt-BR sem float: aceita "1.234,56", "1234,56", "R$ 150.000".
  * Exibe formatado quando fora de foco; Enter confirma e desce para a linha seguinte.
  */
-export function DecimalInput({ value, onCommit, fractionDigits = 2, scale = 'plain', allowEmpty = true, disabled, className, placeholder = '—', gridColumn, trimZeros, suffix, max, allowNegative, ...aria }: Props) {
+export function DecimalInput({ value, onCommit, fractionDigits = 2, scale = 'plain', allowEmpty = true, disabled, className, placeholder = '—', gridColumn, trimZeros, suffix, max, allowNegative, title, ...aria }: Props) {
   const toDisplay = (v: string | null) => {
     if (v === null || v === '') return ''
     const d = scale === 'ratio' ? Decimal.from(v).times(100) : Decimal.from(v)
@@ -92,7 +94,7 @@ export function DecimalInput({ value, onCommit, fractionDigits = 2, scale = 'pla
       disabled={disabled}
       placeholder={placeholder}
       aria-invalid={invalid || undefined}
-      title={error ?? undefined}
+      title={error ?? title}
       onFocus={(e) => {
         setFocused(true)
         e.currentTarget.select()

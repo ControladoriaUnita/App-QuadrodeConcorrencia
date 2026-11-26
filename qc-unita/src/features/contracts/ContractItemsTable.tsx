@@ -2,9 +2,14 @@
  * 2. Especificação dos serviços contratados: insumo, especificação, % retenção, quantidade, preço e
  * vínculos (IP · Qtd · Valor). Abaixo de cada insumo, os insumos referência (do orçamento) usados
  * para compará-lo no QC, com seus IPs e verba. Rodapé com os totais da planilha.
+ * Com % de material no QC, a linha fixa "Materiais globais" soma o material ponderado de cada linha
+ * (total × % material), com os IPs vindos dos vínculos dos itens (shared/domain/contract/global-materials.ts).
  */
+import { useMemo } from 'react'
+import { Package } from 'lucide-react'
 import type { ContractRequestDTO, UpdateContractItemInput } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
+import { globalMaterials } from '@shared/domain/contract/global-materials'
 import { Card, CardHeader, DecimalInput, InlineTextInput } from '@/components/ui'
 import { cn } from '@/utils/cn'
 import { formatBRL, formatPercent, formatQuantity } from '@/utils/format'
@@ -15,6 +20,8 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
   const td = 'border-b border-border px-3 py-1.5 align-top'
   const result = Decimal.from(c.availableAmount).minus(c.totalAmount)
   const ratio = Decimal.from(c.budgetAmount).isZero() ? null : result.div(c.budgetAmount, 6)
+  const materials = useMemo(() => globalMaterials(c.items), [c.items])
+  const hasMaterials = materials.total.isPositive()
 
   return (
     <Card>
@@ -74,7 +81,14 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
                 </td>
                 <td className={cn(td, 'text-right whitespace-nowrap')}>{formatQuantity(i.quantity)} <span className="text-text-muted">{i.unit}</span></td>
                 <td className={cn(td, 'text-right whitespace-nowrap')}>{formatBRL(i.unitPrice)}</td>
-                <td className={cn(td, 'text-right font-medium whitespace-nowrap')}>{formatBRL(i.totalPrice)}</td>
+                <td className={cn(td, 'text-right font-medium whitespace-nowrap')}>
+                  {formatBRL(i.totalPrice)}
+                  {materials.byItem.has(i.id) && (
+                    <span className="block text-[11px] leading-4 font-normal text-text-muted" title="Parte de material desta linha (total × % material), somada em Materiais globais">
+                      material {formatBRL(materials.byItem.get(i.id)!)} · {formatPercent(Decimal.from(i.pctMaterial), 1)}
+                    </span>
+                  )}
+                </td>
                 <td className={td}>
                   <div className="flex flex-wrap gap-1">
                     {i.allocations.length === 0 && <span className="text-xs text-warning">Sem vínculo</span>}
@@ -89,6 +103,30 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
                 </td>
               </tr>
             ))}
+            {hasMaterials && (
+              <tr className="bg-info-soft/40">
+                <td className={cn(td, 'font-semibold')} colSpan={5}>
+                  <p className="flex items-center gap-1.5 text-info">
+                    <Package className="size-4" aria-hidden />
+                    Materiais globais
+                  </p>
+                  <p className="text-[11px] leading-4 font-normal text-text-muted">
+                    Soma do material de {materials.byItem.size} linha(s): total da linha × % material. Valor já incluso nos itens acima.
+                  </p>
+                </td>
+                <td className={cn(td, 'text-right font-semibold whitespace-nowrap text-info')}>{formatBRL(materials.total)}</td>
+                <td className={td}>
+                  <div className="flex flex-wrap gap-1">
+                    {materials.byPackage.map((p) => (
+                      <span key={p.packageCode ?? '-'} className="inline-flex items-center gap-1.5 rounded-control border border-border bg-surface px-2 py-0.5 text-xs whitespace-nowrap">
+                        <span className="font-semibold">{p.packageCode ?? 'Sem IP'}</span>
+                        <span>{formatBRL(p.amount)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
           <tfoot className="font-semibold">
             <tr>
@@ -97,7 +135,14 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
                 <span className="ml-6">Verba disponível</span> <span className="ml-2 font-normal text-text-muted">{formatBRL(c.availableAmount)}</span>
               </td>
               <td className="bg-ink-50 px-3 py-2 text-right" colSpan={2}>Total a contratar</td>
-              <td className="bg-ink-50 px-3 py-2 text-right whitespace-nowrap">{formatBRL(c.totalAmount)}</td>
+              <td className="bg-ink-50 px-3 py-2 text-right whitespace-nowrap">
+                {formatBRL(c.totalAmount)}
+                {hasMaterials && (
+                  <span className="block text-[11px] leading-4 font-normal text-text-muted">
+                    serviço {formatBRL(materials.service)} · materiais {formatBRL(materials.total)}
+                  </span>
+                )}
+              </td>
               <td className={cn('bg-ink-50 px-3 py-2 whitespace-nowrap', result.isNegative() ? 'text-error' : 'text-success')}>
                 Resultado QC {formatBRL(result)} {ratio && <span className="font-normal">({formatPercent(ratio, 1)})</span>}
               </td>

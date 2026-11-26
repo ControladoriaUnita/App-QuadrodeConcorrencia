@@ -20,10 +20,17 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v11 |
-| dev | v16 |
+| produção | v16 |
+| dev | v17 |
 
-## v16 — dev (2026-11-26)
+## v17 — dev (2026-11-26)
+
+- **Nova concorrência e "Adicionar linhas" do QC:** saiu a coluna de caixas de marcação da lateral do orçamento. A verba é escolhida direto na linha: digitar o **% a consumir** coloca a linha no QC (o campo mostra o % ainda livre); vazio ou 0 tira. No Item ou composição, o % vale para todos os insumos abaixo.
+- **Mapa:** teste de regressão confirma que mudar o % material ou o % equipamento não mexe no R$ unitário, nos totais, na melhor condição nem na cotação escolhida.
+- **Solicitação de contrato — Materiais globais:** com % de material no QC, a tabela de itens ganha a linha fixa **Materiais globais**. Ela soma o material de cada linha (total da linha × % material), mostra os IPs vindos dos vínculos dos itens e o rodapé separa serviço e materiais. O total do contrato não muda.
+- Sem migration. `verificar`: 242 testes do Vitest (9 pulados), 35 de tela e build.
+
+## v16 — produção (2026-11-26)
 
 - **Nova concorrência:** botão **Ocultar campos / Mostrar campos** esconde o objeto, o tipo e a origem do pedido para dar espaço à árvore de % a consumir. Data e diretor continuam visíveis; se faltar algum campo oculto ao criar, eles voltam a aparecer.
 - **Fora de escopo:** o QC passa a ser opcional ("Sem concorrência"); "Insumo cadastrado" passa a se chamar **Insumos do Orçamento**; o **Insumo livre** só aceita insumos do cadastro do ERP (UAU); o **vínculo de planejamento (IP)** é obrigatório.

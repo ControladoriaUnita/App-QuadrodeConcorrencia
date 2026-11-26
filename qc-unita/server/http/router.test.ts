@@ -47,6 +47,20 @@ describe('API modo memória', () => {
     expect(data.can.editPrices).toBe(true)
   })
 
+  it('% material e % equipamento não mudam o R$ unitário dos fornecedores no mapa', async () => {
+    const draft = list.find((c) => c.title.startsWith('Pavimentação'))!
+    const before = (await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)).data
+    const item = before.items.find((i) => before.prices.some((p) => p.itemId === i.id && p.unitPrice))!
+    const pct = item.pctMaterial === '0.500000' ? '0.25' : '0.5'
+    expect((await call('PATCH', `/revisions/${before.revision.id}/items/${item.id}`, { pctMaterial: pct, pctEquipment: '0.1' })).status).toBe(200)
+    const after = (await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)).data
+    const pricesOf = (d: CompetitionDetailDTO) => d.prices.filter((p) => p.itemId === item.id).map((p) => [p.competitionSupplierId, p.unitPrice]).sort()
+    expect(pricesOf(after)).toEqual(pricesOf(before))
+    expect(buildQcMap(after).mixTotal.toDb()).toBe(buildQcMap(before).mixTotal.toDb())
+    // volta como estava para não afetar os outros testes
+    await call('PATCH', `/revisions/${before.revision.id}/items/${item.id}`, { pctMaterial: item.pctMaterial, pctEquipment: item.pctEquipment })
+  })
+
   it('valida entrada com Zod', async () => {
     const draft = list.find((c) => c.title.startsWith('Pavimentação'))!
     const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${draft.id}`)

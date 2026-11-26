@@ -38,7 +38,7 @@ const OVERSCAN = 12
 // Colunas: Item · Código · Descrição · Unid · Quantidade · Custo Unit. · Custo Total · Vínculo PL · Classificação · Comprometido · Livre
 // (larguras pelo conteúdo real: códigos inteiros; a descrição fica com o espaço que sobra)
 const COLS = 'grid-cols-[8.75rem_5.75rem_minmax(16rem,1fr)_4rem_6.5rem_6.75rem_7.5rem_6.5rem_8rem_8.5rem_6.75rem]'
-const SELECT_COLS = 'grid-cols-[2.25rem_8.75rem_5.75rem_minmax(14rem,1fr)_4rem_6.5rem_6.75rem_7.5rem_6.5rem_8rem_8.5rem_6.75rem_6.5rem_8.5rem]'
+const SELECT_COLS = 'grid-cols-[8.75rem_5.75rem_minmax(14rem,1fr)_4rem_6.5rem_6.75rem_7.5rem_6.5rem_8rem_8.5rem_6.75rem_6.5rem_8.5rem]'
 /** Recuo de cada nível da EAP na coluna Item */
 const indentOf = (level: number) => ({ paddingLeft: `${0.5 + level * 0.6}rem` })
 const tone = { contracted: 'success', in_approval: 'warning', quoting: 'primary' } as const
@@ -320,7 +320,6 @@ export function BudgetTree({ structure, lines, maxHeight = 'calc(100dvh - 15rem)
       >
         <div className="tabular min-w-max text-sm" role="table" aria-label="Orçamento da obra" aria-rowcount={visible.length}>
           <div role="row" className={cn('sticky top-0 z-10 grid border-b border-border bg-ink-50', cols)}>
-            {selectable && <span role="columnheader" className={hd} aria-label="Marcar" />}
             {BUDGET_COLUMNS.map(({ key: k, label, numeric }) => (
               <span key={k} role="columnheader" className={cn(hd, 'flex items-center', numeric && 'justify-end')}>
                 <span className="truncate">{label}</span>
@@ -401,21 +400,8 @@ function TreeRow({ r, cols, top, open, onToggle, select, onEditPlanning, onRenam
   const style = { top, height: ROW_H }
   const checked = select?.kind === 'line' ? select.share !== undefined : !!select && select.chosen.length > 0
 
-  const lead = select && (
-    <span className="flex justify-center">
-      <input
-        type="checkbox"
-        className="size-4 accent-primary"
-        aria-label={`Marcar ${label}`}
-        checked={select.kind === 'line' ? checked : select.pickable.length > 0 && select.pickable.every((x) => select.chosen.includes(x))}
-        ref={(el) => {
-          if (el) el.indeterminate = select.kind === 'block' && checked && !select.pickable.every((x) => select.chosen.includes(x))
-        }}
-        disabled={select.kind === 'line' ? select.disabled && !checked : select.pickable.length === 0 && !checked}
-        onChange={(e) => select.onCheck(e.target.checked)}
-      />
-    </span>
-  )
+  // Sem coluna de marcação: a linha entra no QC ao digitar o % a consumir (vazio ou 0 tira)
+  const lead = null
   const tail = select && <SelectCells r={r} select={select} label={label} />
 
   if (r.kind === 'group') {
@@ -551,8 +537,18 @@ function SelectCells({ r, select, label }: { r: Row; select: RowSelect; label: s
     return (
       <>
         <span className={cn(PIN_SHARE, 'px-1')} title={over ? `Máximo livre: ${formatPercent(free, 1)}` : undefined}>
-          {share !== undefined ? (
-            <DecimalInput aria-label={`% a consumir de ${label}`} scale="ratio" suffix="%" max="1" allowEmpty={false} className={cn(box, over && 'border-error bg-error-soft')} value={share} onCommit={(v) => v && select.onShare(v)} />
+          {share !== undefined || !select.disabled ? (
+            <DecimalInput
+              aria-label={`% a consumir de ${label}`}
+              scale="ratio"
+              suffix="%"
+              max="1"
+              className={cn(box, share === undefined && 'border-dashed bg-transparent', over && 'border-error bg-error-soft')}
+              placeholder={share === undefined ? formatPercent(free, free.eq(1) ? 0 : 1) : undefined}
+              title={share === undefined ? `Digite o % para puxar a verba desta linha (livre: ${formatPercent(free, 1)})` : 'Vazio ou 0 tira a linha do QC'}
+              value={share ?? null}
+              onCommit={(v) => (v && Decimal.from(v).isPositive() ? select.onShare(v) : select.onCheck(false))}
+            />
           ) : (
             <span className="block w-full px-2 text-right text-xs text-text-muted">{EMPTY}</span>
           )}
@@ -578,7 +574,8 @@ function SelectCells({ r, select, label }: { r: Row; select: RowSelect; label: s
             className={box}
             placeholder={ratio ? formatPercent(ratio, 0) : '%'}
             value={null}
-            onCommit={(v) => v && select.onShare(v)}
+            title="% para todos os insumos abaixo; 0 tira todos"
+            onCommit={(v) => v !== null && (Decimal.from(v).isPositive() ? select.onShare(v) : select.onCheck(false))}
           />
         ) : (
           <span className="block w-full px-2 text-right text-xs text-text-muted">{EMPTY}</span>
