@@ -30,7 +30,7 @@ export { expect }
 export const nav = (page: Page) => page.getByRole('navigation', { name: 'Principal' })
 
 /** Entra como um dos usuários do modo demonstração (seletor do topo). */
-export async function entrarComo(page: Page, nome: 'Lucas · Controladoria' | 'Adriano Carvalho' | 'Marina Costa' | 'Roberto Lima' | 'Helena Duarte') {
+export async function entrarComo(page: Page, nome: 'Lucas · Controladoria' | 'Adriano Carvalho' | 'Marina Costa' | 'Roberto Lima' | 'Helena Duarte' | 'Paula Reis') {
   await page.getByRole('combobox', { name: 'Demonstração — entrar como' }).selectOption({ label: nome })
 }
 
@@ -51,6 +51,7 @@ export async function abrirQc(page: Page, objeto: string) {
 export async function abrirContrato(page: Page) {
   await abrirAlpha(page)
   await nav(page).getByText('Contratos e aditivos').click()
-  await page.getByText('SC-2041-001').click()
-  await expect(page.getByRole('heading', { level: 1, name: /SC-2041-001/ })).toBeVisible()
+  // Contrato concluído da semente: o da Terraplenagem (QC-0004, Terra Forte)
+  await page.getByText('SC-2041-002').click()
+  await expect(page.getByRole('heading', { level: 1, name: /SC-2041-002/ })).toBeVisible()
 }

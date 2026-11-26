@@ -58,6 +58,6 @@ test('dados do QC: engenheiro e suprimentos são digitados', async ({ page }) =>
 
 test('QC com solicitação ativa mostra o botão dela e não oferece gerar outra', async ({ page }) => {
   await abrirQc(page, 'Terraplenagem e bota-fora')
-  await expect(page.getByRole('button', { name: 'Solicitação SC-2041-001' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Solicitação SC-2041-002' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Gerar solicitação de contrato' })).toHaveCount(0)
 })

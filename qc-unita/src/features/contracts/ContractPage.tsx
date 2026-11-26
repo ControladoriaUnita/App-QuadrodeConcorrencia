@@ -1,34 +1,34 @@
 /**
- * Solicitação de Contrato: formulário (seções da planilha), itens com vínculos e aditivos.
- *   rascunho → concluída (ao enviar; a aprovação já aconteceu no QC). Sem assinatura nem ERP.
+ * Contrato (tela de Contratos e aditivos): aditivos e distratos, itens e anexos.
+ * A solicitação (dados, itens, vínculos, enviar e concluir) fica na aba "Solicitação de contrato" do QC;
+ * aqui os itens aparecem só para consulta.
  */
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Ban, ClipboardList, FileStack, Paperclip, Send, Server, Table2 } from 'lucide-react'
+import { AlertTriangle, Ban, FileSignature, FileStack, Paperclip, Server, Table2 } from 'lucide-react'
 import { Decimal } from '@shared/domain/decimal'
 import { currentEndOn } from '@shared/domain/contract/addendum'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { Alert, Badge, Button, ConfirmDialog, Dialog, Field, KpiStrip, Skeleton, Tabs, Textarea, toneClasses } from '@/components/ui'
+import { Alert, Badge, Button, Dialog, Field, KpiStrip, Skeleton, Tabs, Textarea, toneClasses } from '@/components/ui'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/utils/cn'
 import { formatBRL, formatDate, formatDateTime, formatPercent, formatRevision } from '@/utils/format'
 import { AttachmentsPanel } from '@/features/attachments/AttachmentsPanel'
 import { AddendaPanel } from './AddendaPanel'
 import { useContract, useContractMutations } from './api'
-import { ContractForm } from './ContractForm'
 import { ContractItemsTable } from './ContractItemsTable'
 import { contractStatus } from './status'
 
-type TabKey = 'solicitacao' | 'itens' | 'aditivos' | 'anexos'
+type TabKey = 'aditivos' | 'itens' | 'anexos'
 
 export function ContractPage() {
   const { id = '', workId = '' } = useParams()
   const [params, setParams] = useSearchParams()
-  const tab = (params.get('aba') as TabKey) ?? 'solicitacao'
+  const tab = (params.get('aba') as TabKey) ?? 'aditivos'
   const setTab = (k: TabKey) => setParams((p) => (p.set('aba', k), p), { replace: true })
   const q = useContract(id)
   const m = useContractMutations(id)
-  const [dialog, setDialog] = useState<'submit' | 'cancel' | null>(null)
+  const [dialog, setDialog] = useState<'cancel' | null>(null)
   const [cancelReason, setCancelReason] = useState('')
 
   const anyError = Object.values(m).map((x) => x.error).find(Boolean) as ApiError | undefined
@@ -88,11 +88,11 @@ export function ContractPage() {
                 Cancelar solicitação
               </Button>
             )}
-            {c.can.submit && (
-              <Button variant="primary" icon={<Send className="size-4" />} onClick={() => setDialog('submit')}>
-                Enviar e concluir
+            <Link to={`/obras/${c.work.id}/qc/${c.competition.id}?aba=contrato`}>
+              <Button variant={c.status === 'draft' ? 'primary' : 'secondary'} icon={<FileSignature className="size-4" />}>
+                Solicitação no QC
               </Button>
-            )}
+            </Link>
           </>
         }
       />
@@ -100,6 +100,9 @@ export function ContractPage() {
       <div className="mb-3 grid gap-2">
         {c.status === 'cancelled' && (
           <Alert tone="warning" title="Solicitação cancelada">{c.cancelReason}</Alert>
+        )}
+        {c.status === 'draft' && (
+          <p className="text-xs text-text-muted">Solicitação em rascunho: dados, itens e envio ficam na aba “Solicitação de contrato” do QC.</p>
         )}
         {c.status === 'draft' && c.issues.length > 0 && (
           <div className={cn('flex min-w-0 items-center gap-2 overflow-hidden rounded-card border border-warning/30 px-3 py-1.5 text-sm', toneClasses.warning)}>
@@ -143,17 +146,16 @@ export function ContractPage() {
           value={tab}
           onChange={setTab}
           items={[
-            { key: 'solicitacao', label: 'Solicitação', icon: <ClipboardList className="size-4" /> },
-            { key: 'itens', label: 'Itens e vínculos', icon: <Table2 className="size-4" />, count: c.items.length },
             { key: 'aditivos', label: 'Aditivos e distratos', icon: <FileStack className="size-4" />, count: pendingAddenda || c.addenda.length || undefined },
+            { key: 'itens', label: 'Itens e vínculos', icon: <Table2 className="size-4" />, count: c.items.length },
             { key: 'anexos', label: 'Anexos', icon: <Paperclip className="size-4" /> },
           ]}
           trailing={<span className="text-xs text-text-muted">Vigência {formatDate(c.startOn)} → {formatDate(currentEndOn(c.endOn, approved))}</span>}
         />
       </div>
 
-      {tab === 'solicitacao' && <ContractForm c={c} saving={m.update.isPending} onSave={(v) => m.update.mutate(v)} />}
-      {tab === 'itens' && <ContractItemsTable c={c} onUpdate={(itemId, patch) => m.updateItem.mutate({ itemId, ...patch })} />}
+      {/* Só consulta: a edição e os vínculos ficam na aba "Solicitação de contrato" do QC */}
+      {tab === 'itens' && <ContractItemsTable c={{ ...c, can: { ...c.can, edit: false, planning: false } }} onUpdate={() => undefined} />}
       {tab === 'aditivos' && (
         <AddendaPanel
           c={c}
@@ -175,18 +177,6 @@ export function ContractPage() {
           description="Minuta e contrato assinado, aditivos, projetos de referência e documentos do contratado."
         />
       )}
-
-      <ConfirmDialog
-        open={dialog === 'submit'}
-        title="Enviar e concluir o contrato?"
-        description="O contrato passa a “Concluído”: dados e itens ficam bloqueados e a concorrência passa a “Contratada”. Mudanças posteriores seguem por aditivo."
-        confirmLabel="Enviar e concluir"
-        loading={m.submit.isPending}
-        onCancel={close}
-        onConfirm={() => run(() => m.submit.mutateAsync())}
-      >
-        {c.issues.length > 0 && <Alert tone="warning" title="Há pendências">O envio será recusado até que sejam resolvidas.</Alert>}
-      </ConfirmDialog>
 
       <Dialog
         open={dialog === 'cancel'}

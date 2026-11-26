@@ -8,6 +8,7 @@ test('o QC abre com as abas na ordem do fluxo e os indicadores da cotação', as
     /^Mapa de cotação/,
     /^Fornecedores e condições/,
     'Dados do QC',
+    /^Solicitação de contrato/,
     'Anexos',
     'Aprovações',
     'Histórico',

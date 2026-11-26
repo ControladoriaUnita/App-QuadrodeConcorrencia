@@ -330,7 +330,7 @@ export interface IndirectRepository {
 }
 
 // ----------------------------------------------------------------------------- contratos
-export type ContractData = Omit<ContractRequestDTO, 'can' | 'contractTypes' | 'issues'>
+export type ContractData = Omit<ContractRequestDTO, 'can' | 'contractTypes' | 'issues' | 'qcApproved'>
 
 export interface NewContractItem {
   competitionItemId: string
@@ -369,6 +369,14 @@ export interface NewContractRequest {
 }
 
 export interface ContractPatch {
+  /** Revisão do QC de origem (a solicitação acompanha a revisão enviada à aprovação) */
+  revisionId?: string
+  totalAmount?: string
+  pctMaterial?: string
+  pctEquipment?: string
+  pctService?: string
+  budgetAmount?: string
+  availableAmount?: string
   contractTypeId?: string
   secondSupplierId?: string | null
   startOn?: string
@@ -426,6 +434,10 @@ export interface ContractRepository {
   create(data: NewContractRequest, actorId: string): Promise<string>
   update(id: string, patch: ContractPatch): Promise<void>
   updateItem(contractId: string, itemId: string, patch: { specification?: string | null; pctRetention?: string }): Promise<void>
+  /** Troca os itens de uma solicitação em rascunho (sincronização com o mapa do QC) */
+  replaceItems(contractId: string, items: NewContractItem[]): Promise<void>
+  /** Troca os vínculos de planejamento (IP · quantidade) de um item */
+  setAllocations(contractId: string, itemId: string, allocations: { packageCode: string; quantity: string }[]): Promise<void>
   createAddendum(contractId: string, number: number, content: AddendumContent, actorId: string): Promise<string>
   /** Substitui o conteúdo de um aditivo em rascunho */
   saveAddendum(addendumId: string, content: AddendumContent): Promise<void>

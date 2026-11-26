@@ -3,6 +3,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
+  ContractItemAllocationsInput,
   ContractListItemDTO,
   ContractRequestDTO,
   SaveAddendumInput,
@@ -58,6 +59,11 @@ export function useContractMutations(id: string) {
       mutationFn: ({ itemId, ...b }: UpdateContractItemInput & { itemId: string }) => api(`${base}/items/${itemId}`, { method: 'PATCH', body: b }),
       ...opts,
     }),
+    setAllocations: useMutation({
+      mutationFn: ({ itemId, ...b }: ContractItemAllocationsInput & { itemId: string }) => api(`${base}/items/${itemId}/allocations`, { method: 'PUT', body: b }),
+      ...opts,
+    }),
+    sync: useMutation({ mutationFn: () => api<{ updated: number; created: number; cancelled: number }>(`${base}/sync`, { method: 'POST' }), ...opts }),
     submit: useMutation({ mutationFn: () => api(`${base}/submit`, { method: 'POST' }), ...opts }),
     cancel: useMutation({ mutationFn: (reason: string) => api(`${base}/cancel`, { method: 'POST', body: { reason } }), ...opts }),
     createAddendum: useMutation({

@@ -23,6 +23,7 @@ export const DEMO_USERS = [
   { id: '00000000-0000-4000-8000-000000000003', fullName: 'Marina Costa', email: 'engenharia@unita.example', roles: ['engineering'] },
   { id: '00000000-0000-4000-8000-000000000004', fullName: 'Roberto Lima', email: 'gerente@unita.example', roles: ['manager'] },
   { id: '00000000-0000-4000-8000-000000000005', fullName: 'Helena Duarte', email: 'diretoria@unita.example', roles: ['director'] },
+  { id: '00000000-0000-4000-8000-000000000006', fullName: 'Paula Reis', email: 'planejamento@unita.example', roles: ['planning'] },
 ] as const
 
 const ROLES = [
@@ -32,12 +33,14 @@ const ROLES = [
   ['manager', 'Gerente / Coordenador de Obra'],
   ['director', 'Diretoria'],
   ['viewer', 'Visualizador'],
+  ['planning', 'Planejamento'],
 ] as const
 
 const ALL_PERMS = [
   'work.read', 'work.manage', 'budget.read', 'catalog.manage', 'supplier.read', 'supplier.manage', 'competition.read',
   'competition.create', 'competition.edit', 'proposal.edit', 'competition.submit', 'approval.decide', 'contract.read',
   'contract.manage', 'attachment.upload', 'audit.read', 'integration.read', 'integration.run', 'budget.import', 'out_of_scope.manage',
+  'contract.planning',
 ]
 
 const MATRIX: Record<string, string[]> = {
@@ -47,6 +50,7 @@ const MATRIX: Record<string, string[]> = {
   manager: ['work.read', 'budget.read', 'supplier.read', 'competition.read', 'approval.decide', 'contract.read', 'audit.read'],
   director: ['work.read', 'budget.read', 'supplier.read', 'competition.read', 'approval.decide', 'contract.read', 'audit.read'],
   viewer: ['work.read', 'budget.read', 'competition.read'],
+  planning: ['work.read', 'budget.read', 'supplier.read', 'competition.read', 'contract.read', 'contract.planning'],
 }
 
 const CONTRACT_TYPES: [string, string][] = [
@@ -246,8 +250,8 @@ async function seed(db: MemoryDb) {
       const a = await load(user.id)
       await qc.decideApproval(a.repos, a.ctx, revisionId, { stepOrder: step, decision: 'approved', comment: 'De acordo.' })
     }
-    // Solicitação de contrato da rev00 aprovada (enviada) + 1º aditivo aguardando a Gerência
-    const { id: contractId } = await contracts.createContractRequest(s.repos, s.ctx, competitionId)
+    // Solicitação de contrato (gerada no envio do QC, antes da aprovação) concluída + 1º aditivo aguardando a Gerência
+    const contractId = (await s.repos.contracts.list({ competitionId })).find((c) => c.status === 'draft')!.id
     await contracts.updateContractRequest(s.repos, s.ctx, contractId, {
       projects: [
         { sheet: 'TER-01', fileName: 'Planta de terraplenagem — cortes e aterros.pdf', revision: 'R02' },

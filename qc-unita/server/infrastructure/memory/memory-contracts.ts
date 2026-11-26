@@ -7,7 +7,7 @@ import type { AddendumDTO, AddendumItemDTO, ContractItemDTO, ContractListItemDTO
 import { Decimal } from '../../../shared/domain/decimal'
 import { lineTotal } from '../../../shared/domain/competition/best-condition'
 import { nextContractCode } from '../../../shared/domain/contract/contract-request'
-import type { AddendumContent, ContractData, ContractRepository } from '../../application/ports'
+import type { AddendumContent, ContractData, ContractRepository, NewContractItem } from '../../application/ports'
 import type { AuditCtx, MemoryDb, Row } from './memory-db'
 
 export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRepository {
@@ -96,6 +96,16 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
 
   const approvedTotal = (contractId: string) =>
     Decimal.sum(db.find('contract_addenda', (a) => a.contractRequestId === contractId && a.status === 'approved').map((a) => a.totalDelta as string))
+
+  const writeItems = (contractId: string, list: NewContractItem[], scope: { workId: string | null }) => {
+    list.forEach((i, idx) => {
+      const { allocations, ...rest } = i
+      const row = db.insert('contract_request_items', { contractRequestId: contractId, ...rest, sortOrder: idx }, audit, scope)
+      for (const a of allocations) {
+        db.insert('contract_item_allocations', { contractRequestItemId: row.id, packageCode: a.packageCode, locationCode: null, quantity: a.quantity }, audit, scope)
+      }
+    })
+  }
 
   const writeAddendumItems = (addendumId: string, content: AddendumContent, workId: string | null) => {
     for (const x of db.find('contract_addendum_items', (i) => i.addendumId === addendumId)) db.remove('contract_addendum_items', x.id, audit, { workId })
@@ -200,19 +210,31 @@ export function createMemoryContracts(db: MemoryDb, audit: AuditCtx): ContractRe
         scopeDefinitions: d.scopeDefinitions, directBillingMaterials: null, measurementCriteria: null, notes: d.notes,
         createdBy: actorId,
       }, audit, scope)
-      d.items.forEach((i, idx) => {
-        const { allocations, ...rest } = i
-        const row = db.insert('contract_request_items', { contractRequestId: cr.id, ...rest, sortOrder: idx }, audit, scope)
-        for (const a of allocations) {
-          db.insert('contract_item_allocations', { contractRequestItemId: row.id, packageCode: a.packageCode, locationCode: null, quantity: a.quantity }, audit, scope)
-        }
-      })
+      writeItems(cr.id, d.items, scope)
       return cr.id
     },
 
     async update(id, patch) {
-      const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))
+      const { revisionId, ...rest } = patch
+      const clean = Object.fromEntries(Object.entries({ ...rest, qcRevisionId: revisionId }).filter(([, v]) => v !== undefined))
       if (Object.keys(clean).length) db.update('contract_requests', id, clean, audit, { workId: workOf(id) })
+    },
+
+    async replaceItems(contractId, items) {
+      const scope = { workId: workOf(contractId) }
+      for (const i of db.find('contract_request_items', (x) => x.contractRequestId === contractId)) {
+        for (const a of db.find('contract_item_allocations', (x) => x.contractRequestItemId === i.id)) db.remove('contract_item_allocations', a.id, audit, scope)
+        db.remove('contract_request_items', i.id, audit, scope)
+      }
+      writeItems(contractId, items, scope)
+    },
+
+    async setAllocations(contractId, itemId, allocations) {
+      const scope = { workId: workOf(contractId) }
+      for (const a of db.find('contract_item_allocations', (x) => x.contractRequestItemId === itemId)) db.remove('contract_item_allocations', a.id, audit, scope)
+      for (const a of allocations) {
+        db.insert('contract_item_allocations', { contractRequestItemId: itemId, packageCode: a.packageCode, locationCode: null, quantity: a.quantity }, audit, scope)
+      }
     },
 
     async updateItem(contractId, itemId, patch) {

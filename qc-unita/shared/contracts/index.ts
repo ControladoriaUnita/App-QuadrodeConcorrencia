@@ -1219,7 +1219,20 @@ export interface ContractRequestDTO {
   contractTypes: ContractTypeDTO[]
   /** Pendências para envio (somente em rascunho) */
   issues: { field: string; message: string }[]
-  can: { manage: boolean; edit: boolean; submit: boolean; cancel: boolean; addendum: boolean; decideAddendum: boolean }
+  /** A revisão do QC de origem já foi aprovada (só então o contrato é concluído) */
+  qcApproved: boolean
+  can: {
+    manage: boolean
+    edit: boolean
+    submit: boolean
+    cancel: boolean
+    addendum: boolean
+    decideAddendum: boolean
+    /** Atualizar os itens pelo mapa do QC (rascunho) */
+    sync: boolean
+    /** Editar os vínculos de planejamento (IP · Qtd) dos itens */
+    planning: boolean
+  }
 }
 
 export const createContractRequestSchema = z.object({ competitionId: uuid })
@@ -1249,6 +1262,14 @@ export const updateContractItemSchema = z
   .object({ specification: z.string().max(2000).nullable(), pctRetention: ratioString })
   .partial()
 export type UpdateContractItemInput = z.infer<typeof updateContractItemSchema>
+
+export const contractItemAllocationsSchema = z.object({
+  allocations: z
+    .array(z.object({ packageCode: z.string().trim().min(1, 'Informe o IP').max(40), quantity: decimalString }))
+    .min(1, 'Informe ao menos um vínculo')
+    .max(100),
+})
+export type ContractItemAllocationsInput = z.infer<typeof contractItemAllocationsSchema>
 
 export const cancelContractSchema = z.object({ reason: z.string().trim().min(5, 'Explique o motivo do cancelamento').max(1000) })
 

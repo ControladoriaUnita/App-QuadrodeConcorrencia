@@ -35,7 +35,7 @@ import { groupBudgetLines, lineBalances, linkFromQuantity, linkFromShare, type G
 import { AppError, can, notFound, requirePermission, roleIdsFor, type RequestContext } from '../context'
 import type { AggregatedInput, CompetitionData, ComputedPersistence, NewQcItem, Repositories } from '../ports'
 import { namedBudgetStructure } from './works'
-import { contractPending } from './contracts'
+import { contractPending, syncContractRequests } from './contracts'
 import { directorUsers, flowContextOf, toInstances } from './approval-flows'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
@@ -69,7 +69,7 @@ export async function getCompetition(
   const manage = can(ctx.actor, 'contract.manage', data.competition.workId)
   return {
     ...base,
-    can: { ...base.can, createContract: manage && (await contractPending(repos, competitionId, data.revisions)) },
+    can: { ...base.can, createContract: manage && (await contractPending(repos, competitionId)) },
     budgetLines: allLines.filter((l) => pkgs.has(l.packageCode) || mats.has(l.materialId) || keys.has(l.lineKey)),
     otherCommitments: commitments.links.filter((l) => l.competitionId !== competitionId),
   }
@@ -615,7 +615,9 @@ export async function submitRevision(repos: Repositories, ctx: RequestContext, r
     submittedBy: ctx.actor.id,
   })
   await setCompetitionStatus(repos, ref.competitionId, 'in_approval')
-  return { steps: plan.length, amount: amount.toDb() }
+  // A solicitação de contrato nasce antes da aprovação: gerada (ou atualizada pelo mapa) no envio
+  const contracts = can(ctx.actor, 'contract.manage', ref.workId) ? await syncContractRequests(repos, ctx, ref.competitionId, revisionId, { create: true }) : null
+  return { steps: plan.length, amount: amount.toDb(), contracts }
 }
 
 export async function decideApproval(repos: Repositories, ctx: RequestContext, revisionId: string, input: DecideApprovalInput) {

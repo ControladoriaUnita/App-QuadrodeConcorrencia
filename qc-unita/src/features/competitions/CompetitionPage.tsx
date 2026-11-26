@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { REQUEST_KIND_LABEL, REQUEST_ORIGIN_LABEL } from '@shared/domain/approval/flows'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ChevronDown, ClipboardList, FileSignature, Link2, FilePlus2, GitBranch, History, Lock, Paperclip, Send, ShieldCheck, Table2, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { buildQcMap } from '@shared/domain/competition/qc-map'
@@ -11,6 +11,7 @@ import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useContracts, useCreateContract } from '@/features/contracts/api'
 import { contractStatus } from '@/features/contracts/status'
+import { ContractRequestPanel } from '@/features/contracts/ContractRequestPanel'
 import { formatBRL, formatDateTime, formatPercent, formatRevision } from '@/utils/format'
 import { AttachmentsPanel } from '@/features/attachments/AttachmentsPanel'
 import { useCompetition, useCreateRevision, useQcMutations } from './api'
@@ -22,7 +23,7 @@ import { RevisionForm } from './RevisionForm'
 import { SuppliersPanel } from './SuppliersPanel'
 import { budgetTone, competitionStatus, revisionStatus } from './status'
 
-type TabKey = 'vinculos' | 'mapa' | 'fornecedores' | 'dados' | 'anexos' | 'aprovacoes' | 'historico'
+type TabKey = 'vinculos' | 'mapa' | 'fornecedores' | 'dados' | 'contrato' | 'anexos' | 'aprovacoes' | 'historico'
 const today = () => new Date().toISOString().slice(0, 10)
 
 export function CompetitionPage() {
@@ -37,7 +38,6 @@ export function CompetitionPage() {
   const map = useMemo(() => (detail ? buildQcMap(detail, { today: today() }) : null), [detail])
   const m = useQcMutations(id, detail?.revision.id ?? '')
   const newRevision = useCreateRevision(id)
-  const navigate = useNavigate()
   const { can } = useAuth()
   const contracts = useContracts({ competitionId: id }, can('contract.read'))
   const createContract = useCreateContract()
@@ -113,7 +113,7 @@ export function CompetitionPage() {
                 key={ac.id}
                 icon={<FileSignature className="size-4" />}
                 title={`${contractStatus[ac.status].label} · ${ac.supplierName}`}
-                onClick={() => navigate(`/obras/${c.workId}/contratos/${ac.id}`)}
+                onClick={() => setTab('contrato')}
               >
                 Solicitação {ac.code}
               </Button>
@@ -124,9 +124,8 @@ export function CompetitionPage() {
                 icon={<FileSignature className="size-4" />}
                 loading={createContract.isPending}
                 onClick={async () => {
-                  const r = await createContract.mutateAsync(c.id)
-                  // Várias empresas escolhidas: abre a lista de solicitações da obra
-                  navigate(r.created.length > 1 ? `/obras/${c.workId}/contratos` : `/obras/${c.workId}/contratos/${r.id}`)
+                  await createContract.mutateAsync(c.id)
+                  setTab('contrato')
                 }}
               >
                 Gerar solicitação de contrato
@@ -208,6 +207,7 @@ export function CompetitionPage() {
             { key: 'mapa', label: 'Mapa de cotação', icon: <Table2 className="size-4" />, count: detail.items.length || undefined },
             { key: 'fornecedores', label: 'Fornecedores e condições', icon: <Users className="size-4" />, count: detail.suppliers.length },
             { key: 'dados', label: 'Dados do QC', icon: <ClipboardList className="size-4" /> },
+            ...(can('contract.read') ? [{ key: 'contrato' as const, label: 'Solicitação de contrato', icon: <FileSignature className="size-4" />, count: activeContracts.length || undefined }] : []),
             { key: 'anexos', label: 'Anexos', icon: <Paperclip className="size-4" /> },
             { key: 'aprovacoes', label: 'Aprovações', icon: <ShieldCheck className="size-4" /> },
             { key: 'historico', label: 'Histórico', icon: <History className="size-4" /> },
@@ -232,6 +232,7 @@ export function CompetitionPage() {
           onRemoveItem={(itemId) => m.removeItem.mutate(itemId)}
         />
       )}
+      {tab === 'contrato' && can('contract.read') && <ContractRequestPanel competitionId={c.id} workId={c.workId} canCreate={detail.can.createContract} />}
       {tab === 'vinculos' && (
         <LinksPanel
           detail={detail}

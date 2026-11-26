@@ -8,7 +8,7 @@ import { Decimal } from '../../shared/domain/decimal'
 import { DEMO_USERS } from '../infrastructure/memory/seed'
 import { handle } from './router'
 
-const [, PROC, ENG, MGR, DIR] = DEMO_USERS.map((u) => u.id)
+const [, PROC, ENG, MGR, DIR, PLAN] = DEMO_USERS.map((u) => u.id)
 
 async function call<T = unknown>(method: string, path: string, body?: unknown, user = PROC): Promise<{ status: number; data: T }> {
   const res = await handle(
@@ -25,7 +25,11 @@ const comps = async () => (await call<CompetitionListItemDTO[]>('GET', '/competi
 let workId: string
 const contracted = async () =>
   Number((await call<{ code: string; summary: { contracted: string } }[]>('GET', '/works')).data.find((w) => w.code === '2041')!.summary.contracted)
-const seeded = async () => (await call<ContractListItemDTO[]>('GET', `/contracts?workId=${workId}`)).data.find((c) => c.code === 'SC-2041-001')!.id
+/** Contrato da semente: o da Terraplenagem (concluído, com aditivo) */
+const seeded = async () => {
+  const terra = (await comps()).find((c) => c.title.startsWith('Terraplenagem'))!
+  return (await call<ContractListItemDTO[]>('GET', `/contracts?competitionId=${terra.id}`)).data.find((c) => c.status !== 'cancelled')!.id
+}
 
 
 /** Aprova as etapas pendentes em ordem, cada uma com o usuário do papel (inclui a etapa de desvio) */
@@ -62,7 +66,7 @@ describe('solicitação de contrato', () => {
     expect(c.can.addendum).toBe(false) // há aditivo em aberto
   })
 
-  it('não gera duas solicitações nem contrato de QC sem revisão aprovada', async () => {
+  it('não gera duas solicitações nem solicitação de QC sem vencedora, tipo de contrato e datas', async () => {
     const all = await comps()
     const terra = all.find((c) => c.title.startsWith('Terraplenagem'))!
     const dup = await call<{ error: { code: string } }>('POST', '/contracts', { competitionId: terra.id })
@@ -70,23 +74,34 @@ describe('solicitação de contrato', () => {
     expect(dup.data.error.code).toBe('CONTRACT_EXISTS')
     const draft = all.find((c) => c.title.startsWith('Pavimentação'))!
     const none = await call<{ error: { code: string } }>('POST', '/contracts', { competitionId: draft.id })
-    expect(none.data.error.code).toBe('CONTRACT_NO_APPROVED_REVISION')
+    expect(none.data.error.code).toBe('CONTRACT_REVISION_INCOMPLETE')
     expect((await call('POST', '/contracts', { competitionId: terra.id }, ENG)).status).toBe(403)
   })
 
-  it('gera do QC aprovado, exige critérios de medição, envia e cancela', async () => {
+  it('nasce no envio do QC (antes da aprovação), só conclui depois de aprovado, exige critérios de medição e cancela', async () => {
     const contrapiso = (await comps()).find((c) => c.title.startsWith('Contrapiso'))!
     const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${contrapiso.id}`)
     expect(d.revision.status).toBe('in_approval')
+    // A semente enviou o QC: a solicitação já existe em rascunho, antes da aprovação
+    const list = (await call<ContractListItemDTO[]>('GET', `/contracts?competitionId=${contrapiso.id}`)).data
+    expect(list.map((x) => [x.code, x.status])).toEqual([['SC-2041-001', 'draft']])
+    const id = list[0]!.id
+    const { data: early } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
+    expect(early.qcApproved).toBe(false)
+    expect(early.can.submit).toBe(false)
+    expect(early.can.edit).toBe(true)
+    expect(early.issues.map((i) => i.field)).toContain('competition')
+    const tooSoon = await call<{ error: { code: string } }>('POST', `/contracts/${id}/submit`)
+    expect(tooSoon.data.error.code).toBe('CONTRACT_QC_NOT_APPROVED')
+
     await approveAll(contrapiso.id)
     expect((await comps()).find((x) => x.id === contrapiso.id)!.status).toBe('approved')
+    // Já existe: nada a gerar
+    expect((await call<CompetitionDetailDTO>('GET', `/competitions/${contrapiso.id}`)).data.can.createContract).toBe(false)
 
-    const created = await call<{ id: string; code: string }>('POST', '/contracts', { competitionId: contrapiso.id })
-    expect(created.status).toBe(201)
-    expect(created.data.code).toBe('SC-2041-002')
-    const id = created.data.id
     const { data: c } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
     expect(c.status).toBe('draft')
+    expect(c.qcApproved).toBe(true)
     expect(c.can.edit).toBe(true)
     expect(c.contractType.code).toBe('CTD08')
     expect(c.issues.map((i) => i.field)).toContain('measurementCriteria')
@@ -137,13 +152,15 @@ describe('solicitação de contrato', () => {
     // A alçada usa o total da cotação escolhida
     const sent = await detail()
     expect(sent.revision.status).toBe('in_approval')
+    // O envio do QC já gerou uma solicitação por empresa escolhida
+    const active = async () => (await call<ContractListItemDTO[]>('GET', `/contracts?competitionId=${contrapiso.id}`)).data.filter((x) => x.status !== 'cancelled')
+    expect((await active()).map((x) => x.status)).toEqual(['draft', 'draft'])
     await approveAll(contrapiso.id)
-    expect((await detail()).can.createContract).toBe(true)
+    expect((await detail()).can.createContract).toBe(false)
 
-    const created = await call<{ created: { id: string }[] }>('POST', '/contracts', { competitionId: contrapiso.id })
-    expect(created.status).toBe(201)
-    expect(created.data.created).toHaveLength(2)
-    const made = await Promise.all(created.data.created.map(async (x) => (await call<ContractRequestDTO>('GET', `/contracts/${x.id}`)).data))
+    const made = (await Promise.all((await active()).map(async (x) => (await call<ContractRequestDTO>('GET', `/contracts/${x.id}`)).data)))
+      .sort((x, y) => x.code.localeCompare(y.code))
+    expect(made.every((c) => c.revision.id === rev.revisionId)).toBe(true)
     expect(made.map((c) => c.supplier.id)).toEqual([a!.supplierId, b!.supplierId])
     expect(made[1]!.items.map((i) => i.code)).toEqual([items[0]!.code])
     expect(made[0]!.items.map((i) => i.code)).toEqual(items.slice(1).map((i) => i.code))
@@ -184,7 +201,7 @@ describe('aditivos', () => {
     const before = await contracted()
     expect((await call('POST', `/addenda/${a.id}/decide`, { decision: 'approved', comment: 'De acordo.' }, MGR)).status).toBe(200)
     expect(await contracted()).toBeCloseTo(before + Number(a.totalDelta), 2)
-    const row = (await call<ContractListItemDTO[]>('GET', `/contracts?workId=${workId}`)).data.find((x) => x.code === 'SC-2041-001')!
+    const row = (await call<ContractListItemDTO[]>('GET', `/contracts?workId=${workId}`)).data.find((x) => x.id === c.id)!
     expect(row.addendaTotal).toBe(a.totalDelta)
     expect((await call('PUT', `/addenda/${a.id}`, { reason: 'Alterar depois de aprovado', items: [] })).status).toBe(409)
   })
@@ -283,5 +300,69 @@ describe('aditivos', () => {
     expect(c.can).not.toHaveProperty('pushToErp')
     expect((await call('POST', `/contracts/${id}/erp-push`)).status).toBe(404)
     expect((await call('POST', `/contracts/${id}/sign`, { signedOn: '2026-10-05' })).status).toBe(404)
+  })
+})
+
+describe('vínculos de planejamento na solicitação', () => {
+  it('o Planejamento edita os vínculos do contrato concluído; a soma fecha com a quantidade; sem permissão → 403', async () => {
+    const id = await seeded()
+    const { data: c } = await call<ContractRequestDTO>('GET', `/contracts/${id}`, undefined, PLAN)
+    expect(c.status).toBe('submitted')
+    expect(c.can.planning).toBe(true)
+    expect(c.can.edit).toBe(false)
+    const item = c.items[0]!
+    const half = Decimal.from(item.quantity).div(2).round(4)
+    const rest = Decimal.from(item.quantity).minus(half)
+    const url = `/contracts/${id}/items/${item.id}/allocations`
+
+    const wrong = await call<{ error: { code: string } }>('PUT', url, { allocations: [{ packageCode: 'IP00104', quantity: half.toDb() }] }, PLAN)
+    expect(wrong.data.error.code).toBe('ALLOCATION_SUM')
+    expect((await call('PUT', url, { allocations: [{ packageCode: 'IP00104', quantity: item.quantity }] }, ENG)).status).toBe(403)
+
+    const ok = await call('PUT', url, { allocations: [{ packageCode: 'IP00104', quantity: half.toDb() }, { packageCode: 'IP00999', quantity: rest.toDb() }] }, PLAN)
+    expect(ok.status, JSON.stringify(ok.data)).toBe(200)
+    const { data: after } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
+    const allocs = after.items.find((i) => i.id === item.id)!.allocations
+    expect(allocs.map((a) => [a.packageCode, a.quantity]).sort()).toEqual([['IP00104', half.toDb()], ['IP00999', rest.toDb()]].sort())
+    // As referências do item não mudam
+    expect(after.items.find((i) => i.id === item.id)!.references).toEqual(item.references)
+    // volta ao vínculo original
+    await call('PUT', url, { allocations: item.allocations.map((a) => ({ packageCode: a.packageCode, quantity: a.quantity })) }, PLAN)
+  })
+
+  it('o rascunho acompanha o mapa ao reenviar o QC e mantém os vínculos editados de itens que não mudaram', async () => {
+    // Pavimentação: em rascunho na semente; preenche o necessário, gera a solicitação antes de enviar
+    const pav = (await comps()).find((c) => c.title.startsWith('Pavimentação'))!
+    const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${pav.id}`)
+    const rid = d.revision.id
+    const winner = d.suppliers.find((s) => !s.isPlaceholder)!
+    const types = (await call<{ id: string; code: string }[]>('GET', '/contract-types')).data
+    const head = await call('PATCH', `/revisions/${rid}`, {
+      winnerSupplierId: winner.supplierId, winnerJustification: 'Melhor preço.', contractTypeId: types[0]!.id,
+      serviceStartOn: '2027-01-04', serviceEndOn: '2027-03-31',
+    })
+    expect(head.status, JSON.stringify(head.data)).toBe(200)
+    expect((await call<CompetitionDetailDTO>('GET', `/competitions/${pav.id}`)).data.can.createContract).toBe(true)
+    const created = await call<{ id: string }>('POST', '/contracts', { competitionId: pav.id })
+    expect(created.status, JSON.stringify(created.data)).toBe(201)
+    const id = created.data.id
+    const { data: c } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
+    expect(c.revision.id).toBe(rid)
+    expect(c.can.sync).toBe(true)
+    const [keep, change] = c.items
+    // vínculo editado à mão no item que não muda
+    const put = await call('PUT', `/contracts/${id}/items/${keep!.id}/allocations`, { allocations: [{ packageCode: 'IP00777', quantity: keep!.quantity }] })
+    expect(put.status, JSON.stringify(put.data)).toBe(200)
+    // muda a quantidade de outro item no mapa e atualiza pelo mapa
+    const qcItem = d.items.find((i) => i.id === change!.competitionItemId)!
+    expect((await call('PATCH', `/revisions/${rid}/items/${qcItem.id}`, { quantity: Decimal.from(qcItem.quantity).plus(1).toDb() })).status).toBe(200)
+    const sync = await call<{ updated: number }>('POST', `/contracts/${id}/sync`)
+    expect(sync.data.updated).toBe(1)
+    const { data: after } = await call<ContractRequestDTO>('GET', `/contracts/${id}`)
+    const k = after.items.find((i) => i.competitionItemId === keep!.competitionItemId)!
+    const ch = after.items.find((i) => i.competitionItemId === change!.competitionItemId)!
+    expect(k.allocations.map((a) => a.packageCode)).toEqual(['IP00777'])
+    expect(ch.quantity).toBe(Decimal.from(change!.quantity).plus(1).toDb())
+    expect(after.totalAmount).toBe(Decimal.sum(after.items.map((i) => i.totalPrice)).toDb())
   })
 })

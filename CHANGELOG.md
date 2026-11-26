@@ -21,7 +21,15 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 | Ambiente | Versão |
 |---|---|
 | produção | v16 |
-| dev | v17 |
+| dev | v18 |
+
+## v18 — dev (2026-11-26)
+
+- **Solicitação de contrato dentro do QC:** aba nova **Solicitação de contrato** no QC, ao lado de Mapa, Fornecedores e Dados. Os aditivos e distratos continuam na tela de Contratos (o contrato abre direto nos aditivos e tem o botão **Solicitação no QC**).
+- **Antes da aprovação do quadro:** a solicitação pode ser gerada a partir da revisão corrente, com vencedora (ou cotação escolhida), tipo de contrato e datas. Ela também é gerada automaticamente ao enviar o QC para aprovação. Em rascunho, os itens acompanham o mapa: são refeitos no envio do QC e pelo botão **Atualizar pelo mapa**, mantendo a especificação, o % de retenção e os vínculos editados de itens que não mudaram. **Enviar e concluir** só libera depois do QC aprovado.
+- **Vínculos de planejamento editáveis depois do envio:** botão **Editar** nos vínculos (IP · Qtd) de cada item, também com o contrato concluído. A soma precisa fechar com a quantidade do item e as referências do item não mudam. Papel novo **Planejamento** com a permissão `contract.planning` (o administrador também a tem).
+- **Migration 029** (`029_contract_planning.sql`): papel e permissão do Planejamento; os vínculos podem ser gravados em contrato concluído (cancelado continua travado). Validada no PGlite. **Rodar no Supabase antes de liberar.**
+- `verificar`: 244 testes do Vitest (9 pulados), 37 de tela e build.
 
 ## v17 — dev (2026-11-26)
 

@@ -36,6 +36,7 @@ import {
   decideAddendumSchema,
   saveAddendumSchema,
   updateContractItemSchema,
+  contractItemAllocationsSchema,
   updateContractRequestSchema,
   ATTACHMENT_ENTITIES,
   confirmUploadSchema,
@@ -259,6 +260,11 @@ route('PATCH', '/contracts/:id/items/:itemId', async ({ repos, ctx, params, body
   await contracts.updateContractItem(repos, ctx, parse(uuidParam, params.id), parse(uuidParam, params.itemId), parse(updateContractItemSchema, await body()))
   return { ok: true }
 })
+route('PUT', '/contracts/:id/items/:itemId/allocations', async ({ repos, ctx, params, body }) => {
+  await contracts.setContractItemAllocations(repos, ctx, parse(uuidParam, params.id), parse(uuidParam, params.itemId), parse(contractItemAllocationsSchema, await body()).allocations)
+  return { ok: true }
+})
+route('POST', '/contracts/:id/sync', async ({ repos, ctx, params }) => contracts.syncContractFromMap(repos, ctx, parse(uuidParam, params.id)))
 route('POST', '/contracts/:id/submit', async ({ repos, ctx, params }) => contracts.submitContractRequest(repos, ctx, parse(uuidParam, params.id)))
 route('POST', '/contracts/:id/cancel', async ({ repos, ctx, params, body }) =>
   contracts.cancelContractRequest(repos, ctx, parse(uuidParam, params.id), parse(cancelContractSchema, await body()).reason))

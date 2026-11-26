@@ -205,7 +205,8 @@ async function build(sim: Sim, s: Scenario, title: string): Promise<{ competitio
   for (const step of plan) await decide(step, 'approved', 'Simulado: de acordo.')
   if (s.stage === 'approved') return { competitionId }
 
-  const { created } = await contracts.createContractRequest(repos, ctx, competitionId)
+  // A solicitação já nasceu no envio do QC (antes da aprovação)
+  const created = (await repos.contracts.list({ competitionId })).filter((c) => c.status === 'draft')
   if (s.stage === 'split-contracts') return { competitionId, contracts: created.length }
 
   const contractId = created[0]!.id

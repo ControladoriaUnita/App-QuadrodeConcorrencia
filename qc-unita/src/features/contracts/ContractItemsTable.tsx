@@ -5,17 +5,25 @@
  * Com % de material no QC, a linha fixa "Materiais globais" soma o material ponderado de cada linha
  * (total × % material), com os IPs vindos dos vínculos dos itens (shared/domain/contract/global-materials.ts).
  */
-import { useMemo } from 'react'
-import { Package } from 'lucide-react'
-import type { ContractRequestDTO, UpdateContractItemInput } from '@shared/contracts'
+import { useMemo, useState } from 'react'
+import { Package, Pencil } from 'lucide-react'
+import type { ContractItemDTO, ContractRequestDTO, UpdateContractItemInput } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import { globalMaterials } from '@shared/domain/contract/global-materials'
-import { Card, CardHeader, DecimalInput, InlineTextInput } from '@/components/ui'
+import { Alert, Button, Card, CardHeader, DecimalInput, Dialog, InlineTextInput } from '@/components/ui'
+import { usePackages } from '@/features/competitions/api'
+import { AllocationsEditor, allocationsTotal, type AllocationRow } from './AllocationsEditor'
 import { cn } from '@/utils/cn'
 import { formatBRL, formatPercent, formatQuantity } from '@/utils/format'
 
-export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onUpdate: (itemId: string, patch: UpdateContractItemInput) => void }) {
+export function ContractItemsTable({ c, onUpdate, onAllocations }: {
+  c: ContractRequestDTO
+  onUpdate: (itemId: string, patch: UpdateContractItemInput) => void
+  /** Planejamento: troca os vínculos (IP · Qtd) de um item */
+  onAllocations?: (itemId: string, allocations: { packageCode: string; quantity: string }[]) => Promise<unknown>
+}) {
   const editable = c.can.edit
+  const [editing, setEditing] = useState<ContractItemDTO | null>(null)
   const th = 'sticky top-0 z-10 border-b border-border bg-ink-50 px-3 py-2 text-xs font-semibold text-text-muted whitespace-nowrap'
   const td = 'border-b border-border px-3 py-1.5 align-top'
   const result = Decimal.from(c.availableAmount).minus(c.totalAmount)
@@ -90,7 +98,7 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
                   )}
                 </td>
                 <td className={td}>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap items-center gap-1">
                     {i.allocations.length === 0 && <span className="text-xs text-warning">Sem vínculo</span>}
                     {i.allocations.map((a, k) => (
                       <span key={k} className="inline-flex items-center gap-1.5 rounded-control border border-border bg-surface px-2 py-0.5 text-xs whitespace-nowrap">
@@ -99,6 +107,16 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
                         <span>{formatBRL(a.amount)}</span>
                       </span>
                     ))}
+                    {c.can.planning && onAllocations && (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-primary-soft"
+                        aria-label={`Editar vínculos de ${i.code}`}
+                        onClick={() => setEditing(i)}
+                      >
+                        <Pencil className="size-3" aria-hidden /> Editar
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -150,6 +168,58 @@ export function ContractItemsTable({ c, onUpdate }: { c: ContractRequestDTO; onU
           </tfoot>
         </table>
       </div>
+      {editing && onAllocations && <AllocationsDialog c={c} item={editing} onClose={() => setEditing(null)} onSave={(rows) => onAllocations(editing.id, rows)} />}
     </Card>
+  )
+}
+
+/** Vínculos de planejamento de um item, editados pelo Planejamento (as referências não mudam). */
+function AllocationsDialog({ c, item, onClose, onSave }: {
+  c: ContractRequestDTO
+  item: ContractItemDTO
+  onClose: () => void
+  onSave: (rows: { packageCode: string; quantity: string }[]) => Promise<unknown>
+}) {
+  const packages = usePackages(c.work.id).data ?? []
+  const [rows, setRows] = useState<AllocationRow[]>(() => item.allocations.map((a) => ({ packageCode: a.packageCode ?? '', quantity: a.quantity })))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const target = Decimal.from(item.quantity)
+  const options = [
+    ...rows.filter((r) => r.packageCode && !packages.some((p) => p.packageCode === r.packageCode)).map((r) => ({ packageCode: r.packageCode, label: r.packageCode })),
+    ...packages.map((p) => ({ packageCode: p.packageCode, label: `${p.packageCode} — ${p.description}` })),
+  ]
+  const valid = rows.length > 0 && rows.every((r) => r.packageCode && r.quantity) && allocationsTotal(rows).eq(target)
+  const save = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(rows.map((r) => ({ packageCode: r.packageCode, quantity: r.quantity! })))
+      onClose()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      width="min(94vw, 40rem)"
+      title="Vínculos de planejamento do item"
+      description={`${item.code} — ${item.description} · ${formatQuantity(item.quantity)} ${item.unit}. As referências do item não mudam.`}
+      footer={
+        <>
+          <Button variant="ghost" className="mr-auto" onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" loading={saving} disabled={!valid} onClick={save}>Salvar vínculos</Button>
+        </>
+      }
+    >
+      <div className="grid gap-2">
+        <AllocationsEditor rows={rows} options={options} target={target} unit={item.unit} onChange={setRows} />
+        {error && <Alert tone="error">{error}</Alert>}
+      </div>
+    </Dialog>
   )
 }

@@ -99,7 +99,7 @@ describe('aditivo em etapas', () => {
     ]
     expect((await call('PUT', `/approval-flows/${flow.id}`, { kind: flow.kind, name: flow.name, origin: null, requestKind: null, directorId: null, active: true, steps }, ADMIN)).status).toBe(200)
 
-    const contractId = (await call<ContractListItemDTO[]>('GET', `/contracts?workId=${alpha}`)).data.find((c) => c.code === 'SC-2041-001')!.id
+    const contractId = (await call<ContractListItemDTO[]>('GET', `/contracts?workId=${alpha}`)).data.find((c) => c.status === 'submitted')!.id
     const contract = async (user = PROC) => (await call<ContractRequestDTO>('GET', `/contracts/${contractId}`, undefined, user)).data
     // O 1º aditivo da semente foi enviado com o fluxo antigo (1 etapa): a Gerência decide
     const first = (await contract()).addenda[0]!

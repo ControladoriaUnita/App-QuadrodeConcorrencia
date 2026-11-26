@@ -7,7 +7,7 @@ import type { AddendumDTO, ContractItemDTO, ContractListItemDTO, ContractPartyDT
 import { Decimal } from '../../../shared/domain/decimal'
 import { lineTotal } from '../../../shared/domain/competition/best-condition'
 import { nextContractCode } from '../../../shared/domain/contract/contract-request'
-import type { AddendumContent, ContractData, ContractRepository } from '../../application/ports'
+import type { AddendumContent, ContractData, ContractRepository, NewContractItem } from '../../application/ports'
 
 type Json = Record<string, unknown>
 
@@ -69,6 +69,23 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
       i.allocations.map((a) => ({ addendum_item_id: idByOrder.get(idx)!, package_code: a.packageCode, location_code: a.locationCode, quantity: a.quantity })),
     )
     if (allocations.length) must(await db.from('contract_addendum_item_allocations').insert(allocations))
+  }
+
+  const insertItems = async (contractId: string, items: NewContractItem[]) => {
+    if (!items.length) return
+    const inserted = must(await db.from('contract_request_items').insert(
+      items.map((i, idx) => ({
+        contract_request_id: contractId, competition_item_id: i.competitionItemId, material_id: i.materialId, code: i.code,
+        description: i.description, specification: i.specification, unit: i.unit, quantity: i.quantity, unit_price: i.unitPrice,
+        pct_retention: i.pctRetention, pct_material: i.pctMaterial, pct_equipment: i.pctEquipment, sort_order: idx,
+        references: i.references,
+      })),
+    ).select('id, sort_order')) as { id: string; sort_order: number }[]
+    const allocations = items.flatMap((i, idx) => {
+      const itemId = inserted.find((x) => x.sort_order === idx)!.id
+      return i.allocations.map((a) => ({ contract_request_item_id: itemId, package_code: a.packageCode, quantity: a.quantity }))
+    })
+    if (allocations.length) must(await db.from('contract_item_allocations').insert(allocations))
   }
 
   const addendumHead = (c: AddendumContent) => ({
@@ -237,21 +254,7 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
       // Sem transação: se os itens falharem, desfaz o cabeçalho (senão o rascunho incompleto
       // bloquearia a empresa pelo índice de uma solicitação ativa por concorrência e empresa)
       try {
-        if (d.items.length) {
-          const inserted = must(await db.from('contract_request_items').insert(
-            d.items.map((i, idx) => ({
-              contract_request_id: cr.id, competition_item_id: i.competitionItemId, material_id: i.materialId, code: i.code,
-              description: i.description, specification: i.specification, unit: i.unit, quantity: i.quantity, unit_price: i.unitPrice,
-              pct_retention: i.pctRetention, pct_material: i.pctMaterial, pct_equipment: i.pctEquipment, sort_order: idx,
-              references: i.references,
-            })),
-          ).select('id, sort_order')) as { id: string; sort_order: number }[]
-          const allocations = d.items.flatMap((i, idx) => {
-            const itemId = inserted.find((x) => x.sort_order === idx)!.id
-            return i.allocations.map((a) => ({ contract_request_item_id: itemId, package_code: a.packageCode, quantity: a.quantity }))
-          })
-          if (allocations.length) must(await db.from('contract_item_allocations').insert(allocations))
-        }
+        await insertItems(cr.id, d.items)
       } catch (err) {
         await db.from('contract_requests').delete().eq('id', cr.id)
         throw err
@@ -262,6 +265,21 @@ export function createSupabaseContracts(db: SupabaseClient): ContractRepository 
     async update(id, patch) {
       const row = toSnake(patch)
       if (Object.keys(row).length) must(await db.from('contract_requests').update(row).eq('id', id))
+    },
+
+    async replaceItems(contractId, items) {
+      // Os vínculos saem junto (on delete cascade)
+      must(await db.from('contract_request_items').delete().eq('contract_request_id', contractId))
+      await insertItems(contractId, items)
+    },
+
+    async setAllocations(contractId, itemId, allocations) {
+      const item = must(await db.from('contract_request_items').select('id').eq('id', itemId).eq('contract_request_id', contractId).maybeSingle())
+      if (!item) throw new Error('Item da solicitação não encontrado.')
+      must(await db.from('contract_item_allocations').delete().eq('contract_request_item_id', itemId))
+      if (allocations.length) {
+        must(await db.from('contract_item_allocations').insert(allocations.map((a) => ({ contract_request_item_id: itemId, package_code: a.packageCode, quantity: a.quantity }))))
+      }
     },
 
     async updateItem(contractId, itemId, patch) {
