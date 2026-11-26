@@ -20,10 +20,16 @@ Três barreiras impedem que uma versão com teste quebrado chegue aos usuários:
 
 | Ambiente | Versão |
 |---|---|
-| produção | v21 |
-| dev | v22 |
+| produção | v22 |
+| dev | v23 |
 
-## v22 — dev (2026-11-26)
+## v23 — dev (2026-11-26)
+
+- **Solicitação acompanha o mapa na hora:** com a solicitação em rascunho, toda alteração do mapa (insumo criado ou removido, quantidade, preço, empresa escolhida, vencedora) já atualiza os itens dela, sem precisar de “Atualizar pelo mapa”. Corrige insumos criados no mapa que não apareciam na solicitação gerada antes deles. Trocar a vencedora cancela o rascunho da anterior e gera o da nova. Vale para quem gera solicitações (contract.manage).
+- **Item do orçamento em cada linha:** cada linha da solicitação mostra de qual Item da EAP e composição do orçamento ela vem (pelos insumos referência). Insumo criado no mapa sem referência aparece como **fora do orçamento · criado no mapa**.
+- Sem migration. `verificar`: 246 testes do Vitest (9 pulados), 41 de tela e build.
+
+## v22 — produção (2026-11-26)
 
 - **Solicitação de contrato liberada desde o rascunho do QC:** sem solicitação, a aba mostra os dados que ela precisa (empresa vencedora ou cotação escolhida, tipo de contrato, datas e responsáveis) para preencher ali mesmo. Ao salvar com tudo completo, a solicitação é gerada na hora e o QC é enviado para aprovação pela mesma tela. A geração automática vale só para QC em rascunho que nunca teve solicitação (depois de cancelar uma, gera-se pelo botão).
 - Sem migration. `verificar`: 245 testes do Vitest (9 pulados), 41 de tela e build.

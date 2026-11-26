@@ -1091,6 +1091,17 @@ export interface ContractItemDTO {
   allocations: ContractAllocationDTO[]
   /** Insumos referência (do orçamento) usados para comparar este item no QC */
   references: ContractItemReferenceDTO[]
+  /** Itens do orçamento (Item da EAP › composição) de onde a linha vem; vazio = fora do orçamento */
+  budgetItems?: ContractItemBudgetDTO[]
+}
+
+export interface ContractItemBudgetDTO {
+  /** Item da EAP (ex.: "05") e o nome dele */
+  itemWbs: string
+  itemName: string
+  /** Composição do orçamento (ex.: "05.02") */
+  activityWbs: string
+  activityDescription: string
 }
 
 /** Insumo referência de um item contratado: insumo do orçamento, seus IPs e a verba usada */

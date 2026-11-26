@@ -398,3 +398,36 @@ describe('vínculos de planejamento na solicitação', () => {
     expect(after.totalAmount).toBe(Decimal.sum(after.items.map((i) => i.totalPrice)).toDb())
   })
 })
+
+describe('solicitação acompanha o mapa e aponta o item do orçamento', () => {
+  it('insumo criado no mapa depois da solicitação entra sozinho; cada linha aponta o Item da EAP e a composição', async () => {
+    const pav = (await comps()).find((c) => c.title.startsWith('Pavimentação'))!
+    const { data: d } = await call<CompetitionDetailDTO>('GET', `/competitions/${pav.id}`)
+    const rid = d.revision.id
+    const draft = (await call<ContractListItemDTO[]>('GET', `/contracts?competitionId=${pav.id}`)).data.find((x) => x.status === 'draft')!
+    expect(draft).toBeTruthy()
+    const winner = d.suppliers.find((s) => s.supplierId === d.revision.winnerSupplierId)!
+
+    // Insumo criado no mapa, com preço da vencedora: entra na solicitação sem "Atualizar pelo mapa"
+    const add = await call<{ id: string }>('POST', `/revisions/${rid}/items`, { code: 'IS77777', description: 'Item criado no mapa', unit: 'm', quantity: '10', referenceIds: [], planningCode: 'IP00105', planningDescription: 'Pavimentação' })
+    expect(add.status, JSON.stringify(add.data)).toBe(201)
+    expect((await call('PUT', `/revisions/${rid}/prices`, { prices: [{ competitionSupplierId: winner.id, itemId: add.data.id, unitPrice: '12' }] })).status).toBe(200)
+    const { data: c } = await call<ContractRequestDTO>('GET', `/contracts/${draft.id}`)
+    const manual = c.items.find((i) => i.code === 'IS77777')!
+    expect(manual).toBeTruthy()
+    expect(manual.totalPrice).toBe('120.0000')
+    expect(c.totalAmount).toBe(Decimal.sum(c.items.map((i) => i.totalPrice)).toDb())
+    // Sem referência do orçamento: fora do orçamento
+    expect(manual.budgetItems).toEqual([])
+    // Os insumos que vêm do orçamento apontam Item da EAP e composição
+    const fromBudget = c.items.filter((i) => i.references.length)
+    expect(fromBudget.length).toBeGreaterThan(0)
+    for (const i of fromBudget) {
+      expect(i.budgetItems!.length).toBeGreaterThan(0)
+      for (const b of i.budgetItems!) expect(b.activityWbs.startsWith(b.itemWbs)).toBe(true)
+    }
+    // Removido do mapa, sai da solicitação
+    expect((await call('DELETE', `/revisions/${rid}/items/${add.data.id}`)).status).toBe(200)
+    expect((await call<ContractRequestDTO>('GET', `/contracts/${draft.id}`)).data.items.some((i) => i.code === 'IS77777')).toBe(false)
+  })
+})

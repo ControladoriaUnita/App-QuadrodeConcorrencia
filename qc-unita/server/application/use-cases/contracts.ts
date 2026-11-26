@@ -38,6 +38,7 @@ import {
 import { AppError, can, notFound, requirePermission, type Actor, type RequestContext } from '../context'
 import type { CompetitionData, ContractData, NewContractRequest, Repositories } from '../ports'
 import { canDecideCurrent, directorUsers } from './approval-flows'
+import { namedBudgetStructure } from './works'
 
 const today = (ctx: RequestContext) => ctx.now().toISOString().slice(0, 10)
 
@@ -94,9 +95,11 @@ export async function getContract(repos: Repositories, ctx: RequestContext, id: 
     ? can(ctx.actor, 'approval.decide', workId) && canDecideCurrent(ctx.actor, workId, submitted.approvals, users)
     : canDecideAddendum(ctx.actor, workId))
   const qcApproved = (await repos.competitions.getRevisionRef(c.revision.id))?.status === 'approved'
+  const items = await withBudgetItems(repos, c)
   const planning = can(ctx.actor, 'contract.planning', workId) || manage
   return {
     ...c,
+    items,
     addenda,
     contractTypes,
     issues: c.status === 'draft' && !qcApproved ? [...issues, { field: 'competition', message: 'O QC ainda não foi aprovado: o contrato só é concluído depois da aprovação.' }] : issues,
@@ -112,6 +115,42 @@ export async function getContract(repos: Repositories, ctx: RequestContext, id: 
       decideAddendum,
     },
   }
+}
+
+/**
+ * Aponta, em cada linha da solicitação, os itens do orçamento de onde ela vem: insumo do mapa →
+ * insumos referência → linhas do orçamento → composição e Item da EAP. Insumo criado no mapa sem
+ * referência fica sem item do orçamento (fora do orçamento).
+ */
+async function withBudgetItems(repos: Repositories, c: ContractData): Promise<ContractData['items']> {
+  const data = await repos.competitions.getData(c.competition.id, c.revision.id)
+  if (!data) return c.items
+  const work = await repos.catalog.getWork(c.work.id)
+  const budgetId = work?.currentBudgetId ?? data.competition.budgetId
+  if (!budgetId) return c.items
+  const [lines, structure] = await Promise.all([repos.catalog.listBudgetLines(budgetId), namedBudgetStructure(repos, budgetId)])
+  const lineByKey = new Map(lines.map((l) => [l.lineKey, l]))
+  const groupName = new Map(structure.groups.map((g) => [g.wbs, g.description]))
+  const itemOf = (wbs: string) => {
+    const top = wbs.split('.')[0]!
+    if (groupName.has(top)) return { itemWbs: top, itemName: groupName.get(top)! }
+    const best = structure.groups.filter((g) => wbs.startsWith(g.wbs)).sort((a, b) => a.wbs.length - b.wbs.length)[0]
+    return { itemWbs: best?.wbs ?? top, itemName: best?.description ?? '' }
+  }
+  const linksByRef = new Map<string, typeof data.links>()
+  for (const l of data.links) linksByRef.set(l.referenceId, [...(linksByRef.get(l.referenceId) ?? []), l])
+  const refsOf = new Map(data.items.map((i) => [i.id, i.referenceIds]))
+  return c.items.map((i) => {
+    const seen = new Map<string, NonNullable<typeof i.budgetItems>[number]>()
+    for (const rid of (i.competitionItemId && refsOf.get(i.competitionItemId)) || []) {
+      for (const l of linksByRef.get(rid) ?? []) {
+        const line = l.lineKey ? lineByKey.get(l.lineKey) : undefined
+        if (!line || seen.has(line.activityWbs)) continue
+        seen.set(line.activityWbs, { ...itemOf(line.activityWbs), activityWbs: line.activityWbs, activityDescription: line.activityDescription })
+      }
+    }
+    return { ...i, budgetItems: [...seen.values()].sort((a, b) => a.activityWbs.localeCompare(b.activityWbs, 'pt-BR', { numeric: true })) }
+  })
 }
 
 // ----------------------------------------------------------------------------- criação
@@ -258,9 +297,11 @@ export async function syncContractRequests(repos: Repositories, ctx: RequestCont
   const { map, chosen, drafts, unchosen } = draftsOf(data)
   const active = (await repos.contracts.list({ competitionId })).filter((c) => c.status !== 'cancelled')
   const result = { updated: 0, created: 0, cancelled: 0 }
+  const cancelled = new Set<string>()
   for (const ac of active.filter((c) => c.status === 'draft')) {
     const draft = drafts.find((d) => d.supplierId === ac.supplierId)
     if (!draft) {
+      cancelled.add(ac.id)
       await repos.contracts.update(ac.id, { status: 'cancelled', cancelReason: `Empresa fora da cotação da ${formatRev(r.number)} do QC (cancelada ao atualizar pelo mapa).` })
       result.cancelled++
       continue
@@ -284,8 +325,10 @@ export async function syncContractRequests(repos: Repositories, ctx: RequestCont
     result.updated++
   }
   if (opts.create && r.contractTypeId && r.serviceStartOn && r.serviceEndOn) {
-    const covered = new Set(active.map((c) => c.supplierId))
-    const missing = drafts.filter((d) => d.items.length && !covered.has(d.supplierId) && (chosen || !active.length))
+    // Empresa cujo rascunho saiu agora (troca de vencedora) deixa o lugar para a nova
+    const still = active.filter((c) => !cancelled.has(c.id))
+    const covered = new Set(still.map((c) => c.supplierId))
+    const missing = drafts.filter((d) => d.items.length && !covered.has(d.supplierId) && (chosen || !still.length))
     if (missing.length) {
       const work = (await repos.catalog.getWork(data.competition.workId))!
       for (const draft of missing) {

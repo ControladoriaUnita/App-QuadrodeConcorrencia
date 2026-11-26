@@ -10,7 +10,7 @@ import { Package, Pencil } from 'lucide-react'
 import type { ContractItemDTO, ContractRequestDTO, UpdateContractItemInput } from '@shared/contracts'
 import { Decimal } from '@shared/domain/decimal'
 import { globalMaterials } from '@shared/domain/contract/global-materials'
-import { Alert, Button, Card, CardHeader, DecimalInput, Dialog, InlineTextInput } from '@/components/ui'
+import { Alert, Badge, Button, Card, CardHeader, DecimalInput, Dialog, InlineTextInput } from '@/components/ui'
 import { usePackages } from '@/features/competitions/api'
 import { AllocationsEditor, allocationsTotal, type AllocationRow } from './AllocationsEditor'
 import { cn } from '@/utils/cn'
@@ -56,6 +56,24 @@ export function ContractItemsTable({ c, onUpdate, onAllocations }: {
                 <td className={cn(td, 'max-w-80')}>
                   <p className="truncate text-[15px] font-semibold text-text" title={i.description}>{i.description}</p>
                   <p className="text-xs leading-4 font-medium text-ink-600">{i.code}</p>
+                  {i.budgetItems && (
+                    <div className="mt-1 flex flex-wrap gap-1" aria-label={`Item do orçamento de ${i.code}`}>
+                      {i.budgetItems.length ? (
+                        i.budgetItems.map((b) => (
+                          <span
+                            key={b.activityWbs}
+                            className="inline-flex max-w-full items-center gap-1 rounded-control border border-info/30 bg-info-soft px-1.5 py-0.5 text-[11px] leading-4 text-info"
+                            title={`Item ${b.itemWbs}${b.itemName ? ` — ${b.itemName}` : ''} › ${b.activityWbs} ${b.activityDescription}`}
+                          >
+                            <span className="font-semibold whitespace-nowrap">Item {b.itemWbs}{b.itemName ? ` · ${b.itemName}` : ''}</span>
+                            <span className="truncate">› {b.activityWbs} {b.activityDescription}</span>
+                          </span>
+                        ))
+                      ) : (
+                        <Badge tone="warning" className="px-1.5 py-0 text-[10px]" title="Insumo criado no mapa sem insumo referência do orçamento">fora do orçamento · criado no mapa</Badge>
+                      )}
+                    </div>
+                  )}
                   {i.references.length > 0 && (
                     <ul className="mt-1 grid gap-0.5 border-l-2 border-border pl-2 text-[11px] leading-4 text-text-muted">
                       {i.references.map((r) => (

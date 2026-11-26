@@ -207,6 +207,20 @@ function serializeBest(map: QcMap): ComputedPersistence['best'] {
  * Recalcula melhores condições/totais com o domínio e persiste o resultado. O total orçado da
  * revisão acompanha a verba dos insumos referência (Σ linhas puxadas do orçamento).
  */
+/**
+ * Recalcula o QC e, se já houver solicitação de contrato em rascunho, ela acompanha o mapa na hora
+ * (insumos criados no mapa, quantidades, preços, empresa escolhida). Só para quem gera solicitações.
+ */
+export async function recomputeAndSync(repos: Repositories, ctx: RequestContext, competitionId: string, revisionId: string): Promise<QcMap> {
+  const map = await recompute(repos, competitionId, revisionId)
+  const ref = await repos.competitions.getRevisionRef(revisionId)
+  if (ref && ref.status === 'draft' && can(ctx.actor, 'contract.manage', ref.workId)) {
+    const drafts = (await repos.contracts.list({ competitionId })).filter((c) => c.status === 'draft')
+    if (drafts.length) await syncContractRequests(repos, ctx, competitionId, revisionId, { create: true })
+  }
+  return map
+}
+
 export async function recompute(repos: Repositories, competitionId: string, revisionId: string): Promise<QcMap> {
   const data = await repos.competitions.getData(competitionId, revisionId)
   if (!data) throw notFound('Concorrência')
@@ -258,7 +272,7 @@ export async function updateRevision(repos: Repositories, ctx: RequestContext, r
     await repos.competitions.updateCompetition(ref.competitionId, { ...owners, ...request })
   }
   if (Object.keys(revisionPatch).length) await repos.competitions.updateRevision(revisionId, revisionPatch)
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
 }
 
 export async function updateItem(repos: Repositories, ctx: RequestContext, revisionId: string, itemId: string, input: UpdateItemInput) {
@@ -287,7 +301,7 @@ export async function updateItem(repos: Repositories, ctx: RequestContext, revis
     }
   }
   await repos.competitions.updateItem(itemId, input)
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
 }
 
 export async function addSupplier(repos: Repositories, ctx: RequestContext, revisionId: string, supplierId: string) {
@@ -300,7 +314,7 @@ export async function addSupplier(repos: Repositories, ctx: RequestContext, revi
   }
   const sortOrder = data!.suppliers.reduce((m, s) => Math.max(m, s.sortOrder), 0) + 1
   const id = await repos.competitions.addSupplier(revisionId, supplier, sortOrder)
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
   return { id }
 }
 
@@ -308,21 +322,21 @@ export async function updateSupplier(repos: Repositories, ctx: RequestContext, r
   const { ref, data } = await loadDraft(repos, ctx, revisionId, 'proposal.edit')
   assertInRevision(data, { suppliers: [competitionSupplierId] })
   await repos.competitions.updateSupplier(competitionSupplierId, input)
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
 }
 
 export async function removeSupplier(repos: Repositories, ctx: RequestContext, revisionId: string, competitionSupplierId: string) {
   const { ref, data } = await loadDraft(repos, ctx, revisionId)
   assertInRevision(data, { suppliers: [competitionSupplierId] })
   await repos.competitions.removeSupplier(competitionSupplierId)
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
 }
 
 export async function upsertPrices(repos: Repositories, ctx: RequestContext, revisionId: string, input: UpsertPricesInput) {
   const { ref, data } = await loadDraft(repos, ctx, revisionId, 'proposal.edit')
   assertInRevision(data, { items: input.prices.map((p) => p.itemId), suppliers: input.prices.map((p) => p.competitionSupplierId) })
   await repos.competitions.upsertPrices(revisionId, input.prices)
-  const map = await recompute(repos, ref.competitionId, revisionId)
+  const map = await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
   return { bestMixTotal: map.mixTotal.toDb() }
 }
 
@@ -457,7 +471,7 @@ export async function setReferenceLines(repos: Repositories, ctx: RequestContext
     if (oldQty.eq(item.quantity) && !newQty.eq(item.quantity)) await repos.competitions.updateItem(item.id, { quantity: newQty.toDb() })
   }
   await repos.competitions.setReferenceLinks(revisionId, referenceId, links)
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
 }
 
 /**
@@ -496,7 +510,7 @@ export async function addLines(repos: Repositories, ctx: RequestContext, revisio
   const aggregated = toAggregated(newRefs)
   const created = aggregated.length ? await repos.competitions.addReferences(revisionId, aggregated) : []
   if (input.fillMap && created.length) await repos.competitions.addItems(revisionId, aggregated.map((r, k) => itemFromReference(r, created[k]!)))
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
   return { createdReferences: created.length, mergedReferences: merges.length }
 }
 
@@ -512,7 +526,7 @@ export async function removeReference(repos: Repositories, ctx: RequestContext, 
   const { ref, data } = await loadDraft(repos, ctx, revisionId)
   if (!data.references.some((r) => r.id === referenceId)) throw notFound('Insumo referência')
   await repos.competitions.removeReference(referenceId)
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
 }
 
 /** Insumo novo no mapa (da lista da obra ou livre), ligado às referências escolhidas. */
@@ -533,7 +547,7 @@ export async function addQcItem(repos: Repositories, ctx: RequestContext, revisi
     planningDescription: input.planningDescription ?? null,
     referenceIds: input.referenceIds,
   }])
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
   return { id: id! }
 }
 
@@ -547,7 +561,7 @@ export async function fillFromReferences(repos: Repositories, ctx: RequestContex
   if (free.length) {
     await repos.competitions.addItems(revisionId, free.map((r) => itemFromReference({ ...r, quantity: (quantity.get(r.id) ?? Decimal.ZERO).round(4).toDb() }, r.id)))
   }
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
   return { created: free.length }
 }
 
@@ -556,7 +570,7 @@ export async function setItemReferences(repos: Repositories, ctx: RequestContext
   if (!data.items.some((i) => i.id === itemId)) throw notFound('Item')
   assertReferences(data, referenceIds)
   await repos.competitions.setItemReferences(revisionId, itemId, referenceIds)
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
 }
 
 function assertReferences(data: CompetitionData, referenceIds: string[]) {
@@ -568,7 +582,7 @@ export async function removeItem(repos: Repositories, ctx: RequestContext, revis
   const { ref, data } = await loadDraft(repos, ctx, revisionId)
   assertInRevision(data, { items: [itemId] })
   await repos.competitions.removeItem(itemId)
-  await recompute(repos, ref.competitionId, revisionId)
+  await recomputeAndSync(repos, ctx, ref.competitionId, revisionId)
 }
 
 // ----------------------------------------------------------------------------- revisões e aprovações

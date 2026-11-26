@@ -89,4 +89,6 @@ test('a solicitação é liberada antes da aprovação: os dados são preenchido
   await expect(page.getByText('2. Itens do contrato', { exact: false })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Enviar QC para aprovação' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Enviar e concluir' })).toBeDisabled()
+  // Cada linha aponta o item do orçamento de onde vem
+  await expect(page.getByLabel(/^Item do orçamento de /).first()).toContainText(/Item \d+/)
 })
